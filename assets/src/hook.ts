@@ -3,6 +3,7 @@
 // server's later renders (`updated`), which it draws in place.
 
 import { Chart, type Transport } from "./chart";
+import type { Config } from "./wire";
 
 interface HookContext {
   el: HTMLElement;
@@ -27,6 +28,9 @@ export const Fude = {
       },
     };
     hook.chart = new Chart(hook.el, transport);
+    hook.handleEvent("fude:append", (payload) => {
+      if (payload.id === hook.chart?.id) hook.chart?.append(payload.wire as Config, (payload.max as number | null) ?? null);
+    });
   },
 
   updated(this: FudeHook) {

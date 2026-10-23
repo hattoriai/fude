@@ -40,4 +40,14 @@ defmodule Fude.TestTest do
   test "fails on a chart that is not there", %{view: view} do
     assert_raise ExUnit.AssertionError, ~r/no chart/, fn -> chart(view, "nope") end
   end
+
+  test "Fude.Live.append sends only the new rows, compiled", %{view: view} do
+    render_hook(view, "stream", %{})
+
+    assert_push_event(view, "fude:append", %{
+      id: "revenue",
+      max: 50,
+      wire: %{"layers" => [%{"n" => 1}], "scales" => %{"x" => %{"domain" => ["West"]}}}
+    })
+  end
 end

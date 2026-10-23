@@ -414,7 +414,7 @@ defmodule FudeDev.LiveLive do
     if connected?(socket), do: :timer.send_interval(1000, :tick)
     now = System.system_time(:second)
     points = for s <- -59..0, do: point(now + s)
-    {:ok, assign(socket, locale: params["locale"] || "en-GB", points: points)}
+    {:ok, assign(socket, locale: params["locale"] || "en-GB", points: points, initial: points)}
   end
 
   defp point(second) do
@@ -427,15 +427,34 @@ defmodule FudeDev.LiveLive do
     }
   end
 
+  # Each second, one new reading: sent alone (Fude.Live.append), not the
+  # minute again. The queue's bars sum by minute: they draw again from
+  # their assigns.
   def handle_info(:tick, socket) do
     now = System.system_time(:second)
-    {:noreply, update(socket, :points, &(Enum.drop(&1, 1) ++ [point(now)]))}
+    reading = point(now)
+
+    socket =
+      socket
+      |> Fude.Live.append("load", load_chart(), [reading], max: 60)
+      |> update(:points, &(Enum.drop(&1, 1) ++ [reading]))
+
+    {:noreply, socket}
   end
+
+  defp load_chart,
+    do:
+      Fude.line(
+        x: :at,
+        y: [field: :load, title: "Load, %"],
+        title: "Load",
+        subtitle: "The last minute, every second"
+      )
 
   def render(assigns) do
     ~H"""
     <div class="grid">
-      <.chart id="load" locale={@locale} chart={Fude.line(@points, x: :at, y: [field: :load, title: "Load, %"], title: "Load", subtitle: "The last minute, every second")} />
+      <.chart id="load" locale={@locale} chart={load_chart()} data={@initial} />
       <.chart id="queue" locale={@locale} chart={Fude.bar(Enum.take(@points, -20), x: {:minute, :at}, y: {:sum, :queue}, title: "Queue")} />
       <.chart id="load-now" locale={@locale} chart={Fude.number(Enum.take(@points, -1), value: :load, label: "Load now, %")} />
     </div>

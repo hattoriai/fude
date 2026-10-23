@@ -20,6 +20,12 @@ defmodule FudeTest.SalesLive do
     """
   end
 
+  def handle_event("stream", _params, socket) do
+    chart = Fude.bar(x: :region, y: :revenue, color: :channel)
+    row = %{region: "West", channel: "Online", revenue: 10}
+    {:noreply, Fude.Live.append(socket, "revenue", chart, [row], max: 50)}
+  end
+
   def handle_event("more", _params, socket) do
     {:noreply, update(socket, :sales, &[%{region: "East", channel: "Online", revenue: 40} | &1])}
   end

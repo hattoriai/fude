@@ -125,8 +125,12 @@ export function tween(prev: Shape | undefined, next: Shape, t: number): Shape {
     case "area": {
       const before = new Map<string, PathPoint>();
       if (prev && (prev.type === "line" || prev.type === "area")) for (const point of prev.points) before.set(point.k, point);
+      // A point new to a path that was there (a point streamed in) comes
+      // from where the path was before it, not from the baseline.
+      let last: PathPoint | undefined;
       const points = next.points.map((point) => {
-        const from = before.get(point.k);
+        const from = before.get(point.k) ?? (before.size ? last : undefined);
+        if (before.has(point.k)) last = before.get(point.k);
         const startY = from ? from.y : next.baseline;
         const startY0 = from ? from.y0 : next.baseline;
         const startX = from ? from.x : point.x;

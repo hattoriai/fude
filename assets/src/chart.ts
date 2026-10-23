@@ -91,6 +91,18 @@ export class Chart {
     if (this.plot) this.render(true);
   }
 
+  /**
+   * Takes new rows, compiled by the server with the chart's rules
+   * (Fude.Live.append): adds them to the marks, keeps the last `max` of
+   * them, and draws again, moving.
+   */
+  append(wire: Config, max: number | null): void {
+    if (!this.config.layers || !wire.layers) return;
+    this.config = merge(this.config, wire, max);
+    this.raw = this.el.dataset.fude ?? "{}";
+    if (this.plot) this.render(true);
+  }
+
   destroy(): void {
     cancelAnimationFrame(this.frame);
     for (const observer of this.observers) observer.disconnect();
@@ -1401,6 +1413,66 @@ export class Chart {
       legend.append(item);
     });
   }
+}
+
+// -- Appending rows ------------------------------------------------------------
+
+const SCALE_OF: Record<string, string> = { x: "x", x2: "x", x0: "x", x1: "x", y: "y", y0: "y", y1: "y", y2: "y", color: "color", size: "size", region: "region" };
+const CATEGORICAL = new Set(["band", "point", "ordinal"]);
+
+/**
+ * A chart's config with the rows of another of the same chart added: a
+ * category goes by its name into the chart's scale (a new one at its end),
+ * a number or a time as it is; the scales of numbers and times then fit
+ * the rows that stay.
+ */
+export function merge(config: Config, add: Config, max: number | null): Config {
+  const scales: Record<string, Scale> = structuredClone(config.scales ?? {});
+  const layers = (config.layers ?? []).map((layer, i) => {
+    const more = add.layers?.[i];
+    if (!more || more.mark !== layer.mark) return layer;
+    const columns: Record<string, (number | null)[]> = {};
+    for (const [name, values] of Object.entries(layer.columns)) {
+      const scaleName = SCALE_OF[name];
+      const scale = scaleName ? scales[scaleName] : undefined;
+      const from = scaleName ? add.scales?.[scaleName] : undefined;
+      const extra = (more.columns[name] ?? []).map((value) => {
+        if (value === null || !scale || !from || !CATEGORICAL.has(scale.type)) return value;
+        const category = from.domain?.[value];
+        const domain = (scale.domain ??= []);
+        let index = domain.findIndex((known) => known === category);
+        if (index < 0) index = domain.push(category) - 1;
+        return index;
+      });
+      const all = values.concat(extra);
+      columns[name] = max && all.length > max ? all.slice(all.length - max) : all;
+    }
+    const n = Object.values(columns)[0]?.length ?? 0;
+    return { ...layer, columns, n };
+  });
+
+  // Numbers and times: the extent of the rows that stay (with zero, if
+  // the scale had it).
+  for (const [name, scale] of Object.entries(scales)) {
+    if (CATEGORICAL.has(scale.type) || !scale.domain || scale.bins) continue;
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const layer of layers) {
+      for (const [column, values] of Object.entries(layer.columns)) {
+        if (SCALE_OF[column] !== name) continue;
+        for (const value of values) {
+          if (value === null) continue;
+          if (value < lo) lo = value;
+          if (value > hi) hi = value;
+        }
+      }
+    }
+    if (lo > hi) continue;
+    const [d0, d1] = scale.domain as [number, number];
+    const zero = d0 <= 0 && d1 >= 0 && scale.type !== "time";
+    scale.domain = zero ? [Math.min(lo, 0), Math.max(hi, 0)] : [lo, hi];
+  }
+  return { ...config, scales, layers };
 }
 
 function div(className: string, text?: string): HTMLDivElement {
