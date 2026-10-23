@@ -51,6 +51,8 @@ export interface Config {
   scales?: Record<string, Scale>;
   single?: Single;
   annotations?: Annotation[];
+  /** False for a panel of small multiples: the legend is the whole chart's. */
+  legend?: boolean;
 }
 
 export interface Annotation {

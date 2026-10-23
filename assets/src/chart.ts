@@ -369,7 +369,8 @@ export class Chart {
     const layers = this.config.layers ?? [];
     const color = this.config.scales?.color;
     const paths = layers.filter((layer) => layer.mark === "line" || layer.mark === "area");
-    if (paths.length === 0 || !this.config.axes) return null;
+    // A panel of small multiples has the whole chart's legend instead.
+    if (paths.length === 0 || !this.config.axes || this.config.legend === false) return null;
     const x = this.config.scales?.x;
     if (!x || x.type === "band") return null;
     if (!color || color.type !== "ordinal") return null;
@@ -1354,6 +1355,10 @@ export class Chart {
     legend.replaceChildren();
     const color = this.config.scales?.color;
     const layers = this.config.layers ?? [];
+    if (this.config.legend === false) {
+      legend.hidden = true;
+      return;
+    }
     if (color && color.type === "sequential") return this.renderRamp(color);
     if (!color || color.type !== "ordinal") {
       legend.hidden = true;

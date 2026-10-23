@@ -125,6 +125,26 @@ defmodule Fude do
     %{chart | annotations: chart.annotations ++ [Fude.Annotation.new(type, opts)]}
   end
 
+  @doc """
+  Small multiples: the chart drawn once for each value of a field, side
+  by side, on the same scales, so that the panels compare at a glance.
+
+      Fude.line(sales, x: :month, y: :revenue)
+      |> Fude.facet(:region, columns: 3)
+
+  `columns` is how many panels make a row; as many as fit when not given.
+  """
+  @spec facet(Chart.t(), atom() | String.t(), keyword()) :: Chart.t()
+  def facet(%Chart{} = chart, field, opts \\ []) when is_atom(field) or is_binary(field) do
+    columns = Keyword.get(opts, :columns)
+
+    unless is_nil(columns) or (is_integer(columns) and columns > 0) do
+      raise ArgumentError, "Fude: :columns of a facet is a whole number, got: #{inspect(columns)}"
+    end
+
+    %{chart | facet: %{field: to_string(field), columns: columns}}
+  end
+
   @doc "Sets the chart's title, and with `:subtitle`, its subtitle."
   @spec title(Chart.t(), String.t(), keyword()) :: Chart.t()
   def title(%Chart{} = chart, title, opts \\ []) do

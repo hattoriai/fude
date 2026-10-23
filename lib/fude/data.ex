@@ -202,6 +202,19 @@ defmodule Fude.Data do
   @spec field(t(), String.t()) :: field() | nil
   def field(%__MODULE__{fields: fields}, name), do: Enum.find(fields, &(&1.name == name))
 
+  @doc "The rows whose field has a value."
+  @spec where(t(), String.t(), term()) :: t()
+  def where(%__MODULE__{} = data, name, value) do
+    keep = data |> column(name) |> Enum.map(&(&1 == value))
+
+    columns =
+      Map.new(data.columns, fn {field, values} ->
+        {field, values |> Enum.zip(keep) |> Enum.filter(&elem(&1, 1)) |> Enum.map(&elem(&1, 0))}
+      end)
+
+    %{data | columns: columns, count: Enum.count(keep, & &1)}
+  end
+
   @doc "The names of the fields, in order."
   @spec names(t()) :: [String.t()]
   def names(%__MODULE__{names: names}), do: names

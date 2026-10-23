@@ -64,8 +64,8 @@ defmodule Fude.Components do
     <figure
       id={@id}
       class={["fude", "fude-kind-#{@kind}", @class]}
-      phx-hook="Fude"
-      data-fude={@config}
+      phx-hook={!@wire["facet"] && "Fude"}
+      data-fude={!@wire["facet"] && @config}
       aria-labelledby={@wire["title"] && "#{@id}-title"}
       {@rest}
     >
@@ -78,7 +78,7 @@ defmodule Fude.Components do
       </p>
       <.single :if={@wire["single"]} id={@id} single={@wire["single"]} kind={@kind} />
       <div
-        :if={@errors == [] and @wire["layers"]}
+        :if={@errors == [] and @wire["layers"] && !@wire["facet"]}
         id={"#{@id}-plot"}
         class="fude-plot"
         style={"height: #{@plot_height}px"}
@@ -87,6 +87,7 @@ defmodule Fude.Components do
         phx-update="ignore"
       >
       </div>
+      <.panels :if={@errors == [] and @wire["facet"]} id={@id} wire={@wire} locale={@locale} height={@height} />
       <details :if={@table and @rows != []} class="fude-data">
         <summary>Data</summary>
         <table>
@@ -105,6 +106,86 @@ defmodule Fude.Components do
     </figure>
     """
   end
+
+  attr :id, :string, required: true
+  attr :wire, :map, required: true
+  attr :locale, :string, default: nil
+  attr :height, :integer, default: nil
+
+  # Small multiples: one legend for all, then a panel for each value, each
+  # a chart of its own on the shared scales.
+  defp panels(assigns) do
+    facet = assigns.wire["facet"]
+    base = Map.drop(assigns.wire, ["facet", "title", "subtitle", "caption", "source"])
+
+    panels =
+      facet["panels"]
+      |> Enum.with_index()
+      |> Enum.map(fn {panel, index} ->
+        config =
+          base
+          |> Map.merge(%{
+            "layers" => panel["layers"],
+            "legend" => false,
+            "id" => "#{assigns.id}-#{index}",
+            "locale" => assigns.locale,
+            "description" => "#{panel["title"]}. #{base["description"]}"
+          })
+
+        %{
+          id: "#{assigns.id}-#{index}",
+          title: panel["title"],
+          config: JSON.encode!(config),
+          description: config["description"]
+        }
+      end)
+
+    assigns =
+      assign(assigns,
+        panels: panels,
+        legend: legend(assigns.wire["scales"]["color"]),
+        columns: facet["columns"],
+        panel_height: assigns.height || 180
+      )
+
+    ~H"""
+    <div :if={@legend != []} class="fude-legend fude-legend-shared">
+      <span :for={{name, color} <- @legend} class="fude-legend-item">
+        <span class="fude-swatch fude-swatch-box" style={"background: #{color}"}></span>{name}
+      </span>
+    </div>
+    <div class="fude-panels" style={@columns && "--fude-columns: #{@columns}"}>
+      <div :for={panel <- @panels} id={panel.id} class="fude-panel" phx-hook="Fude" data-fude={panel.config}>
+        <div class="fude-panel-title">{panel.title}</div>
+        <div
+          id={"#{panel.id}-plot"}
+          class="fude-plot"
+          style={"height: #{@panel_height}px"}
+          role="img"
+          aria-label={panel.description}
+          phx-update="ignore"
+        >
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  # The legend of an ordinal color, with the colors of its places or its
+  # roles, as the browser has them.
+  defp legend(%{"type" => "ordinal", "domain" => domain} = scale) when length(domain) > 1 do
+    roles = scale["roles"]
+
+    domain
+    |> Enum.with_index()
+    |> Enum.map(fn {name, i} -> {to_string(name), swatch(roles, i)} end)
+  end
+
+  defp legend(_scale), do: []
+
+  defp swatch(roles, i) when is_list(roles), do: "var(--fude-#{Enum.at(roles, i)})"
+  defp swatch(_roles, i) when i < 8, do: "var(--fude-series-#{i + 1})"
+  defp swatch(_roles, _i), do: "var(--fude-muted)"
 
   attr :id, :string, required: true
   attr :single, :map, required: true

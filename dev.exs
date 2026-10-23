@@ -142,6 +142,22 @@ defmodule FudeDev.Data do
 
   def kpis, do: [%{mrr: 184_320.5, last: 171_240.0, done: 68}]
 
+  def region_months do
+    for region <- Enum.take(@regions, 4),
+        month <- 0..11,
+        {channel, c} <- Enum.with_index(@channels) do
+      base = [14_000, 10_000, 4_000] |> Enum.at(c)
+      growth = [1.05, 1.0, 1.04] |> Enum.at(c)
+
+      %{
+        region: region,
+        month: Date.shift(~D[2026-01-01], month: month),
+        channel: channel,
+        revenue: round(base * :math.pow(growth, month) * (0.85 + 0.3 * noise({region, month, c})))
+      }
+    end
+  end
+
   def profit do
     [
       %{step: "Revenue", amount: 420_000},
@@ -328,6 +344,13 @@ defmodule FudeDev.GalleryLive do
         id="revenue-area"
         locale={@locale}
         chart={Fude.area(monthly(@shuffled), x: :month, y: [field: :revenue, format: :compact, title: "Revenue"], color: :channel, title: "Revenue, stacked")}
+      />
+      <.chart
+        id="regions-multiples"
+        locale={@locale}
+        chart={Fude.area(Data.region_months(), x: :month, y: [field: :revenue, format: :compact, title: "Revenue"], color: :channel)
+          |> Fude.facet(:region)
+          |> Fude.title("Every region grows online", subtitle: "Monthly revenue by channel, by region")}
       />
       <.chart
         id="profit"

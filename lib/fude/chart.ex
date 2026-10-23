@@ -21,6 +21,7 @@ defmodule Fude.Chart do
           data: String.t(),
           height: pos_integer() | nil,
           annotations: [Fude.Annotation.t()],
+          facet: %{field: String.t(), columns: pos_integer() | nil} | nil,
           datasets: %{String.t() => term()}
         }
 
@@ -33,6 +34,7 @@ defmodule Fude.Chart do
             data: "data",
             height: nil,
             annotations: [],
+            facet: nil,
             datasets: %{}
 
   @words [:title, :subtitle, :caption, :source, :description]

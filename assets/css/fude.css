@@ -182,6 +182,30 @@
   box-shadow: var(--fude-focus-ring);
 }
 
+/* Small multiples: a grid of panels, as many in a row as fit, or the
+   chart's columns. */
+.fude-panels {
+  display: grid;
+  grid-template-columns: repeat(var(--fude-columns, auto-fill), minmax(min(100%, 14rem), 1fr));
+  gap: 1.25rem 1.5rem;
+}
+
+@media (max-width: 40rem) {
+  .fude-panels {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
+  }
+}
+
+.fude-panel-title {
+  margin-bottom: 0.25rem;
+  font-size: 0.875em;
+  font-weight: 600;
+}
+
+.fude-legend-shared {
+  margin-bottom: 0.75rem;
+}
+
 .fude-swatch {
   flex: none;
   width: 10px;

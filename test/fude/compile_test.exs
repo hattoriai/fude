@@ -217,4 +217,50 @@ defmodule Fude.CompileTest do
       end
     end
   end
+
+  describe "small multiples" do
+    @by_region [
+      %{region: "North", month: ~D[2026-01-01], n: 10, c: "A"},
+      %{region: "North", month: ~D[2026-02-01], n: 30, c: "A"},
+      %{region: "South", month: ~D[2026-01-01], n: 5, c: "B"},
+      %{region: "South", month: ~D[2026-02-01], n: 7, c: "A"}
+    ]
+
+    test "a panel for each value, on scales they share" do
+      wire =
+        compile!(
+          @by_region
+          |> Fude.bar(x: :month, y: :n, color: :c)
+          |> Fude.facet(:region, columns: 2)
+        )
+
+      %{"facet" => %{"title" => "Region", "columns" => 2, "panels" => [north, south]}} = wire
+
+      assert north["title"] == "North"
+      assert south["title"] == "South"
+      # The largest bar of any panel, not of all the panels summed.
+      assert wire["scales"]["y"]["domain"] == [0, 30]
+      assert wire["scales"]["color"]["domain"] == ["A", "B"]
+      # Each panel's colors are the shared scale's: South's "A" is 0.
+      assert south["layers"] |> hd() |> get_in(["columns", "color"]) == [1, 0]
+    end
+
+    test "the table has the facet's field" do
+      wire = compile!(@by_region |> Fude.bar(x: :month, y: :n) |> Fude.facet(:region))
+      assert {["Region", "Month", "N"], [["North", ~D[2026-01-01], 10] | _]} = Compile.table(wire)
+    end
+
+    test "goes into the spec and back" do
+      chart = Fude.line(x: :month, y: :n) |> Fude.facet(:region, columns: 3)
+      assert %{"facet" => %{"field" => "region", "columns" => 3}} = Fude.Spec.dump(chart)
+      assert {:ok, ^chart} = chart |> Fude.Spec.dump() |> Fude.Spec.load()
+    end
+
+    test "a facet's field that is not in the data is an error" do
+      assert {:error, [message]} =
+               Compile.compile(@by_region |> Fude.bar(x: :month, y: :n) |> Fude.facet(:regoin))
+
+      assert message =~ ~s|facet: the field "regoin" is not in the data; did you mean "region"?|
+    end
+  end
 end

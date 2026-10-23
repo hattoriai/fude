@@ -34,19 +34,30 @@ defmodule Fude.Compile do
   end
 
   # The fields that the chart reads.
-  defp fields(%Chart{layers: layers}) do
-    for %Layer{channels: channels} <- layers,
-        {_name, channel} <- channels,
-        %Channel{field: field} <- List.wrap(channel),
-        is_binary(field),
-        uniq: true,
-        do: field
+  defp fields(%Chart{layers: layers, facet: facet}) do
+    fields =
+      for %Layer{channels: channels} <- layers,
+          {_name, channel} <- channels,
+          %Channel{field: field} <- List.wrap(channel),
+          is_binary(field),
+          uniq: true,
+          do: field
+
+    if facet, do: Enum.uniq([facet.field | fields]), else: fields
   end
 
   @doc false
   # Every field that a channel reads is in the data.
-  def check_fields(%Chart{layers: layers}, data) do
+  def check_fields(%Chart{layers: layers, facet: facet}, data) do
     names = Data.names(data)
+
+    facet_errors =
+      if facet && facet.field not in names,
+        do: [
+          "facet: the field #{inspect(facet.field)} is not in the data" <>
+            Fude.Names.suggest(facet.field, names)
+        ],
+        else: []
 
     errors =
       for %Layer{channels: channels} <- layers,
@@ -63,7 +74,50 @@ defmodule Fude.Compile do
         end
       end
 
+    errors = facet_errors ++ errors
     if errors == [], do: :ok, else: {:error, Enum.uniq(errors)}
+  end
+
+  # Small multiples: the whole chart (its scales, its table, its words),
+  # and a panel for each value of the facet's field, drawn on the whole
+  # chart's scales.
+  defp build(%Chart{facet: %{field: field} = facet} = chart, data) do
+    whole = build(%{chart | facet: nil}, data)
+    field_info = Data.field(data, field)
+
+    values =
+      data
+      |> Data.column(field)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> sort_panels(field_info)
+
+    tables =
+      Enum.map(values, fn value ->
+        {value, Enum.map(chart.layers, &table(&1, Data.where(data, field, value)))}
+      end)
+
+    scales =
+      for {_value, layer_tables} <- tables, table <- layer_tables, reduce: %{} do
+        acc -> merge_scales(acc, table.scales)
+      end
+
+    panels =
+      Enum.map(tables, fn {value, layer_tables} ->
+        %{
+          "title" => panel_title(value, field_info),
+          "layers" => Enum.map(layer_tables, &encode(&1, scales))
+        }
+      end)
+
+    whole
+    |> Map.put("scales", finish_scales(scales))
+    |> Map.put("annotations", Enum.map(chart.annotations, &annotation(&1, scales)))
+    |> Map.put("facet", %{
+      "title" => Fude.Channel.title(%Fude.Channel{field: field}),
+      "columns" => facet.columns,
+      "panels" => panels
+    })
   end
 
   defp build(chart, data) do
@@ -199,6 +253,24 @@ defmodule Fude.Compile do
     scales = Enum.reduce(tables, %{}, &merge_scales(&2, &1.scales))
     {Enum.map(tables, &encode(&1, scales)), scales}
   end
+
+  defp sort_panels(values, %{type: :time}), do: Enum.sort(values)
+  defp sort_panels(values, _field), do: values
+
+  defp panel_title(value, %{type: :time, unit: unit}) when unit in [:day, :month, :year],
+    do:
+      value
+      |> Integer.floor_div(86_400_000)
+      |> then(&Date.add(~D[1970-01-01], &1))
+      |> Date.to_iso8601()
+
+  defp panel_title(value, %{type: :time}),
+    do: value |> DateTime.from_unix!(:millisecond) |> DateTime.to_iso8601()
+
+  defp panel_title(value, _field) when is_float(value),
+    do: :erlang.float_to_binary(value, [:short])
+
+  defp panel_title(value, _field), do: to_string(value)
 
   # The marks of each kind, and how its channels go to the mark's.
   defp table(%Layer{kind: kind} = layer, data) do
@@ -986,8 +1058,13 @@ defmodule Fude.Compile do
     Map.merge(acc, scales, fn _name, a, b -> merge_scale(a, b) end)
   end
 
-  defp merge_scale(%{"type" => "band"} = a, %{"type" => "band"} = b),
-    do: %{a | "domain" => Enum.uniq(a["domain"] ++ b["domain"])}
+  # Categories: all of both, in order. A waterfall's roles follow its names.
+  defp merge_scale(%{"type" => type} = a, %{"type" => type} = b)
+       when type in ["band", "point", "ordinal"] do
+    domain = Enum.uniq(a["domain"] ++ b["domain"])
+    merged = %{a | "domain" => domain}
+    if a["roles"], do: %{merged | "roles" => roles(domain)}, else: merged
+  end
 
   defp merge_scale(%{"domain" => [a0, a1]} = a, %{"domain" => [b0, b1]})
        when is_number(a0) and is_number(b0),
@@ -1088,6 +1165,17 @@ defmodule Fude.Compile do
   # by their titles, a category by its name, a time as a Date (a time of
   # a day or more) or a DateTime. The page's table and Fude.Test read it.
   @spec table(map()) :: {[String.t()], [[term()]]}
+  def table(%{"facet" => %{"title" => title, "panels" => panels}, "scales" => scales}) do
+    panels
+    |> Enum.map(fn panel ->
+      {panel["title"], table(%{"layers" => panel["layers"], "scales" => scales})}
+    end)
+    |> Enum.reduce({[], []}, fn {name, {heads, rows}}, {_, all} ->
+      {[title | heads], all ++ Enum.map(rows, &[name | &1])}
+    end)
+    |> then(fn {heads, rows} -> {heads, Enum.take(rows, 1000)} end)
+  end
+
   def table(%{"layers" => [layer | _], "scales" => scales}) do
     columns =
       [{"x", "x"}, {"y", "y"}, {"color", "color"}, {"size", "size"}, {"value", nil}]

@@ -74,6 +74,7 @@ defmodule Fude.Spec do
       |> put_unless("data", chart.data, "data")
       |> put_unless("height", chart.height, nil)
       |> put_unless("annotations", Enum.map(chart.annotations, &Fude.Annotation.dump/1), [])
+      |> put_unless("facet", dump_facet(chart.facet), nil)
 
     spec =
       case chart.layers do
@@ -97,6 +98,12 @@ defmodule Fude.Spec do
       put_unless(spec, Atom.to_string(key), Map.get(chart, key), nil)
     end)
   end
+
+  defp dump_facet(nil), do: nil
+  defp dump_facet(%{field: field, columns: nil}), do: %{"field" => field}
+
+  defp dump_facet(%{field: field, columns: columns}),
+    do: %{"field" => field, "columns" => columns}
 
   defp put_unless(map, _key, value, value), do: map
   defp put_unless(map, key, value, _default), do: Map.put(map, key, value)
@@ -203,7 +210,7 @@ defmodule Fude.Spec do
      [%{path: ["fude"], message: "is missing: a Fude spec carries its version, \"fude\" => 1"}]}
   end
 
-  @chart_keys ~w(fude title subtitle caption source description data height layers datasets annotations)
+  @chart_keys ~w(fude title subtitle caption source description data height layers datasets annotations facet)
 
   defp load_chart(spec) do
     acc = {%Chart{}, []}
@@ -230,6 +237,9 @@ defmodule Fude.Spec do
 
         {"annotations", list}, acc ->
           annotations(list, acc)
+
+        {"facet", facet}, acc ->
+          facet(facet, acc)
 
         _other, acc ->
           acc
@@ -276,6 +286,23 @@ defmodule Fude.Spec do
 
   defp height(height, acc),
     do: error(acc, ["height"], "must be a whole number of pixels, got: #{inspect(height)}")
+
+  defp facet(%{"field" => field} = facet, {chart, errors})
+       when is_binary(field) and field != "" do
+    case facet["columns"] do
+      nil ->
+        {%{chart | facet: %{field: field, columns: nil}}, errors}
+
+      n when is_integer(n) and n > 0 ->
+        {%{chart | facet: %{field: field, columns: n}}, errors}
+
+      n ->
+        error({chart, errors}, ["facet", "columns"], "must be a whole number, got: #{inspect(n)}")
+    end
+  end
+
+  defp facet(other, acc),
+    do: error(acc, ["facet"], ~s|must be {"field": name}, with "columns", got: #{inspect(other)}|)
 
   defp annotations(list, acc) when is_list(list) do
     list
