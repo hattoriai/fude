@@ -21,8 +21,8 @@ defmodule Fude.Test do
 
   import ExUnit.Assertions
 
-  @typedoc "A LiveView under test, or a render of one."
-  @type view :: Phoenix.LiveViewTest.View.t() | String.t()
+  @typedoc "A LiveView under test (a `Phoenix.LiveViewTest.View`), or a render of one."
+  @type view :: struct() | String.t()
 
   @doc "What the server sent the browser for the chart: its kind, scales and layers."
   @spec chart(view(), String.t()) :: map()

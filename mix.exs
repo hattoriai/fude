@@ -110,12 +110,28 @@ defmodule Fude.MixProject do
       assets: %{"media" => "media"},
       extras: [
         "README.md",
+        "guides/quickstart.md",
+        "guides/charts.md",
+        "guides/data.md",
+        "guides/story.md",
+        "guides/maps.md",
+        "guides/specs.md",
+        "guides/live.md",
+        "guides/testing.md",
+        "guides/theming.md",
+        "guides/accessibility.md",
+        "guides/limits.md",
         "CHANGELOG.md"
       ],
+      groups_for_extras: [
+        Guides: ~r{guides/(quickstart|charts|data|story|maps|specs|live)\.md},
+        "More guides": ~r{guides/(testing|theming|accessibility|limits)\.md}
+      ],
       groups_for_modules: [
-        Charts: [Fude, Fude.Chart, Fude.Channel, Fude.Components],
-        Spec: [Fude.Spec],
-        Data: [Fude.Data],
+        Charts: [Fude, Fude.Chart, Fude.Layer, Fude.Channel, Fude.Annotation, Fude.Components],
+        Data: [Fude.Data, Fude.Query],
+        Live: [Fude.Live],
+        Specs: [Fude.Spec],
         Testing: [Fude.Test]
       ]
     ]

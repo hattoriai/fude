@@ -225,8 +225,11 @@ domains, bins, units of time) are tested on both sides with one fixture,
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](https://github.com/hattoriai/fude/blob/main/CONTRIBUTING.md): when a change needs an issue
+first, and what a pull request needs.
 
 ## License
 
-MIT. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Fude is released under the MIT License. See `LICENSE`. The maps are made
+from Natural Earth and the U.S. Census Bureau (public domain), through
+world-atlas and us-atlas (ISC) and i18n-iso-countries (MIT). See `NOTICE`.

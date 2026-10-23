@@ -1,7 +1,8 @@
 defmodule Fude.QueryTest do
   # One database for the module: SQLite, or PostgreSQL with
   # FUDE_DB=postgres (a server on localhost, user postgres, password
-  # postgres), or MySQL with FUDE_DB=mysql (user root, password root).
+  # postgres), or MySQL with FUDE_DB=mysql (user root, password mysql), as
+  # in docker-compose.yml and CI.
   use ExUnit.Case, async: false
 
   import Ecto.Query
@@ -43,7 +44,7 @@ defmodule Fude.QueryTest do
 
   defp start_repo("mysql") do
     database = "fude_test_#{System.unique_integer([:positive])}"
-    opts = [hostname: "localhost", username: "root", password: "root"]
+    opts = [hostname: "localhost", username: "root", password: "mysql"]
     {:ok, admin} = MyXQL.start_link(opts)
     MyXQL.query!(admin, "CREATE DATABASE #{database}")
     GenServer.stop(admin)

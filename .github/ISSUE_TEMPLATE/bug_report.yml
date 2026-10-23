@@ -1,0 +1,100 @@
+name: Bug report
+description: Something in Fude does not work as the docs say.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A security problem goes to a private report instead (see SECURITY.md).
+
+  - type: input
+    id: fude
+    attributes:
+      label: Fude version
+      description: From `mix.lock`, or `mix deps | grep fude`.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: stack
+    attributes:
+      label: Elixir, OTP, Phoenix and LiveView versions
+      placeholder: "Elixir 1.20.1, OTP 29, Phoenix 1.8.1, LiveView 1.1.14"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where it happens
+      options:
+        - In the browser (what a chart draws, its tooltip, legend or keyboard)
+        - On the server (the chart's data, a spec, an error)
+        - In the database (Fude.query/3)
+        - Both
+        - Fude.Test
+        - mix fude.install
+    validations:
+      required: true
+
+  - type: input
+    id: kind
+    attributes:
+      label: Kind of chart
+      placeholder: "line, with color and a note"
+
+  - type: input
+    id: locale
+    attributes:
+      label: Locale
+      description: The `locale` of the chart, and of the browser. Numbers and dates often go wrong only in some of them.
+      placeholder: "de-DE"
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and OS
+      description: For what the browser draws or does.
+      placeholder: "Safari 26, iOS 26"
+
+  - type: input
+    id: database
+    attributes:
+      label: Database and adapter
+      description: For a chart of an Ecto query.
+      placeholder: "PostgreSQL 16, postgrex 0.21"
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: The smallest chart that shows it
+      description: The call or the spec (`Fude.Spec.dump/1`), and a few rows of its data. Or a link to a small repository.
+      render: elixir
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: A screenshot, the error and its stacktrace, from the server log or the browser console.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I use a release from Hex, not `main`.
+          required: true
+        - label: I searched the open and closed issues, and the Known limits guide.
+          required: true

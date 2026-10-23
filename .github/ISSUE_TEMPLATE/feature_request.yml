@@ -1,0 +1,39 @@
+name: Feature request
+description: An idea, or a change to what Fude does.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. A change of behaviour or a new feature is agreed here before a pull request (see CONTRIBUTING.md).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to show, for whom, and what stops you today. A picture of a chart you admire helps.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+      description: How it would look to an app (a kind, a channel, an option, a spec key) and to the person who reads the chart. Say if it changes what a chart does today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What else you considered
+      description: Other designs, and what you do today instead.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched the open and closed issues, and BACKLOG.md.
+          required: true
+        - label: I would like to make the pull request myself.
