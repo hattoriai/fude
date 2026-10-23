@@ -62,7 +62,10 @@ defmodule Fude do
     sparkline: "A small line with no axes, for a table or a card.",
     number: "One number, large, with a `label`.",
     trend: "One number with its change from `compare`.",
-    progress: "One number on a bar towards a `goal`."
+    progress: "One number on a bar towards a `goal`.",
+    choropleth:
+      "A map of regions colored by `color`: each `region` an ISO code (`\"PRT\"`, `\"PT\"`), a number code or a name; `map` is `\"world\"` (the default) or `\"us-states\"`.",
+    bubble_map: "A map with a circle at each `region`, sized by `size`."
   ]
 
   for {kind, doc} <- @kinds do

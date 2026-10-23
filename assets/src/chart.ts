@@ -3,10 +3,11 @@
 // (axes, labels, legend, tooltip) as DOM, and draws again in place when
 // the config changes, moving each mark from where it was.
 
-import { mix, readTheme, type Theme } from "./theme";
+import { alpha, ramp, readTheme, type Theme } from "./theme";
 import { formatTime, formatter, tickFormatter, timeTickFormatter } from "./format";
 import { position, type Position } from "./scale";
 import { draw, easeOut, tween, type Datum, type Paint, type PathShape, type Shape } from "./shapes";
+import { loadMap, type LoadedMap } from "./maps";
 import type { Config, Layer, Scale } from "./wire";
 
 export interface Transport {
@@ -58,6 +59,9 @@ export class Chart {
   private cursor = -1;
   private observers: { disconnect(): void }[] = [];
   private measurer: CanvasRenderingContext2D | null = null;
+  private geo: LoadedMap | null = null;
+  private note!: HTMLElement;
+  private names = new Map<string, string>();
 
   constructor(el: HTMLElement, _transport: Transport | null) {
     this.el = el;
@@ -118,7 +122,9 @@ export class Chart {
     this.tip.setAttribute("aria-hidden", "true");
     this.live = div("fude-live");
     this.live.setAttribute("aria-live", "polite");
-    this.stage.append(this.grid, this.canvas, this.svg, this.tip);
+    this.note = div("fude-note");
+    this.note.hidden = true;
+    this.stage.append(this.grid, this.canvas, this.svg, this.tip, this.note);
     plot.append(this.legend, this.stage, this.live);
 
     this.stage.addEventListener("pointermove", (event) => this.onPointer(event));
@@ -191,6 +197,7 @@ export class Chart {
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
     }
 
+    if (!this.prepareMap(animate)) return;
     this.layout = this.computeLayout(width, height);
     const shapes = this.computeShapes(this.layout);
 
@@ -201,6 +208,31 @@ export class Chart {
     this.shapes = shapes;
     this.renderAxes(this.layout);
     this.play(from, animate ? this.theme.duration : 0);
+  }
+
+  // The map of a map chart: ready, or loading (the chart draws when it
+  // comes), or not registered (the chart says so).
+  private prepareMap(animate: boolean): boolean {
+    const layer = (this.config.layers ?? []).find((l) => l.mark === "region" || l.mark === "bubble");
+    this.note.hidden = true;
+    if (!layer) return true;
+    const name = String(layer.options.map ?? "world");
+    const map = loadMap(name);
+    if (map === null) {
+      this.showNote(`The map "${name}" is not registered: see registerMap in the Maps guide.`);
+      return false;
+    }
+    if (map instanceof Promise) {
+      map.then(() => this.render(animate)).catch((error: Error) => this.showNote(error.message));
+      return false;
+    }
+    this.geo = map;
+    return true;
+  }
+
+  private showNote(text: string): void {
+    this.note.textContent = text;
+    this.note.hidden = false;
   }
 
   private play(from: Map<string, Shape>, duration: number): void {
@@ -382,7 +414,7 @@ export class Chart {
     const scale = this.config.scales?.color;
     const [d0, d1] = (scale?.domain as [number, number] | null) ?? [0, 1];
     const t = value === null || value === undefined || d1 === d0 ? 0.5 : (value - d0) / (d1 - d0);
-    return mix(this.theme.sequential[0], this.theme.sequential[1], Math.max(0, Math.min(1, t)));
+    return ramp(this.theme.sequential, t);
   }
 
   private colorOf(layer: Layer, row: number): string {
@@ -412,6 +444,10 @@ export class Chart {
           break;
         case "rect":
           this.cells(layer, index, layout, shapes);
+          break;
+        case "region":
+        case "bubble":
+          this.regions(layer, index, layout, shapes);
           break;
         case "rule":
           this.rules(layer, index, layout, shapes);
@@ -640,6 +676,69 @@ export class Chart {
     }
   }
 
+  // The regions of a map, colored by their value (or empty), fitted to the
+  // stage; a bubble map adds a circle at each region's center.
+  private regions(layer: Layer, index: number, layout: Layout, shapes: Shape[]): void {
+    const geo = this.geo;
+    if (!geo) return;
+    const map = geo.map;
+    const k = Math.min(layout.width / map.width, layout.height / map.height);
+    const tx = (layout.width - map.width * k) / 2;
+    const ty = (layout.height - map.height * k) / 2;
+    const c = layer.columns;
+    const domain = this.config.scales?.region?.domain ?? [];
+    const rows = new Map<number, number>();
+    const unmatched: unknown[] = [];
+    for (let i = 0; i < layer.n; i++) {
+      const value = domain[c.region?.[i] ?? -1];
+      const region = geo.find(value);
+      if (region === undefined) unmatched.push(value);
+      else rows.set(region, i);
+    }
+    if (unmatched.length) console.warn(`Fude: ${unmatched.length} regions of chart ${this.id} are not on the map ${map.name}:`, unmatched.slice(0, 20));
+
+    const bubble = layer.mark === "bubble";
+    map.regions.forEach((region, r) => {
+      const row = bubble ? undefined : rows.get(r);
+      const key = `${index}:${region.id}`;
+      const center: [number, number] = [tx + region.center[0] * k, ty + region.center[1] * k];
+      this.names.set(key, region.name);
+      shapes.push({
+        type: "region",
+        key,
+        path: geo.path(r),
+        k,
+        tx,
+        ty,
+        center,
+        color: row === undefined ? this.theme.empty : this.colorOf(layer, row),
+        name: region.name,
+        datum: row === undefined ? null : { layer: index, row, series: c.color?.[row] ?? null },
+      });
+    });
+    if (!bubble) return;
+
+    const [, max] = (this.config.scales?.size?.domain as [number, number] | null) ?? [0, 1];
+    const largest = Math.max(6, Math.min(layout.width, layout.height) / 18);
+    const circles = [...rows.entries()].sort(([, a], [, b]) => (c.size?.[b] ?? 0) - (c.size?.[a] ?? 0));
+    for (const [r, row] of circles) {
+      const region = map.regions[r]!;
+      const value = c.size?.[row] ?? 0;
+      const key = `${index}:${region.id}:bubble`;
+      this.names.set(key, region.name);
+      shapes.push({
+        type: "dot",
+        key,
+        x: tx + region.center[0] * k,
+        y: ty + region.center[1] * k,
+        r: max > 0 ? Math.max(2, Math.sqrt(Math.max(0, value) / max) * largest) : 2,
+        color: alpha(c.color ? this.colorOf(layer, row) : this.color(null), 0.78),
+        ring: true,
+        datum: { layer: index, row, series: c.color?.[row] ?? null },
+      });
+    }
+  }
+
   private rules(layer: Layer, index: number, layout: Layout, shapes: Shape[]): void {
     const c = layer.columns;
     for (let i = 0; i < layer.n; i++) {
@@ -790,7 +889,9 @@ export class Chart {
   }
 
   private marks(): Shape[] {
-    return this.shapes.filter((shape) => shape.type === "rect" || shape.type === "dot" || shape.type === "arc").filter((shape) => !shape.key.endsWith(":end"));
+    return this.shapes
+      .filter((shape) => shape.type === "rect" || shape.type === "dot" || shape.type === "arc" || (shape.type === "region" && shape.datum !== null))
+      .filter((shape) => !shape.key.endsWith(":end"));
   }
 
   private onPointer(event: PointerEvent): void {
@@ -808,13 +909,21 @@ export class Chart {
     }
     const hit = this.hit(px, py);
     this.cursor = hit ? this.marks().indexOf(hit) : -1;
-    this.setHover(hit && "datum" in hit ? { kind: "mark", key: hit.key, datum: hit.datum, ...this.anchor(hit) } : null);
+    this.setHover(hit && "datum" in hit && hit.datum ? { kind: "mark", key: hit.key, datum: hit.datum, ...this.anchor(hit) } : null);
   }
 
   private hit(px: number, py: number): Shape | null {
     let best: Shape | null = null;
     let bestDistance = 24;
-    for (const shape of this.marks()) {
+    // Circles over regions: the circles first, the smallest on top.
+    const marks = this.marks();
+    const ordered = marks.some((shape) => shape.type === "region") ? [...marks].reverse() : marks;
+    for (const shape of ordered) {
+      if (shape.type === "region") {
+        if (best) return best;
+        if (this.inRegion(shape, px, py)) return shape;
+        continue;
+      }
       if (shape.type === "rect") {
         const slack = 3;
         if (px >= shape.x - slack && px <= shape.x + shape.w + slack && py >= shape.y - slack && py <= shape.y + shape.h + slack) return shape;
@@ -837,8 +946,17 @@ export class Chart {
     return best;
   }
 
+  private hitContext: CanvasRenderingContext2D | null = null;
+
+  private inRegion(shape: Extract<Shape, { type: "region" }>, px: number, py: number): boolean {
+    this.hitContext ??= document.createElement("canvas").getContext("2d");
+    return !!this.hitContext?.isPointInPath(shape.path, (px - shape.tx) / shape.k, (py - shape.ty) / shape.k);
+  }
+
   private anchor(shape: Shape): { px: number; py: number } {
     switch (shape.type) {
+      case "region":
+        return { px: shape.center[0], py: shape.center[1] };
       case "rect":
         return { px: shape.x + shape.w / 2, py: shape.y };
       case "dot":
@@ -882,7 +1000,7 @@ export class Chart {
       if (!marks.length) return;
       this.cursor = this.move(this.cursor, marks.length, event.key);
       const mark = marks[this.cursor]!;
-      if ("datum" in mark) this.setHover({ kind: "mark", key: mark.key, datum: mark.datum, ...this.anchor(mark) });
+      if ("datum" in mark && mark.datum) this.setHover({ kind: "mark", key: mark.key, datum: mark.datum, ...this.anchor(mark) });
     }
     this.live.textContent = this.tipText();
   }
@@ -982,6 +1100,13 @@ export class Chart {
           rows: [{ value: `${formatter(null, this.locale)(c.value?.[row] ?? 0)} · ${formatter("percent", this.locale)(share)}`, name: "", color }],
         };
       }
+      case "region":
+      case "bubble": {
+        const rows: { value: string; name: string; color: string | null }[] = [];
+        if (c.size) rows.push({ value: this.valueText(c.size[row], scales.size), name: scales.size?.title ?? "", color: null });
+        if (c.color) rows.push({ value: this.valueText(c.color[row], scales.color), name: scales.color?.title ?? "", color });
+        return { title: this.names.get(hover.key) ?? this.valueText(c.region?.[row], scales.region), rows };
+      }
       case "rect":
         return {
           title: `${this.valueText(c.x?.[row], scales.x)} · ${this.valueText(c.y?.[row], scales.y)}`,
@@ -1041,11 +1166,28 @@ export class Chart {
 
   // -- Legend ---------------------------------------------------------------
 
+  // The legend of a sequential color: its ramp, from its lowest value to
+  // its highest.
+  private renderRamp(scale: Scale): void {
+    const legend = this.legend;
+    const [d0, d1] = (scale.domain as [number, number] | null) ?? [0, 1];
+    const format = formatter(scale.format, this.locale);
+    legend.hidden = false;
+    const ramp = div("fude-ramp");
+    if (scale.title) ramp.append(div("fude-ramp-title", scale.title));
+    const bar = div("fude-ramp-bar");
+    const stops = [0, 0.25, 0.5, 0.75, 1].map((t) => this.sequential(d0 + (d1 - d0) * t));
+    bar.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
+    ramp.append(div("fude-ramp-end", format(d0)), bar, div("fude-ramp-end", format(d1)));
+    legend.append(ramp);
+  }
+
   private renderLegend(): void {
     const legend = this.legend;
     legend.replaceChildren();
     const color = this.config.scales?.color;
     const layers = this.config.layers ?? [];
+    if (color && color.type === "sequential") return this.renderRamp(color);
     if (!color || color.type !== "ordinal") {
       legend.hidden = true;
       return;

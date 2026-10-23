@@ -1,3 +1,5 @@
+import { mix } from "./theme";
+
 // The shapes a chart draws, in pixels, each with the key that keeps its
 // identity from one render to the next: a bar moves to its new height, a
 // line's points to their new places, a new mark grows from the baseline.
@@ -82,7 +84,22 @@ export interface RuleShape {
   dashed: boolean;
 }
 
-export type Shape = RectShape | PathShape | DotShape | ArcShape | RuleShape;
+/** A region of a map: its path in the map's units, placed by `k`, `tx`, `ty`. */
+export interface RegionShape {
+  type: "region";
+  key: string;
+  path: Path2D;
+  k: number;
+  tx: number;
+  ty: number;
+  color: string;
+  name: string;
+  /** Its center in pixels: where its tooltip points. */
+  center: [number, number];
+  datum: Datum | null;
+}
+
+export type Shape = RectShape | PathShape | DotShape | ArcShape | RuleShape | RegionShape;
 
 // -- Tweening ---------------------------------------------------------------
 
@@ -130,6 +147,11 @@ export function tween(prev: Shape | undefined, next: Shape, t: number): Shape {
       const p = prev && prev.type === "arc" ? prev : { ...next, a1: next.a0 };
       return { ...next, a0: lerp(p.a0, next.a0, t), a1: lerp(p.a1, next.a1, t), r0: lerp(p.r0, next.r0, t), r1: lerp(p.r1, next.r1, t) };
     }
+    case "region": {
+      // A region keeps its place; its color moves to the new one.
+      const p = prev && prev.type === "region" ? prev : null;
+      return p && p.color !== next.color ? { ...next, color: mix(p.color, next.color, t) } : next;
+    }
     case "rule": {
       const p = prev && prev.type === "rule" ? prev : next;
       return { ...next, x1: lerp(p.x1, next.x1, t), y1: lerp(p.y1, next.y1, t), x2: lerp(p.x2, next.x2, t), y2: lerp(p.y2, next.y2, t) };
@@ -160,7 +182,24 @@ export function draw(ctx: CanvasRenderingContext2D, shape: Shape, paint: Paint, 
       return drawArc(ctx, shape, paint, opacity);
     case "rule":
       return drawRule(ctx, shape, opacity);
+    case "region":
+      return drawRegion(ctx, shape, paint, opacity);
   }
+}
+
+function drawRegion(ctx: CanvasRenderingContext2D, s: RegionShape, paint: Paint, opacity: number): void {
+  ctx.save();
+  ctx.translate(s.tx, s.ty);
+  ctx.scale(s.k, s.k);
+  ctx.globalAlpha = opacity * (s.datum ? paint.focus(s.key, null) : 1);
+  ctx.fillStyle = s.color;
+  ctx.fill(s.path);
+  ctx.globalAlpha = opacity;
+  ctx.lineWidth = 0.75 / s.k;
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = paint.surface;
+  ctx.stroke(s.path);
+  ctx.restore();
 }
 
 function drawRect(ctx: CanvasRenderingContext2D, s: RectShape, paint: Paint, opacity: number): void {

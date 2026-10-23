@@ -32,8 +32,10 @@
   --fude-series-6: #008300;
   --fude-series-7: #6250d6;
   --fude-series-8: #e34948;
-  --fude-sequential-low: #cde2fb;
-  --fude-sequential-high: #0d366b;
+  /* The ramp of a number's color, low to high: steps of one hue. */
+  --fude-sequential: #cde2fb, #9ec5f4, #6da7ec, #3987e5, #256abf, #184f95, #0d366b;
+  /* A region of a map with no value. */
+  --fude-map-empty: #ebeae5;
   --fude-up: #006300;
   --fude-down: #c62828;
   /* Marks: the thickest bar, the round end of a bar, the gap between
@@ -69,8 +71,9 @@
   --fude-series-6: #008300;
   --fude-series-7: #9085e9;
   --fude-series-8: #e66767;
-  --fude-sequential-low: #1e2b3d;
-  --fude-sequential-high: #86b6ef;
+  /* On ink, the ramp starts dark: low values recede into the surface. */
+  --fude-sequential: #16263b, #173f6e, #1c5cab, #2a78d6, #5598e7, #86b6ef, #b7d3f6;
+  --fude-map-empty: #2a2a2e;
   --fude-up: #0ca30c;
   --fude-down: #e66767;
   --fude-tooltip-background: #222226;
@@ -216,6 +219,44 @@
 
 .fude-canvas {
   z-index: 0;
+}
+
+/* The legend of a sequential color: a ramp between its ends. */
+.fude-ramp {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  color: var(--fude-secondary);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.fude-ramp-title {
+  flex-basis: 100%;
+  font-size: 0.8125rem;
+}
+
+.fude-ramp-bar {
+  width: 8rem;
+  height: 8px;
+  border-radius: 2px;
+}
+
+/* What a chart says when it cannot draw yet (a map that is not there). */
+.fude-note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  color: var(--fude-secondary);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.fude-note[hidden] {
+  display: none;
 }
 
 .fude-tooltip {

@@ -23,6 +23,8 @@ defmodule Fude.Layer do
           | :number
           | :trend
           | :progress
+          | :choropleth
+          | :bubble_map
 
   @type t :: %__MODULE__{
           kind: kind(),
@@ -85,7 +87,17 @@ defmodule Fude.Layer do
     },
     number: %{channels: [:value], needs: [:value], options: [label: :string]},
     trend: %{channels: [:value, :compare], needs: [:value], options: [label: :string]},
-    progress: %{channels: [:value], needs: [:value], options: [label: :string, goal: :number]}
+    progress: %{channels: [:value], needs: [:value], options: [label: :string, goal: :number]},
+    choropleth: %{
+      channels: [:region, :color, :tooltip],
+      needs: [:region, :color],
+      options: [map: :string]
+    },
+    bubble_map: %{
+      channels: [:region, :size, :color, :tooltip],
+      needs: [:region, :size],
+      options: [map: :string]
+    }
   }
 
   @doc false

@@ -8,7 +8,8 @@
     ".": {
       "import": "./priv/static/fude.esm.js",
       "require": "./priv/static/fude.cjs.js"
-    }
+    },
+    "./maps/*": "./priv/static/maps/*"
   },
   "files": [
     "priv/static"

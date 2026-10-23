@@ -92,7 +92,8 @@ defmodule Fude.Compile do
     end
   end
 
-  defp arcs?(chart), do: Enum.all?(chart.layers, &(&1.kind in [:pie, :donut]))
+  defp arcs?(chart),
+    do: Enum.all?(chart.layers, &(&1.kind in [:pie, :donut, :choropleth, :bubble_map]))
 
   # -- Single values ---------------------------------------------------------
 
@@ -195,7 +196,8 @@ defmodule Fude.Compile do
   # The channels that are aggregated, and how: by their own aggregate, or by
   # a sum for the value of a bar, an area, a cell or a slice.
   defp aggregated(kind, channels) do
-    implicit = if kind in [:bar, :area, :heatmap, :pie, :donut], do: :sum
+    implicit =
+      if kind in [:bar, :area, :heatmap, :pie, :donut, :choropleth, :bubble_map], do: :sum
 
     for {name, %Channel{} = channel} <- channels,
         fun = channel.aggregate || implicit_aggregate(implicit, kind, name, channel),
@@ -292,6 +294,8 @@ defmodule Fude.Compile do
 
   defp value_channels(kind) when kind in [:pie, :donut], do: [:value]
   defp value_channels(:heatmap), do: [:color]
+  defp value_channels(:choropleth), do: [:color]
+  defp value_channels(:bubble_map), do: [:size, :color]
   defp value_channels(_kind), do: [:y]
 
   defp column(%Channel{aggregate: :count, field: nil}, data, _bins),
@@ -527,6 +531,40 @@ defmodule Fude.Compile do
       channels: %{x: :x, y: :y},
       scales: scales,
       options: Map.take(layer.options, [:labels])
+    }
+  end
+
+  defp marks(kind, layer, %{rows: rows}, data) when kind in [:choropleth, :bubble_map] do
+    region = layer.channels.region
+    values = rows |> Enum.map(& &1[:region]) |> Enum.reject(&is_nil/1) |> Enum.uniq()
+
+    scales = %{
+      "region" => %{"type" => "ordinal", "domain" => values, "title" => Channel.title(region)}
+    }
+
+    scales = put_color(scales, layer.channels[:color], data, rows)
+
+    scales =
+      case layer.channels[:size] do
+        nil ->
+          scales
+
+        size ->
+          Map.put(scales, "size", %{
+            "type" => "sqrt",
+            "domain" => extent(rows, :size) |> with_zero(),
+            "title" => Channel.title(size),
+            "format" => format(size)
+          })
+      end
+
+    %{
+      mark: if(kind == :choropleth, do: "region", else: "bubble"),
+      layer: layer,
+      rows: rows,
+      channels: %{},
+      scales: scales,
+      options: %{map: layer.options[:map] || "world"}
     }
   end
 
@@ -830,7 +868,7 @@ defmodule Fude.Compile do
     present = rows |> List.first(%{}) |> Map.keys()
 
     columns =
-      [:x, :x2, :y, :y0, :y1, :color, :size, :value, :a0, :a1, :text]
+      [:x, :x2, :y, :y0, :y1, :color, :size, :value, :a0, :a1, :text, :region]
       |> Enum.filter(&(&1 in present))
       |> Map.new(fn name ->
         target = column_name(name, swap)
@@ -963,7 +1001,9 @@ defmodule Fude.Compile do
         "#{article(kind)} #{kind_name(kind)}",
         axis_words("x", scales["x"]),
         axis_words("y", scales["y"]),
-        color_words(scales["color"])
+        region_words(scales["region"]),
+        color_words(scales["color"]),
+        size_words(scales["size"])
       ]
       |> Enum.reject(&(&1 in [nil, ""]))
 
@@ -983,6 +1023,8 @@ defmodule Fude.Compile do
   defp kind_name(:histogram), do: "histogram"
   defp kind_name(:heatmap), do: "heatmap"
   defp kind_name(:sparkline), do: "sparkline"
+  defp kind_name(:choropleth), do: "map"
+  defp kind_name(:bubble_map), do: "map"
   defp kind_name(kind), do: "#{kind} chart"
 
   defp axis_words(_name, nil), do: nil
@@ -999,7 +1041,20 @@ defmodule Fude.Compile do
   defp color_words(%{"type" => "ordinal", "domain" => domain} = scale) when domain != [],
     do: "#{length(domain)} series by #{scale["title"]}: #{Enum.join(Enum.take(domain, 8), ", ")}"
 
+  defp color_words(%{"type" => "sequential", "domain" => [min, max]} = scale),
+    do: "color, #{scale["title"]}: from #{plain(min, scale)} to #{plain(max, scale)}"
+
   defp color_words(_scale), do: nil
+
+  defp region_words(%{"domain" => domain} = scale),
+    do: "#{length(domain)} regions by #{scale["title"]}"
+
+  defp region_words(_scale), do: nil
+
+  defp size_words(%{"domain" => [_, max]} = scale) when is_number(max),
+    do: "size, #{scale["title"]}: up to #{plain(max, scale)}"
+
+  defp size_words(_scale), do: nil
 
   defp plain(value, %{"type" => "time", "unit" => "day"}) when is_integer(value),
     do: value |> div(86_400_000) |> then(&Date.add(~D[1970-01-01], &1)) |> Date.to_iso8601()

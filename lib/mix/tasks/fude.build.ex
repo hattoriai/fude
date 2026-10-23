@@ -20,10 +20,11 @@ defmodule Mix.Tasks.Fude.Build do
     3. Runs esbuild (the `esbuild` Mix package) with the `:fude_esm` and
        `:fude_cjs` profiles.
     4. Copies `assets/css/fude.css` and `assets/css/fude-sumi.css` to
-       `priv/static/`.
+       `priv/static/`, and the maps of `assets/maps/` to
+       `priv/static/maps/`.
 
-  After the task, `priv/static` holds exactly these four files, which are
-  the files of the Hex package.
+  After the task, `priv/static` holds exactly these files, which are the
+  files of the Hex package.
 
   It needs `npm` on the path and the `:esbuild` dependency, which is
   available in the `:dev` environment.
@@ -58,6 +59,7 @@ defmodule Mix.Tasks.Fude.Build do
     File.mkdir_p!(@static)
     Enum.each(@profiles, &bundle/1)
     Enum.each(@stylesheets, &copy_stylesheet/1)
+    File.cp_r!(Path.join(@assets, "maps"), Path.join(@static, "maps"))
 
     Mix.shell().info("Fude assets are in #{@static}/")
   end

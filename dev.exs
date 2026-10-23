@@ -141,6 +141,25 @@ defmodule FudeDev.Data do
   end
 
   def kpis, do: [%{mrr: 184_320.5, last: 171_240.0, done: 68}]
+
+  # Users by country, by ISO code; a few by name.
+  def countries do
+    codes =
+      ~w(USA CAN MEX BRA ARG CHL COL PER GBR IRL FRA DEU ESP PRT ITA NLD BEL CHE AUT POL SWE NOR DNK FIN
+      CZE HUN ROU GRC TUR UKR IND CHN JPN KOR IDN PHL VNM THA MYS AUS NZL ZAF NGA KEN EGY MAR SAU ARE ISR)
+
+    (for code <- codes do
+       %{country: code, users: round(200 + 9000 * :math.pow(noise({:c, code}), 2.2))}
+     end ++ [%{country: "Viet Nam", users: 0}])
+    |> Enum.reject(&(&1.users == 0))
+  end
+
+  def states do
+    states =
+      ~w(CA TX FL NY PA IL OH GA NC MI NJ VA WA AZ MA TN IN MO MD WI CO MN SC AL LA KY OR OK CT UT IA NV)
+
+    for s <- states, do: %{state: s, stores: round(5 + 120 * noise({:s, s}))}
+  end
 end
 
 defmodule FudeDev.Layouts do
@@ -186,7 +205,10 @@ defmodule FudeDev.Layouts do
         <script type="module">
           import { Socket } from "phoenix"
           import { LiveSocket } from "phoenix_live_view"
-          import { Fude } from "fude"
+          import { Fude, registerMap } from "fude"
+
+          registerMap("world", "/assets/maps/world.json")
+          registerMap("us-states", "/assets/maps/us-states.json")
 
           const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
           const liveSocket = new LiveSocket("/live", Socket, { hooks: { Fude }, params: { _csrf_token: csrfToken } })
@@ -280,6 +302,18 @@ defmodule FudeDev.GalleryLive do
         id="revenue-area"
         locale={@locale}
         chart={Fude.area(monthly(@shuffled), x: :month, y: [field: :revenue, format: :compact, title: "Revenue"], color: :channel, title: "Revenue, stacked")}
+      />
+      <.chart
+        id="world"
+        locale={@locale}
+        chart={Fude.choropleth(Data.countries(), region: :country, color: [field: :users, title: "Users"],
+          title: "Where the users are", subtitle: "Users by country", source: "Made-up data; Natural Earth")}
+      />
+      <.chart
+        id="stores"
+        locale={@locale}
+        chart={Fude.bubble_map(Data.states(), region: :state, size: [field: :stores, title: "Stores"], map: "us-states",
+          title: "Stores by state")}
       />
       <.chart
         id="broken"

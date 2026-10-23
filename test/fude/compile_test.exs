@@ -115,4 +115,31 @@ defmodule Fude.CompileTest do
     assert wire["description"] ==
              "Revenue. A bar chart. x axis, Region: 2 categories. y axis, Revenue: from 0 to 230. 2 series by Channel: Online, Retail."
   end
+
+  describe "maps" do
+    test "a choropleth sums the value of each region and names its map" do
+      data = [%{c: "PRT", n: 2}, %{c: "PRT", n: 3}, %{c: "ESP", n: 4}]
+      wire = compile!(Fude.choropleth(data, region: :c, color: :n))
+
+      assert %{"layers" => [%{"mark" => "region", "options" => %{"map" => "world"}} = layer]} =
+               wire
+
+      assert wire["scales"]["region"]["domain"] == ["PRT", "ESP"]
+      assert layer["columns"]["color"] == [5, 4]
+      assert wire["axes"] == false
+      assert wire["description"] =~ "2 regions by C"
+    end
+
+    test "a bubble map sizes its circles from zero" do
+      data = [%{s: "CA", n: 20}, %{s: "TX", n: 5}]
+      wire = compile!(Fude.bubble_map(data, region: :s, size: :n, map: "us-states"))
+      assert %{"layers" => [%{"mark" => "bubble", "options" => %{"map" => "us-states"}}]} = wire
+      assert wire["scales"]["size"]["domain"] == [0, 20]
+    end
+
+    test "a map's spec goes there and back" do
+      chart = Fude.choropleth(region: :country, color: {:sum, :users}, map: "us-states")
+      assert {:ok, ^chart} = chart |> Fude.Spec.dump() |> Fude.Spec.load()
+    end
+  end
 end

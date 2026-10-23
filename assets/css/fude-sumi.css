@@ -38,8 +38,7 @@
   --fude-sumi-series-6: #e87ba4;
   --fude-sumi-series-7: #008300;
   --fude-sumi-series-8: #8a867e;
-  --fude-sumi-sequential-low: #fbd9cb;
-  --fude-sumi-sequential-high: #7a2208;
+  --fude-sumi-sequential: #fbdccf, #f6b296, #ee7a4c, #e84a1c, #c23a10, #962c0b, #6a1e06;
 }
 
 /* The Sumi palette, dark: data-theme="dark", or a dark preference on a page
@@ -56,8 +55,7 @@
   --fude-sumi-series-6: #d55181;
   --fude-sumi-series-7: #008300;
   --fude-sumi-series-8: #7d7a74;
-  --fude-sumi-sequential-low: #3a1a10;
-  --fude-sumi-sequential-high: #f6a283;
+  --fude-sumi-sequential: #34160c, #5e2410, #8f3312, #c2410f, #e8582a, #f08a62, #f6b79c;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -73,8 +71,7 @@
     --fude-sumi-series-6: #d55181;
     --fude-sumi-series-7: #008300;
     --fude-sumi-series-8: #7d7a74;
-    --fude-sumi-sequential-low: #3a1a10;
-    --fude-sumi-sequential-high: #f6a283;
+    --fude-sumi-sequential: #34160c, #5e2410, #8f3312, #c2410f, #e8582a, #f08a62, #f6b79c;
   }
 }
 
@@ -104,8 +101,8 @@
   --fude-series-6: var(--fude-sumi-series-6);
   --fude-series-7: var(--fude-sumi-series-7);
   --fude-series-8: var(--fude-sumi-series-8);
-  --fude-sequential-low: var(--fude-sumi-sequential-low);
-  --fude-sequential-high: var(--fude-sumi-sequential-high);
+  --fude-sequential: var(--fude-sumi-sequential);
+  --fude-map-empty: color-mix(in oklab, var(--color-base-300, var(--sumi-line, var(--fude-sumi-line))) 80%, var(--color-base-100, var(--sumi-paper, var(--fude-sumi-paper))));
 
   /* The tooltip: paper, as the page. */
   --fude-tooltip-background: var(--color-base-100, var(--sumi-paper, var(--fude-sumi-paper)));

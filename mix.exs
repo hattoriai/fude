@@ -81,6 +81,8 @@ defmodule Fude.MixProject do
         priv/static/fude.cjs.js
         priv/static/fude.css
         priv/static/fude-sumi.css
+        priv/static/maps/world.json
+        priv/static/maps/us-states.json
         package.json
         mix.exs
         .formatter.exs

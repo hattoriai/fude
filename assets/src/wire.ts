@@ -2,7 +2,7 @@
 // domains, and each layer's mark with its columns. A category is its
 // index in its scale's domain; a time is milliseconds since 1970 (UTC).
 
-export type MarkType = "bar" | "line" | "area" | "point" | "arc" | "rect" | "rule" | "text";
+export type MarkType = "bar" | "line" | "area" | "point" | "arc" | "rect" | "rule" | "text" | "region" | "bubble";
 
 export interface Scale {
   type: "band" | "point" | "linear" | "log" | "sqrt" | "time" | "ordinal" | "sequential";

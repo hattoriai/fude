@@ -10,14 +10,19 @@ export interface Theme {
   grid: string;
   baseline: string;
   surface: string;
+  empty: string;
   series: string[];
-  sequential: [string, string];
+  sequential: string[];
   barMax: number;
   radius: number;
   gap: number;
   line: number;
   duration: number;
 }
+
+// A sequential ramp of one hue, light to dark, in steps that are each told
+// apart from the next.
+const SEQUENTIAL = "#cde2fb, #9ec5f4, #6da7ec, #3987e5, #256abf, #184f95, #0d366b";
 
 const FALLBACK_SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
 
@@ -39,8 +44,12 @@ export function readTheme(el: Element): Theme {
     grid: get("--fude-grid", "#e1e0d9"),
     baseline: get("--fude-baseline", "#c3c2b7"),
     surface: get("--fude-surface", "#fcfcfb"),
+    empty: get("--fude-map-empty", "#e8e7e1"),
     series,
-    sequential: [get("--fude-sequential-low", "#cde2fb"), get("--fude-sequential-high", "#0d366b")],
+    sequential: get("--fude-sequential", SEQUENTIAL)
+      .split(",")
+      .map((color) => color.trim())
+      .filter(Boolean),
     barMax: num("--fude-bar-max", 40),
     radius: num("--fude-bar-radius", 4),
     gap: num("--fude-gap", 2),
@@ -74,6 +83,15 @@ export function rgb(color: string): [number, number, number] {
   }
   parsed.set(color, out);
   return out;
+}
+
+/** A color along a ramp of steps, at `t` from 0 to 1: between its two nearest steps. */
+export function ramp(steps: string[], t: number): string {
+  if (steps.length === 0) return "#888";
+  if (steps.length === 1) return steps[0]!;
+  const at = Math.max(0, Math.min(1, t)) * (steps.length - 1);
+  const i = Math.min(steps.length - 2, Math.floor(at));
+  return mix(steps[i]!, steps[i + 1]!, at - i);
 }
 
 /** A color between two, in linear-light RGB so the middle is not muddy. */
