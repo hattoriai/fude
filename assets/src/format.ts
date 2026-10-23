@@ -38,18 +38,40 @@ function dateFormat(locale: string | undefined, options: Intl.DateTimeFormatOpti
 const BYTES = ["byte", "kilobyte", "megabyte", "gigabyte", "terabyte", "petabyte"];
 
 /**
+ * A format of the wire and its digits: "number:0" is "number" with no
+ * decimals, "currency:EUR:2" a currency with two, ":0" no format with none.
+ */
+export function parseFormat(format: string | null | undefined): { name: string | null; digits: number | undefined } {
+  const match = /^(.*?)(?::(\d+))?$/.exec(format ?? "");
+  const name = match?.[1] || null;
+  return { name, digits: match?.[2] === undefined ? undefined : Number(match[2]) };
+}
+
+// Exactly so many decimals, when they are given.
+function fixed(digits: number | undefined): Intl.NumberFormatOptions {
+  return digits === undefined ? {} : { minimumFractionDigits: digits, maximumFractionDigits: digits };
+}
+
+/**
  * A function that writes a value of a format: "number", "integer",
  * "percent", "compact", "currency:EUR", "bytes", "duration" (seconds), or
- * none (as a number, with no more digits than it needs).
+ * none (as a number, with no more digits than it needs). The digits of the
+ * format ("number:0") are exactly its decimals; the digits given, at most.
  */
 export function formatter(format: string | null | undefined, locale?: string, digits?: number): (value: number) => string {
+  const parsed = parseFormat(format);
+  format = parsed.name;
+  // The channel's digits are exact; those given are at most.
+  const own = parsed.digits;
   switch (format) {
     case "integer":
       return (v) => numberFormat(locale, { maximumFractionDigits: 0 }).format(v);
+    case "number":
+      return (v) => numberFormat(locale, own === undefined ? { maximumFractionDigits: digits ?? 2 } : fixed(own)).format(v);
     case "percent":
-      return (v) => numberFormat(locale, { style: "percent", maximumFractionDigits: digits ?? 1 }).format(v);
+      return (v) => numberFormat(locale, { style: "percent", maximumFractionDigits: digits ?? 1, ...fixed(own) }).format(v);
     case "compact":
-      return (v) => numberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(v);
+      return (v) => numberFormat(locale, { notation: "compact", maximumFractionDigits: 1, ...fixed(own) }).format(v);
     case "bytes":
       return (v) => {
         let i = 0;
@@ -68,10 +90,10 @@ export function formatter(format: string | null | undefined, locale?: string, di
           numberFormat(locale, {
             style: "currency",
             currency,
-            maximumFractionDigits: digits ?? (Math.abs(v) >= 1000 ? 0 : 2),
+            ...(own === undefined ? { maximumFractionDigits: digits ?? (Math.abs(v) >= 1000 ? 0 : 2) } : fixed(own)),
           }).format(v);
       }
-      return (v) => numberFormat(locale, { maximumFractionDigits: digits ?? fractionDigits(v) }).format(v);
+      return (v) => numberFormat(locale, own === undefined ? { maximumFractionDigits: digits ?? fractionDigits(v) } : fixed(own)).format(v);
   }
 }
 
@@ -100,9 +122,11 @@ function duration(seconds: number, locale?: string): string {
 
 /**
  * The labels of number ticks: as many digits as the step between them
- * needs, compact from 1,000 up (1K, 2K), in the axis's format.
+ * needs (not the format's own), compact from 1,000 up (1K, 2K), in the
+ * axis's format.
  */
 export function tickFormatter(format: string | null | undefined, ticks: number[], locale?: string): (value: number) => string {
+  format = parseFormat(format).name;
   const step = ticks.length > 1 ? Math.abs(ticks[1]! - ticks[0]!) : 1;
   const digits = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
   const max = Math.max(...ticks.map(Math.abs), 0);

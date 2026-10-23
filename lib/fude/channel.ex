@@ -36,6 +36,12 @@ defmodule Fude.Channel do
     * `:format` - how the browser writes the values: `:number`, `:integer`,
       `:percent`, `:compact`, `{:currency, "EUR"}`, `:bytes`, or a unit
       of a time for times.
+    * `:digits` - how many decimals the values are written with, from 0 to
+      20, for `:number`, `:compact`, `:percent` and currencies:
+      `[field: :revenue, format: :number, digits: 0]` writes 6,893,914. Not
+      given, `:number` keeps a value's decimals up to 2, `:compact` and
+      `:percent` write up to 1, and a currency 2 under 1,000 and none from
+      there. An axis's ticks take the decimals their step needs.
     * `:title` - the title of the axis or the legend; the field's name when
       not given, `false` for none.
     * `:scale` - a keyword list: `:type` (`:linear`, `:log`, `:sqrt`),
@@ -62,6 +68,7 @@ defmodule Fude.Channel do
           bin: boolean() | map() | nil,
           sort: atom() | [term()] | nil,
           format: atom() | {atom(), String.t()} | nil,
+          digits: non_neg_integer() | nil,
           title: String.t() | false | nil,
           scale: map() | nil,
           stack: atom() | false | nil,
@@ -77,6 +84,7 @@ defmodule Fude.Channel do
     :bin,
     :sort,
     :format,
+    :digits,
     :title,
     :scale,
     :stack,
@@ -166,6 +174,9 @@ defmodule Fude.Channel do
   defp put(_name, channel, {:format, {:currency, code}}) when is_binary(code),
     do: %{channel | format: {:currency, code}}
 
+  defp put(_name, channel, {:digits, digits}) when digits in 0..20,
+    do: %{channel | digits: digits}
+
   defp put(_name, channel, {:title, title}) when is_binary(title) or title == false,
     do: %{channel | title: title}
 
@@ -210,14 +221,15 @@ defmodule Fude.Channel do
   defp expected(:sort), do: Enum.map_join(@sorts, ", ", &inspect/1) <> " or a list"
   defp expected(:stack), do: Enum.map_join(@stacks, ", ", &inspect/1) <> " or false"
   defp expected(:format), do: Enum.map_join(@formats, ", ", &inspect/1) <> " or {:currency, code}"
+  defp expected(:digits), do: "a whole number from 0 to 20"
   defp expected(:title), do: "a string or false"
   defp expected(:bin), do: "true, or count: n or step: n"
   defp expected(:axis), do: ":left or :right"
 
   defp expected(_key),
     do:
-      "one of :field, :type, :aggregate, :time, :bin, :sort, :format, :title, :scale, :stack, " <>
-        ":value, :axis"
+      "one of :field, :type, :aggregate, :time, :bin, :sort, :format, :digits, :title, :scale, " <>
+        ":stack, :value, :axis"
 
   defp bad(name, value) do
     "Fude: #{inspect(name)} must be a field, {aggregate, field}, {unit, field}, {:bin, field}, " <>

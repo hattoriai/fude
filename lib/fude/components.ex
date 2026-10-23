@@ -298,7 +298,9 @@ defmodule Fude.Components do
           :if={change(@single) != nil}
           class={["fude-delta", if(change(@single) >= 0, do: "fude-up", else: "fude-down")]}
         >
-          <data value={change(@single)} data-format="percent-change">{percent(change(@single))}</data>
+          <data value={change(@single)} data-format={"percent-change" <> digits_of(@single)}>
+            {percent(change(@single), @single)}
+          </data>
         </span>
         <span :if={@single["label"]} class="fude-label">{@single["label"]}</span>
       </span>
@@ -430,7 +432,27 @@ defmodule Fude.Components do
 
   defp change(_single), do: nil
 
-  defp percent(change), do: "#{if change >= 0, do: "+", else: ""}#{Float.round(change * 100, 1)}%"
+  # A trend's change, with the digits of its value when it has them, or one.
+  defp percent(change, single) do
+    digits =
+      case digits_of(single) do
+        ":" <> digits -> String.to_integer(digits)
+        "" -> 1
+      end
+
+    sign = if change >= 0, do: "+", else: ""
+    "#{sign}#{:erlang.float_to_binary(change * 100.0, decimals: digits)}%"
+  end
+
+  # The digits of a single value's format ("number:0"), as its suffix.
+  defp digits_of(%{"format" => format}) when is_binary(format) do
+    case Regex.run(~r/:(\d+)$/, format) do
+      [suffix, _digits] -> suffix
+      nil -> ""
+    end
+  end
+
+  defp digits_of(_single), do: ""
 
   # The value's share of its goal, which can pass it; the bar stops at the
   # goal.

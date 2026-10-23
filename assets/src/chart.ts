@@ -4,7 +4,7 @@
 // the config changes, moving each mark from where it was.
 
 import { alpha, ramp, readTheme, type Theme } from "./theme";
-import { formatTime, formatter, tickFormatter, timeTickFormatter } from "./format";
+import { formatTime, formatter, parseFormat, tickFormatter, timeTickFormatter } from "./format";
 import { position, type Position } from "./scale";
 import { draw, easeOut, tween, type Datum, type Paint, type PathShape, type Shape } from "./shapes";
 import { loadMap, type LoadedMap } from "./maps";
@@ -244,12 +244,14 @@ export class Chart {
     for (const data of this.el.querySelectorAll<HTMLDataElement>("data.fude-value, .fude-delta data, data.fude-share")) {
       const value = parseFloat(data.value);
       if (!Number.isFinite(value)) continue;
-      const format = data.dataset.format;
-      if (format === "percent-change") {
-        const text = formatter("percent", this.locale, 1)(Math.abs(value));
+      // With no format, exact under 100,000 and compact from there.
+      const { name, digits } = parseFormat(data.dataset.format);
+      if (name === "percent-change") {
+        const text = formatter("percent", this.locale, digits ?? 1)(Math.abs(value));
         data.textContent = `${value >= 0 ? "▲" : "▼"} ${text}`;
       } else {
-        data.textContent = formatter(format || (Math.abs(value) >= 100000 ? "compact" : null), this.locale)(value);
+        const auto = name || (Math.abs(value) >= 100000 ? "compact" : null);
+        data.textContent = formatter(digits === undefined ? auto : `${auto ?? ""}:${digits}`, this.locale)(value);
       }
       if (data.classList.contains("fude-value")) data.style.setProperty("--fude-chars", String(data.textContent.length));
     }

@@ -15,7 +15,21 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   next. Each stack is now in the order of the series, as the legend has
   them (first seen, or the color channel's `sort`).
 
+### Changed
+
+- `format: :number` writes a value's decimals up to 2, under 1 too
+  (0.125 was 0.125, is 0.13), so that money reads naturally.
+
 ### Added
+
+- `digits` on a channel: how many decimals `:number`, `:compact`,
+  `:percent` and currencies write, from 0 to 20
+  (`value: [field: :revenue, format: :number, digits: 0]` writes
+  6,893,914). A trend's change takes the digits of its value. Axis ticks
+  keep the decimals their step needs. In a spec, `"digits": 0` on the
+  channel; nothing changes for saved specs.
+- The default of a single value is documented: with no format, exact
+  under 100,000 and compact from there.
 
 - The single values (`number`, `trend`, `gauge`, `progress`) fill their
   box, as a tile of a dashboard does, and are centered in it: the number,

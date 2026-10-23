@@ -89,7 +89,7 @@ if Code.ensure_loaded?(Issho.Tool) do
       text, number, trend, gauge, progress. A channel is a field's name, or
       {"field", "aggregate" (count, sum, mean, median, min, max, distinct),
       "time" (year, quarter, month, week, day, hour, minute), "bin",
-      "format", "title", "sort", "stack"}.
+      "format", "digits" (decimals, 0 to 20), "title", "sort", "stack"}.
       """,
       annotations: [destructive: true]
 

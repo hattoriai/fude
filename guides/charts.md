@@ -28,7 +28,8 @@ The full form also takes `type` (`:number`, `:time`, `:category`,
 `:ordinal`), `sort` (`:ascending`, `:descending`, `:"-y"` by the other
 channel, or a list of the categories in order), `format` (`:number`,
 `:integer`, `:percent`, `:compact`, `{:currency, code}`, `:bytes`,
-`:duration`), `scale` (`type: :log`, `domain: [0, 100]`, `zero: true`,
+`:duration`), `digits` (the decimals of a `:number`, `:compact`,
+`:percent` or currency, from 0 to 20), `scale` (`type: :log`, `domain: [0, 100]`, `zero: true`,
 `nice: false`), `stack` (`:zero`, `:normalize`, `:center`, `false`) and
 `axis` (`:right`, for a `y` on an axis of its own, see Layers).
 
@@ -67,7 +68,18 @@ side by side, and `stack: :normalize` to 100%.
 
 The single numbers (`number`, `trend`, `gauge`, `progress`) are written
 by the server, with no JavaScript; the browser writes the number in the
-chart's locale.
+chart's locale. With no `format`, a single number is exact under 100,000
+(`84,213.5`) and compact from there (`6.9M`), as a headline. A format
+says which, and `digits` how many decimals:
+
+```elixir
+Fude.number(sales, value: [field: :revenue, format: :number, digits: 0])      # 6,893,914
+Fude.number(sales, value: [field: :revenue, format: :compact, digits: 2])     # 6.89M
+Fude.number(sales, value: [field: :revenue, format: {:currency, "EUR"}, digits: 2]) # €6,893,913.60
+```
+
+`:number` with no digits keeps a value's decimals, up to 2. A trend's
+change takes the digits of its value, or one.
 
 A single number fills its box, as a tile of a dashboard: it is centered,
 and the number, the gauge's arc and the progress bar grow with the box.
