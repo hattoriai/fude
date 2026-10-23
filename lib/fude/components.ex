@@ -59,6 +59,11 @@ defmodule Fude.Components do
     doc:
       "whether the chart has buttons that save it as SVG and PNG (see also `Fude.Live.export/3`)"
 
+  attr :issho, :string,
+    default: nil,
+    doc:
+      "the Issho document of a shared chart (`Fude.Issho`): the people of its room see each other's pointers on its marks"
+
   attr :class, :any, default: nil, doc: "classes for the chart's element"
   attr :rest, :global
 
@@ -71,6 +76,7 @@ defmodule Fude.Components do
       class={["fude", "fude-kind-#{@kind}", @class]}
       phx-hook={!@wire["facet"] && "Fude"}
       data-fude={!@wire["facet"] && @config}
+      data-issho-doc={@issho}
       aria-labelledby={@wire["title"] && "#{@id}-title"}
       {@rest}
     >

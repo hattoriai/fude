@@ -48,4 +48,10 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Fude.Test`, to read what a chart shows in `Phoenix.LiveViewTest`.
 - The Sumi theme (`fude-sumi.css`), dark mode, reduced motion and forced
   colors.
+- `Fude.Issho`, with Issho: a chart as a room's shared state, that people
+  change with `Fude`'s functions (`Fude.Issho.change/3`) and agents with
+  the `read_chart` and `change_chart` tools, refused when a change makes
+  it invalid; the people's pointers on its marks, in its data's terms
+  (`Fude.Issho.Place`, `<.chart issho>`).
+- An `"id"` for a layer and an annotation of a spec.
 - `mix fude.install`.

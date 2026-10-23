@@ -165,4 +165,18 @@ defmodule Fude.SpecAtomsTest do
     Fude.Spec.load(spec.("fresh_key_#{System.unique_integer([:positive])}"))
     assert :erlang.system_info(:atom_count) == before
   end
+
+  test "layers and annotations keep their ids; an id is text" do
+    spec = %{
+      "fude" => 1,
+      "layers" => [%{"id" => "l1", "kind" => "bar", "x" => "region", "y" => "revenue"}],
+      "annotations" => [%{"id" => "n1", "type" => "line", "y" => 100, "text" => "Goal"}]
+    }
+
+    assert {:ok, chart} = Fude.Spec.load(spec)
+    assert Fude.Spec.dump(chart, layers: true) == spec
+
+    assert {:error, [%{path: ["layers", 0, "id"], message: "must be text, got: 7"}]} =
+             Fude.Spec.load(put_in(spec, ["layers", Access.at(0), "id"], 7))
+  end
 end

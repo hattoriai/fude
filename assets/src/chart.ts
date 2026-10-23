@@ -9,6 +9,7 @@ import { position, type Position } from "./scale";
 import { draw, easeOut, tween, type Datum, type Paint, type PathShape, type Shape } from "./shapes";
 import { loadMap, type LoadedMap } from "./maps";
 import { png, save, svgDocument, SvgContext } from "./export";
+import { categorical, dataValue, datumOf, fraction, matches, same, type Datum as PlaceDatum, type Place } from "./places";
 import type { Config, Layer, Scale } from "./wire";
 
 export interface Transport {
@@ -63,6 +64,7 @@ export class Chart {
   private geo: LoadedMap | null = null;
   private note!: HTMLElement;
   private names = new Map<string, string>();
+  private cleanups: (() => void)[] = [];
 
   constructor(el: HTMLElement, _transport: Transport | null) {
     this.el = el;
@@ -82,6 +84,7 @@ export class Chart {
     this.build(this.plot);
     this.render(true);
     this.observe();
+    this.share();
   }
 
   /** Takes the server's new render: draws again, moving the marks. */
@@ -163,6 +166,8 @@ export class Chart {
   }
 
   destroy(): void {
+    for (const cleanup of this.cleanups) cleanup();
+    this.cleanups = [];
     cancelAnimationFrame(this.frame);
     for (const observer of this.observers) observer.disconnect();
     this.observers = [];
@@ -1202,6 +1207,158 @@ export class Chart {
       default:
         return { px: 0, py: 0 };
     }
+  }
+
+  // -- Places (Fude.Issho.Place) -------------------------------------------
+
+  /**
+   * Issho's pointers, through the symbols it reads (no import of it): a
+   * person's pointer over a mark is that mark's data (`placeAt`), and each
+   * screen draws it on the same data (`locate`), whatever its size.
+   */
+  private share(): void {
+    const element = this.el as unknown as Record<symbol, unknown>;
+    const locator = (at: unknown) => this.locate(at);
+    const pointer = (x: number, y: number) => this.placeAt(x, y);
+    element[Symbol.for("issho.locator")] = locator;
+    element[Symbol.for("issho.point")] = pointer;
+    this.cleanups.push(() => {
+      if (element[Symbol.for("issho.locator")] === locator) delete element[Symbol.for("issho.locator")];
+      if (element[Symbol.for("issho.point")] === pointer) delete element[Symbol.for("issho.point")];
+    });
+  }
+
+  /** The datum of a mark: the values of its channels that name it, not those it measures. */
+  private datumOf(shape: Shape): PlaceDatum | null {
+    if (!("datum" in shape) || !shape.datum) return null;
+    const { layer: li, row } = shape.datum;
+    const layer = this.config.layers?.[li];
+    const scales = this.config.scales ?? {};
+    if (!layer) return null;
+    const datum: PlaceDatum = {};
+    if (layer.columns.region) {
+      const region = this.regionId(dataValue(scales.region, layer.columns.region[row]));
+      if (region !== null) datum.region = region;
+    }
+    for (const channel of ["x", "y", "color"]) {
+      const scale = scales[channel];
+      const column = layer.columns[channel];
+      if (!column || !scale || !(categorical(scale) || scale.type === "time" || scale.bins)) continue;
+      const value = dataValue(scale, column[row]);
+      if (value !== null) datum[channel] = value;
+    }
+    if (Object.keys(datum).length === 0) {
+      // Points of two amounts (a scatter): named by both.
+      for (const channel of ["x", "y"]) {
+        const value = dataValue(scales[channel], layer.columns[channel]?.[row]);
+        if (value !== null) datum[channel] = value;
+      }
+    }
+    return Object.keys(datum).length ? datum : null;
+  }
+
+  /** A region by its map's id (its code), from any of its codes or names. */
+  private regionId(value: unknown): string | null {
+    if (value === null || value === undefined) return null;
+    const index = this.geo?.find(value);
+    return index === undefined ? String(value) : (this.geo!.map.regions[index]?.id ?? String(value));
+  }
+
+  /** A shape's box in the viewport. */
+  private boxOf(shape: Shape, stage: DOMRect): DOMRect | null {
+    switch (shape.type) {
+      case "rect":
+        return new DOMRect(stage.left + shape.x, stage.top + shape.y, shape.w, shape.h);
+      case "dot":
+        return new DOMRect(stage.left + shape.x - shape.r, stage.top + shape.y - shape.r, shape.r * 2, shape.r * 2);
+      case "arc":
+      case "region": {
+        const { px, py } = this.anchor(shape);
+        return new DOMRect(stage.left + px, stage.top + py, 0, 0);
+      }
+      default:
+        return null;
+    }
+  }
+
+  /** Where a place of the chart is in the viewport: its mark, its point on a line, or its value on an axis. */
+  private locate(at: unknown): DOMRect | null {
+    const given = datumOf(at);
+    const layout = this.layout;
+    if (!given || !layout) return null;
+    const wanted = given.region === undefined ? given : { ...given, region: this.regionId(given.region) };
+    const stage = this.stage.getBoundingClientRect();
+    for (const shape of this.marks()) {
+      const datum = this.datumOf(shape);
+      if (datum && matches(wanted, datum)) return this.boxOf(shape, stage);
+    }
+    const scales = this.config.scales ?? {};
+    const layers = this.config.layers ?? [];
+    for (const shape of this.shapes) {
+      if (shape.type !== "line" && shape.type !== "area") continue;
+      const layer = layers[shape.layer];
+      const color = shape.series === null ? null : dataValue(scales.color, shape.series);
+      for (const point of shape.points) {
+        if (point.y === null || !layer) continue;
+        const x = dataValue(scales.x, layer.columns.x?.[point.row]);
+        const datum: PlaceDatum = {};
+        if (x !== null) datum.x = x;
+        if (color !== null) datum.color = color;
+        if (matches(wanted, datum)) return new DOMRect(stage.left + point.x - 3, stage.top + point.y - 3, 6, 6);
+      }
+    }
+    // A value of an axis: across the plot there.
+    const px = this.axisPixel("x", wanted.x);
+    const py = this.axisPixel("y", wanted.y);
+    if (px !== null && py !== null) return new DOMRect(stage.left + px, stage.top + py, 0, 0);
+    if (px !== null) return new DOMRect(stage.left + px, stage.top + layout.top, 0, layout.bottom - layout.top);
+    if (py !== null) return new DOMRect(stage.left + layout.left, stage.top + py, layout.right - layout.left, 0);
+    return null;
+  }
+
+  /** The pixel of a value on an axis (the middle of a band), or null. */
+  private axisPixel(axis: "x" | "y", value: unknown): number | null {
+    const position = this.layout?.[axis];
+    const scale = this.config.scales?.[axis];
+    if (value === undefined || value === null || !position || !scale) return null;
+    if (categorical(scale)) {
+      for (let i = 0; i < (scale.domain?.length ?? 0); i++) {
+        const name = dataValue(scale, i);
+        if (name !== null && same(value, name)) return position.at(i) + position.bandwidth / 2;
+      }
+      return null;
+    }
+    const number = typeof value === "number" ? value : scale.type === "time" ? Date.parse(String(value)) : Number(value);
+    if (!Number.isFinite(number)) return null;
+    const pixel = position.at(number);
+    const [r0, r1] = position.range;
+    return pixel >= Math.min(r0, r1) - 1 && pixel <= Math.max(r0, r1) + 1 ? pixel : null;
+  }
+
+  /** The place under a point of the viewport, as the others find it, or null over no mark. */
+  private placeAt(clientX: number, clientY: number): Place | null {
+    const layout = this.layout;
+    if (!layout) return null;
+    const stage = this.stage.getBoundingClientRect();
+    const px = clientX - stage.left;
+    const py = clientY - stage.top;
+    if (px < 0 || py < 0 || px > stage.width || py > stage.height) return null;
+    if (this.crosshair()) {
+      const stops = this.stops();
+      if (!stops.length || px < layout.left || px > layout.right) return null;
+      let best = stops[0]!;
+      for (const stop of stops) if (Math.abs(stop.px - px) < Math.abs(best.px - px)) best = stop;
+      const scale = this.config.scales?.x;
+      const x = categorical(scale) ? best.k : dataValue(scale, Number(best.k));
+      if (x === null) return null;
+      return { datum: { x }, y: fraction(py, layout.top, layout.bottom - layout.top) };
+    }
+    const hit = this.hit(px, py);
+    const datum = hit ? this.datumOf(hit) : null;
+    if (!hit || !datum) return null;
+    const box = this.boxOf(hit, stage);
+    if (!box || box.width === 0 || box.height === 0) return { datum };
+    return { datum, x: fraction(clientX, box.left, box.width), y: fraction(clientY, box.top, box.height) };
   }
 
   private onKey(event: KeyboardEvent): void {

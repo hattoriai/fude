@@ -30,12 +30,13 @@ defmodule Fude.Layer do
           | :bubble_map
 
   @type t :: %__MODULE__{
+          id: String.t() | nil,
           kind: kind(),
           channels: %{atom() => Channel.t()},
           options: map()
         }
 
-  defstruct [:kind, channels: %{}, options: %{}]
+  defstruct [:id, :kind, channels: %{}, options: %{}]
 
   # Each kind: the channels it takes, those it needs, and its options with
   # the check of each value.

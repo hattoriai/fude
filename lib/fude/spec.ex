@@ -36,6 +36,10 @@ defmodule Fude.Spec do
 
       %{"fude" => 1, "layers" => [%{"kind" => "area", ...}, %{"kind" => "rule", "y" => 1000}]}
 
+  A layer, and an annotation, may have an `"id"`, text that names it
+  among the others: a chart shared with `Fude.Issho` gives each one, so
+  that two people who change two layers at once both have their change.
+
   A channel is a field's name, or a map of the keys of `Fude.Channel`
   (`"format" => "currency:EUR"` for `{:currency, "EUR"}`); a constant is
   `%{"value" => 1000}`.
@@ -64,7 +68,9 @@ defmodule Fude.Spec do
 
   @doc """
   The chart as a spec. With `data: true`, the spec holds the chart's data
-  too, under `"datasets"`, as `Fude.Data` normalizes it.
+  too, under `"datasets"`, as `Fude.Data` normalizes it. With `layers:
+  true`, a chart of one layer has it in `"layers"` too, as a chart of
+  several does.
   """
   @spec dump(Chart.t(), keyword()) :: t()
   def dump(%Chart{} = chart, opts \\ []) do
@@ -77,9 +83,9 @@ defmodule Fude.Spec do
       |> put_unless("facet", dump_facet(chart.facet), nil)
 
     spec =
-      case chart.layers do
-        [layer] -> Map.merge(head, dump_layer(layer))
-        layers -> Map.put(head, "layers", Enum.map(layers, &dump_layer/1))
+      case {chart.layers, opts[:layers]} do
+        {[layer], layers?} when layers? != true -> Map.merge(head, dump_layer(layer))
+        {layers, _layers?} -> Map.put(head, "layers", Enum.map(layers, &dump_layer/1))
       end
 
     if opts[:data] && chart.datasets != %{} do
@@ -108,7 +114,7 @@ defmodule Fude.Spec do
   defp put_unless(map, _key, value, value), do: map
   defp put_unless(map, key, value, _default), do: Map.put(map, key, value)
 
-  defp dump_layer(%Layer{kind: kind, channels: channels, options: options}) do
+  defp dump_layer(%Layer{id: id, kind: kind, channels: channels, options: options}) do
     channels =
       Map.new(channels, fn
         {:tooltip, list} -> {"tooltip", Enum.map(list, &dump_channel/1)}
@@ -117,7 +123,10 @@ defmodule Fude.Spec do
 
     options = Map.new(options, fn {key, value} -> {Atom.to_string(key), dump_value(value)} end)
 
-    %{"kind" => Atom.to_string(kind)} |> Map.merge(channels) |> Map.merge(options)
+    %{"kind" => Atom.to_string(kind)}
+    |> put_unless("id", id, nil)
+    |> Map.merge(channels)
+    |> Map.merge(options)
   end
 
   defp dump_channel(%Channel{field: field} = channel) when is_binary(field) do
@@ -360,9 +369,12 @@ defmodule Fude.Spec do
 
     {layer, errors} = Enum.reduce(map, {%Layer{kind: kind}, errors}, &load_key(&1, &2, keys))
 
+    # A channel that is there with an error is not missing too.
+    given = map |> Map.keys() |> MapSet.new()
+
     errors =
       spec.needs
-      |> Enum.reject(&Map.has_key?(layer.channels, &1))
+      |> Enum.reject(&(Map.has_key?(layer.channels, &1) or Atom.to_string(&1) in given))
       |> Enum.reduce(errors, fn name, errors ->
         [
           %{path: path ++ [Atom.to_string(name)], message: "is missing: a #{kind} chart needs it"}
@@ -373,7 +385,15 @@ defmodule Fude.Spec do
     {layer, errors}
   end
 
-  # A key of a layer: a channel, an option, or an error.
+  # A key of a layer: its id, a channel, an option, or an error.
+  defp load_key({"id", id}, {layer, errors}, _keys) when is_binary(id) and id != "",
+    do: {%{layer | id: id}, errors}
+
+  defp load_key({"id", id}, {layer, errors}, keys),
+    do:
+      {layer,
+       [%{path: keys.path ++ ["id"], message: "must be text, got: #{inspect(id)}"} | errors]}
+
   defp load_key({"tooltip", value}, {layer, errors}, %{channels: %{"tooltip" => _}} = keys),
     do: load_tooltip(value, keys.path ++ ["tooltip"], layer, errors)
 

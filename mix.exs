@@ -61,6 +61,10 @@ defmodule Fude.MixProject do
       {:myxql, "~> 0.8", only: :test},
       {:esbuild, "~> 0.10", only: :dev, runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      # Live charts with others (Fude.Issho): Issho 0.4's shared state.
+      # Until Issho 0.4 is on Hex, its state branch, for work on Fude only;
+      # at the release, {:issho, "~> 0.4", optional: true}.
+      {:issho, github: "hattoriai/issho", branch: "state", only: [:dev, :test]},
       {:lazy_html, "~> 0.1", only: :test},
       {:phoenix, if(@oldest, do: "~> 1.7.14", else: "~> 1.7.14 or ~> 1.8")},
       {:phoenix_html, "~> 4.1"},
@@ -117,6 +121,7 @@ defmodule Fude.MixProject do
         "guides/maps.md",
         "guides/specs.md",
         "guides/live.md",
+        "guides/together.md",
         "guides/testing.md",
         "guides/theming.md",
         "guides/accessibility.md",
@@ -124,13 +129,14 @@ defmodule Fude.MixProject do
         "CHANGELOG.md"
       ],
       groups_for_extras: [
-        Guides: ~r{guides/(quickstart|charts|data|story|maps|specs|live)\.md},
+        Guides: ~r{guides/(quickstart|charts|data|story|maps|specs|live|together)\.md},
         "More guides": ~r{guides/(testing|theming|accessibility|limits)\.md}
       ],
       groups_for_modules: [
         Charts: [Fude, Fude.Chart, Fude.Layer, Fude.Channel, Fude.Annotation, Fude.Components],
         Data: [Fude.Data, Fude.Query],
         Live: [Fude.Live],
+        Together: [Fude.Issho, Fude.Issho.Place],
         Specs: [Fude.Spec],
         Testing: [Fude.Test]
       ]

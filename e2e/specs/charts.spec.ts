@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { openPage, pointAt, stage, tooltip } from "./support";
 
 test.describe("the gallery", () => {
@@ -92,5 +92,68 @@ test.describe("the live page", () => {
     const config = await page.locator("#load").getAttribute("data-fude");
     await expect.poll(() => appends, { timeout: 5000 }).toBeGreaterThan(1);
     expect(await page.locator("#load").getAttribute("data-fude")).toBe(config);
+  });
+});
+
+// Issho's pointers (Fude.Issho): the symbols a chart sets on its element,
+// read by Issho's script with no import of Fude.
+test.describe("places for Issho", () => {
+  async function placeAt(page: Page, id: string, x: number, y: number): Promise<unknown> {
+    await stage(page, id).scrollIntoViewIfNeeded();
+    const box = (await stage(page, id).boundingBox())!;
+    return page.evaluate(
+      ([id, cx, cy]) => {
+        const el = document.getElementById(id as string) as unknown as Record<symbol, (x: number, y: number) => unknown>;
+        return el[Symbol.for("issho.point")]!(cx as number, cy as number);
+      },
+      [id, box.x + box.width * x, box.y + box.height * y] as const,
+    );
+  }
+
+  async function locate(page: Page, id: string, at: unknown): Promise<{ left: number; top: number; width: number; height: number } | null> {
+    return page.evaluate(
+      ([id, at]) => {
+        const el = document.getElementById(id as string) as unknown as Record<symbol, (at: unknown) => DOMRect | null>;
+        const box = el[Symbol.for("issho.locator")]!(at);
+        return box && { left: box.left, top: box.top, width: box.width, height: box.height };
+      },
+      [id, at] as const,
+    );
+  }
+
+  test("a bar is named by its category and series, and found again by them", async ({ page }) => {
+    await openPage(page);
+    const place = (await placeAt(page, "revenue-regions", 0.36, 0.85)) as { datum: Record<string, unknown>; x: number; y: number };
+    expect(Object.keys(place.datum).sort()).toEqual(["color", "x"]);
+    expect(place.x).toBeGreaterThanOrEqual(0);
+    expect(place.y).toBeLessThanOrEqual(1);
+
+    const box = await locate(page, "revenue-regions", { datum: place.datum });
+    expect(box!.width).toBeGreaterThan(0);
+    const again = (await page.evaluate(
+      ([id, cx, cy]) => {
+        const el = document.getElementById(id as string) as unknown as Record<symbol, (x: number, y: number) => unknown>;
+        return el[Symbol.for("issho.point")]!(cx as number, cy as number);
+      },
+      ["revenue-regions", box!.left + box!.width / 2, box!.top + box!.height / 2] as const,
+    )) as { datum: unknown };
+    expect(again.datum).toEqual(place.datum);
+  });
+
+  test("a line chart's place is a time, across the plot", async ({ page }) => {
+    await openPage(page);
+    const place = (await placeAt(page, "revenue-lines", 0.6, 0.5)) as { datum: { x: string } };
+    expect(Object.keys(place.datum)).toEqual(["x"]);
+    expect(place.datum.x).toMatch(/^\d{4}-\d{2}-\d{2}/);
+    const box = await locate(page, "revenue-lines", place);
+    expect(box!.height).toBeGreaterThan(100);
+  });
+
+  test("a region is named by its code, and found by any of its names", async ({ page }) => {
+    await openPage(page);
+    const place = (await placeAt(page, "world", 0.36, 0.6)) as { datum: { region: string } };
+    expect(place.datum.region).toBe("BRA");
+    expect(await locate(page, "world", { datum: { region: "Brazil" } })).not.toBeNull();
+    expect(await locate(page, "world", { datum: { region: "Atlantis" } })).toBeNull();
   });
 });

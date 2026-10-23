@@ -21,9 +21,15 @@ defmodule Fude.Annotation do
   @type type :: :label | :band | :line
   @type place :: term() | {term(), term()}
 
-  @type t :: %__MODULE__{type: type(), x: place(), y: place(), text: String.t() | nil}
+  @type t :: %__MODULE__{
+          id: String.t() | nil,
+          type: type(),
+          x: place(),
+          y: place(),
+          text: String.t() | nil
+        }
 
-  defstruct [:type, :x, :y, :text]
+  defstruct [:id, :type, :x, :y, :text]
 
   @types [:label, :band, :line]
 
@@ -73,6 +79,9 @@ defmodule Fude.Annotation do
   def check(%__MODULE__{text: text}) when not is_nil(text) and not is_binary(text),
     do: {:error, "the text of an annotation is a string, got: #{inspect(text)}"}
 
+  def check(%__MODULE__{id: id}) when not is_nil(id) and not is_binary(id),
+    do: {:error, "the id of an annotation is a string, got: #{inspect(id)}"}
+
   def check(%__MODULE__{}), do: :ok
 
   @doc false
@@ -81,6 +90,7 @@ defmodule Fude.Annotation do
   @spec dump(t()) :: map()
   def dump(%__MODULE__{} = annotation) do
     %{"type" => Atom.to_string(annotation.type)}
+    |> put("id", annotation.id)
     |> put("x", annotation.x)
     |> put("y", annotation.y)
     |> put("text", annotation.text)
@@ -110,6 +120,7 @@ defmodule Fude.Annotation do
   @spec load(term()) :: {:ok, t()} | {:error, String.t()}
   def load(%{"type" => type} = map) when type in ~w(label band line) do
     annotation = %__MODULE__{
+      id: map["id"],
       type: String.to_existing_atom(type),
       x: place(map["x"]),
       y: place(map["y"]),
