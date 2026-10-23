@@ -25,6 +25,8 @@ interface Layout {
   bottom: number;
   x?: Position;
   y?: Position;
+  /** The right axis: the y of the layers on it. */
+  yRight?: Position;
   labels: { text: string; y: number; at: number; color: string }[];
 }
 
@@ -380,8 +382,9 @@ export class Chart {
     const layout: Layout = { width, height, left: 0, top: 0, right: width, bottom: height, labels: [] };
     if (!xs && !ys) return layout;
 
+    const yr = scales.yRight;
     const pad = axes ? 8 : 2;
-    let top = pad + (axes && ys?.title && ys.type !== "band" ? 20 : 0);
+    let top = pad + (axes && ((ys?.title && ys.type !== "band") || yr?.title) ? 20 : 0);
     let bottom = height - (axes ? 26 : 2);
     if (axes && xs?.title && xs.type !== "time" && xs.type !== "band") bottom -= 18;
 
@@ -415,6 +418,12 @@ export class Chart {
         left += Math.max(0, ...probe.ticks.map((tick, i) => this.measure(format(tick, i, probe.ticks)))) + 10;
       }
     }
+    // The right axis: its labels beside the plot, on the right.
+    if (axes && yr) {
+      const probe = position(yr, [bottom, top], 44);
+      const format = this.tickFormat(yr, probe);
+      right -= Math.max(0, ...probe.ticks.map((tick, i) => this.measure(format(tick, i, probe.ticks)))) + 10;
+    }
     if (!axes) top = 4;
     if (right - left < 40) right = left + 40;
 
@@ -427,6 +436,7 @@ export class Chart {
     if (this.wrapsLabels(layout)) layout.bottom = bottom = bottom - 14;
     // Categories run down from the top; numbers up from the bottom.
     if (ys) layout.y = position(ys, ys.type === "band" || ys.type === "point" ? [top, bottom] : [bottom, top], 44, this.bandPadding("y"));
+    if (yr) layout.yRight = position(yr, [bottom, top], 44);
 
     if (labels && layout.y) {
       layout.labels = this.placeLabels(labels, layout);
@@ -449,6 +459,8 @@ export class Chart {
     if (paths.length === 0 || !this.config.axes || this.config.legend === false) return null;
     const x = this.config.scales?.x;
     if (!x || x.type === "band") return null;
+    // The right axis takes the margin where the labels would go: the legend names the series.
+    if (this.config.scales?.yRight) return null;
     if (!color || color.type !== "ordinal") return null;
     const domain = color.domain ?? [];
     if (domain.length < 1 || domain.length > 4) return null;
@@ -509,14 +521,22 @@ export class Chart {
   private colorOf(layer: Layer, row: number): string {
     const value = layer.columns.color?.[row];
     if (this.config.scales?.color?.type === "sequential") return this.sequential(value);
+    if (!layer.columns.color) return this.layerColor(layer);
     return this.color(value ?? null);
+  }
+
+  /** The color of a layer with no color channel: the second of the order on the right axis, so that each axis has its color. */
+  private layerColor(layer: Layer): string {
+    return layer.axis === "right" ? (this.theme.series[1] ?? this.theme.series[0]!) : this.theme.series[0]!;
   }
 
   // -- Shapes -----------------------------------------------------------------
 
   private computeShapes(layout: Layout): Shape[] {
     const shapes: Shape[] = [];
+    const all = layout;
     (this.config.layers ?? []).forEach((layer, index) => {
+      const layout = this.layoutOf(layer, all);
       switch (layer.mark) {
         case "bar":
           this.bars(layer, index, layout, shapes);
@@ -546,6 +566,23 @@ export class Chart {
     return shapes;
   }
 
+  /** The color of an axis's title: its layers' when they have no color channel, else the secondary text's. */
+  private axisColor(right: boolean): string {
+    const layer = (this.config.layers ?? []).find((l) => (l.axis === "right") === right && l.mark !== "rule" && l.mark !== "text");
+    return layer && !layer.columns.color ? this.layerColor(layer) : this.theme.secondary;
+  }
+
+  /** A layer's layout: its y is the right axis's when the layer is on it. */
+  private layoutOf(layer: Layer, layout: Layout): Layout {
+    return layer.axis === "right" ? { ...layout, y: layout.yRight } : layout;
+  }
+
+  /** A layer's scales: its y is "yRight" when the layer is on the right axis. */
+  private scalesOf(layer: Layer | undefined): Record<string, Scale> {
+    const scales = this.config.scales ?? {};
+    return layer?.axis === "right" ? { ...scales, y: scales.yRight! } : scales;
+  }
+
   private keyOf(scale: Scale | undefined, value: number | null | undefined): string {
     if (value === null || value === undefined) return "∅";
     if (scale && (scale.type === "band" || scale.type === "point" || scale.type === "ordinal")) return String(scale.domain?.[value]);
@@ -557,7 +594,7 @@ export class Chart {
     const cat = horizontal ? layout.y : layout.x;
     const val = horizontal ? layout.x : layout.y;
     if (!cat || !val) return;
-    const scales = this.config.scales ?? {};
+    const scales = this.scalesOf(layer);
     const catScale = horizontal ? scales.y : scales.x;
     const c = layer.columns;
     const catCol = (horizontal ? c.y : c.x) ?? [];
@@ -637,7 +674,7 @@ export class Chart {
     const x = layout.x;
     const y = layout.y;
     if (!x || !y) return;
-    const scales = this.config.scales ?? {};
+    const scales = this.scalesOf(layer);
     const c = layer.columns;
     const colors = c.color;
     const ys = layer.stack ? c.y1 : c.y;
@@ -657,7 +694,7 @@ export class Chart {
           type: layer.mark as "line" | "area",
           key: `${index}:${series < 0 ? "" : this.keyOf(scales.color, series)}`,
           points: [],
-          color: this.color(series < 0 ? null : series),
+          color: series < 0 ? this.layerColor(layer) : this.color(series),
           curve,
           fill: area ? (layer.stack ? 0.78 : 0.12) : 0,
           width: area && layer.stack ? 0 : this.theme.line,
@@ -884,7 +921,23 @@ export class Chart {
         text(svg, format(tick, i, y.ticks), layout.left - 8, py, { anchor: "end", baseline: "middle", fill: theme.muted, tabular: true });
       });
       if (scales.y.title && y.kind !== "band") {
-        text(svg, scales.y.title, 0, layout.top - 12, { anchor: "start", baseline: "alphabetic", fill: theme.secondary });
+        // With a right axis, each title has its layers' color: which line is on which axis.
+        const fill = scales.yRight ? this.axisColor(false) : theme.secondary;
+        text(svg, scales.y.title, 0, layout.top - 12, { anchor: "start", baseline: "alphabetic", fill });
+      }
+    }
+
+    // The right axis: its labels beside the plot, with no grid of its own
+    // (the left axis's lines would cross its own).
+    const yr = layout.yRight;
+    if (yr && scales.yRight) {
+      const format = this.tickFormat(scales.yRight, yr);
+      yr.ticks.forEach((tick, i) => {
+        const py = Math.round(yr.at(tick)) + 0.5;
+        text(svg, format(tick, i, yr.ticks), layout.right + 8, py, { anchor: "start", baseline: "middle", fill: theme.muted, tabular: true });
+      });
+      if (scales.yRight.title) {
+        text(svg, scales.yRight.title, layout.width, layout.top - 12, { anchor: "end", baseline: "alphabetic", fill: this.axisColor(true) });
       }
     }
 
@@ -1233,7 +1286,7 @@ export class Chart {
     if (!("datum" in shape) || !shape.datum) return null;
     const { layer: li, row } = shape.datum;
     const layer = this.config.layers?.[li];
-    const scales = this.config.scales ?? {};
+    const scales = this.scalesOf(layer);
     if (!layer) return null;
     const datum: PlaceDatum = {};
     if (layer.columns.region) {
@@ -1456,29 +1509,43 @@ export class Chart {
     if (hover.kind === "x") {
       const rows: { value: string; name: string; color: string | null }[] = [];
       let title = "";
+      // The bars at the same x, as a chart of bars and a line has them.
+      for (const shape of this.shapes) {
+        if (shape.type !== "rect" || !shape.datum) continue;
+        const layer = layers[shape.datum.layer];
+        if (!layer || layer.mark !== "bar" || layer.horizontal) continue;
+        const ls = this.scalesOf(layer);
+        const row = shape.datum.row;
+        if (this.keyOf(ls.x, layer.columns.x?.[row]) !== hover.k) continue;
+        title = this.valueText(layer.columns.x?.[row], ls.x);
+        const name = shape.datum.series === null ? (ls.y?.title ?? "") : this.valueText(shape.datum.series, scales.color);
+        rows.push({ value: this.valueText(layer.columns.y?.[row], ls.y), name, color: shape.color });
+      }
       for (const shape of this.shapes) {
         if (shape.type !== "line" && shape.type !== "area") continue;
         const point = shape.points.find((p) => p.k === hover.k);
         if (!point) continue;
         const layer = layers[shape.layer]!;
+        const ys = this.scalesOf(layer).y;
         title = this.valueText(layer.columns.x?.[point.row], scales.x);
-        const name = shape.series === null ? (scales.y?.title ?? "") : this.valueText(shape.series, scales.color);
-        rows.push({ value: this.valueText(layer.columns.y?.[point.row], scales.y), name, color: shape.color });
+        const name = shape.series === null ? (ys?.title ?? "") : this.valueText(shape.series, scales.color);
+        rows.push({ value: this.valueText(layer.columns.y?.[point.row], ys), name, color: shape.color });
       }
       if (this.highlight !== null) rows.sort((a, b) => (a.color === this.color(this.highlight) ? -1 : b.color === this.color(this.highlight) ? 1 : 0));
       return { title, rows };
     }
     const { layer: li, row, series } = hover.datum;
     const layer = layers[li]!;
+    const ls = this.scalesOf(layer);
     const c = layer.columns;
     const color = series === null ? this.colorOf(layer, row) : this.color(series);
     switch (layer.mark) {
       case "bar": {
         const horizontal = layer.horizontal;
-        const catScale = horizontal ? scales.y : scales.x;
+        const catScale = horizontal ? ls.y : scales.x;
         let title = this.valueText((horizontal ? c.y : c.x)?.[row], catScale);
         if (c.x2) title = `${formatter(null, this.locale)(c.x![row]!)}–${formatter(null, this.locale)(c.x2[row]!)}`;
-        const valueScale = horizontal ? scales.x : scales.y;
+        const valueScale = horizontal ? scales.x : ls.y;
         const value = (horizontal ? c.x : c.y)?.[row];
         const name = series === null ? (valueScale?.title ?? "") : this.valueText(series, scales.color);
         const rows: { value: string; name: string; color: string | null }[] = [
@@ -1505,13 +1572,13 @@ export class Chart {
       }
       case "rect":
         return {
-          title: `${this.valueText(c.x?.[row], scales.x)} · ${this.valueText(c.y?.[row], scales.y)}`,
+          title: `${this.valueText(c.x?.[row], scales.x)} · ${this.valueText(c.y?.[row], ls.y)}`,
           rows: c.color ? [{ value: this.valueText(c.color[row], scales.color), name: scales.color?.title ?? "", color }] : [],
         };
       default: {
         const rows = [
           { value: this.valueText(c.x?.[row], scales.x), name: scales.x?.title ?? "x", color: null },
-          { value: this.valueText(c.y?.[row], scales.y), name: scales.y?.title ?? "y", color: null },
+          { value: this.valueText(c.y?.[row], ls.y), name: ls.y?.title ?? "y", color: null },
         ];
         if (c.size) rows.push({ value: this.valueText(c.size[row], scales.size), name: scales.size?.title ?? "size", color: null });
         const title = c.color && scales.color?.type === "ordinal" ? this.valueText(series, scales.color) : "";

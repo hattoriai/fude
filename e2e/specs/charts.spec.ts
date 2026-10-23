@@ -19,6 +19,19 @@ test.describe("the gallery", () => {
     expect(text).toMatch(/€[\d,]+/);
   });
 
+  test("a chart of two units has an axis for each, and its tooltip both values", async ({ page }) => {
+    await openPage(page);
+    const labels = await page.locator("#orders-revenue .fude-axes text").allTextContents();
+    expect(labels).toContain("Orders");
+    expect(labels).toContain("Revenue");
+    // The right axis's ticks, in euros (as the browser's locale writes them).
+    expect(labels.filter((label) => label.includes("€")).length).toBeGreaterThan(2);
+    await pointAt(page, "orders-revenue", 0.6, 0.6);
+    const text = await tooltip(page, "orders-revenue");
+    expect(text).toMatch(/[\d,]+\s*Orders/);
+    expect(text).toMatch(/€[\d,]+\s*Revenue/);
+  });
+
   test("a bar's tooltip names its category and series", async ({ page }) => {
     await openPage(page);
     await pointAt(page, "revenue-regions", 0.36, 0.85);

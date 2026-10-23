@@ -44,6 +44,10 @@ defmodule Fude.Channel do
     * `:stack` - `:zero` (the default of bars and areas with a color),
       `:normalize` (to 100%), `:center` or `false`.
     * `:value` - a constant instead of a field.
+    * `:axis` - `:right` for a `y` of its own scale, on an axis at the
+      right of the plot: a layer of other units over another, as a line
+      of revenue over bars of orders (`Fude.layers/3`). `:left` is the
+      default.
   """
 
   @type aggregate :: :count | :sum | :mean | :median | :min | :max | :distinct
@@ -61,7 +65,8 @@ defmodule Fude.Channel do
           title: String.t() | false | nil,
           scale: map() | nil,
           stack: atom() | false | nil,
-          value: term()
+          value: term(),
+          axis: :left | :right | nil
         }
 
   defstruct [
@@ -75,7 +80,8 @@ defmodule Fude.Channel do
     :title,
     :scale,
     :stack,
-    :value
+    :value,
+    :axis
   ]
 
   @aggregates [:count, :sum, :mean, :median, :min, :max, :distinct]
@@ -85,6 +91,7 @@ defmodule Fude.Channel do
   @formats [:number, :integer, :percent, :compact, :bytes, :duration | @time_units]
   @stacks [:zero, :normalize, :center]
   @scale_types [:linear, :log, :sqrt]
+  @axes [:left, :right]
 
   @doc false
   def aggregates, do: @aggregates
@@ -100,6 +107,8 @@ defmodule Fude.Channel do
   def stacks, do: @stacks
   @doc false
   def scale_types, do: @scale_types
+  @doc false
+  def axes, do: @axes
 
   @doc """
   A channel from its short form or its full form (see above). Raises an
@@ -167,6 +176,7 @@ defmodule Fude.Channel do
     do: %{channel | stack: stack}
 
   defp put(_name, channel, {:value, value}), do: %{channel | value: value}
+  defp put(_name, channel, {:axis, axis}) when axis in @axes, do: %{channel | axis: axis}
 
   defp put(name, _channel, {key, value}) do
     raise ArgumentError, bad_key(name, key, value, expected(key))
@@ -202,10 +212,12 @@ defmodule Fude.Channel do
   defp expected(:format), do: Enum.map_join(@formats, ", ", &inspect/1) <> " or {:currency, code}"
   defp expected(:title), do: "a string or false"
   defp expected(:bin), do: "true, or count: n or step: n"
+  defp expected(:axis), do: ":left or :right"
 
   defp expected(_key),
     do:
-      "one of :field, :type, :aggregate, :time, :bin, :sort, :format, :title, :scale, :stack, :value"
+      "one of :field, :type, :aggregate, :time, :bin, :sort, :format, :title, :scale, :stack, " <>
+        ":value, :axis"
 
   defp bad(name, value) do
     "Fude: #{inspect(name)} must be a field, {aggregate, field}, {unit, field}, {:bin, field}, " <>

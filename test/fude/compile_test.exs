@@ -45,6 +45,51 @@ defmodule Fude.CompileTest do
     end
   end
 
+  describe "the right axis" do
+    @days for d <- 0..4,
+              do: %{day: Date.add(~D[2026-01-01], d), orders: d + 1, revenue: (d + 1) * 1000}
+
+    test "a layer of y on the right has a y scale of its own" do
+      wire =
+        compile!(
+          Fude.layers(@days, [
+            Fude.bar(x: :day, y: :orders),
+            Fude.line(x: :day, y: [field: :revenue, axis: :right])
+          ])
+        )
+
+      assert %{"y" => %{"domain" => [0, 5]}, "yRight" => %{"domain" => [1000, 5000]}} =
+               wire["scales"]
+
+      assert %{"y" => %{"title" => "Orders"}, "yRight" => %{"title" => "Revenue"}} =
+               wire["scales"]
+
+      assert [%{"axis" => nil}, %{"axis" => "right", "columns" => %{"y" => ys}}] =
+               wire["layers"]
+
+      assert ys == [1000, 2000, 3000, 4000, 5000]
+    end
+
+    test "layers on the left share their scale; on the right, theirs" do
+      wire =
+        compile!(
+          Fude.layers(@days, [
+            Fude.bar(x: :day, y: :orders),
+            Fude.rule(y: 10),
+            Fude.line(x: :day, y: [field: :revenue, axis: :right])
+          ])
+        )
+
+      assert wire["scales"]["y"]["domain"] == [0, 10]
+      assert wire["scales"]["yRight"]["domain"] == [1000, 5000]
+    end
+
+    test "a chart with no layer on the right has no right scale" do
+      wire = compile!(Fude.line(@days, x: :day, y: [field: :revenue, axis: :left]))
+      refute Map.has_key?(wire["scales"], "yRight")
+    end
+  end
+
   test "a bar sums the rows of its category and color" do
     wire = compile!(Fude.bar(@sales, x: :region, y: :revenue, color: :channel))
     {_heads, rows} = Compile.table(wire)

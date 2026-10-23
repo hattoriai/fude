@@ -7,6 +7,17 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A right axis: `y: [field: :revenue, axis: :right]` puts a layer on a y
+  scale of its own, drawn on the right of the plot, for two measures of
+  other units over each other (bars of orders, a line of revenue):
+  - the layers on the left share their scale, those on the right theirs;
+  - with no color channel, the right axis's layers take the second color
+    of the order, and each axis's title its layers' color;
+  - the crosshair's tooltip lists the bars at the pointer with the lines;
+  - in a spec, `"axis": "right"` on the channel.
+
 ## [0.1.0] - Unreleased
 
 ### Added

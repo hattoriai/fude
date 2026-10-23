@@ -128,6 +128,20 @@ defmodule FudeDev.Data do
     end
   end
 
+  # Orders and revenue by month: two measures of other units, for a chart
+  # with a right axis.
+  def orders_and_revenue do
+    for month <- 0..11 do
+      orders = round(900 + 40 * month + 120 * noise({:o, month}))
+
+      %{
+        month: Date.shift(~D[2026-01-01], month: month),
+        orders: orders,
+        revenue: round(orders * (48 + month * 1.5))
+      }
+    end
+  end
+
   def daily do
     for day <- 0..89 do
       %{
@@ -341,6 +355,14 @@ defmodule FudeDev.GalleryLive do
           Fude.rule(y: 4000, label: "Goal: 4,000 a day")
         ], title: "Visits reach the goal", subtitle: "Daily visits, July to September")
           |> Fude.annotate(:line, x: ~D[2026-08-17], text: "Campaign")}
+      />
+      <.chart
+        id="orders-revenue"
+        locale={@locale}
+        chart={Fude.layers(Data.orders_and_revenue(), [
+          Fude.bar(x: :month, y: [field: :orders, title: "Orders"]),
+          Fude.line(x: :month, y: [field: :revenue, format: {:currency, "EUR"}, title: "Revenue", axis: :right], points: true)
+        ], title: "Revenue grows faster than orders", subtitle: "Orders on the left axis, revenue on the right")}
       />
       <.chart
         id="revenue-area"
