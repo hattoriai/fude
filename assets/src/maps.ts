@@ -91,6 +91,7 @@ export function lookup(map: FudeMap): LoadedMap {
   return {
     map,
     find: (value) => (value === null || value === undefined ? undefined : index.get(normalize(value))),
-    path: (i) => (paths[i] ??= new Path2D(map.regions[i]!.path)),
+    // The path data stays on the Path2D, for an SVG export of the map.
+    path: (i) => (paths[i] ??= Object.assign(new Path2D(map.regions[i]!.path), { d: map.regions[i]!.path })),
   };
 }

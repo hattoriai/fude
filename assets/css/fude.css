@@ -132,6 +132,28 @@
   font-size: 0.75em;
 }
 
+.fude-export {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+}
+
+.fude-export button {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--fude-border);
+  border-radius: var(--fude-radius);
+  background: none;
+  color: var(--fude-secondary);
+  font: inherit;
+  font-size: 0.75em;
+  cursor: pointer;
+}
+
+.fude-export button:focus-visible {
+  outline: none;
+  box-shadow: var(--fude-focus-ring);
+}
+
 .fude-source::before {
   content: "Source: ";
 }

@@ -291,6 +291,7 @@ defmodule FudeDev.GalleryLive do
     <div class="grid">
       <.chart
         id="revenue-lines"
+        export
         locale={@locale}
         chart={Fude.line(monthly(@shuffled), x: :month, y: [field: :revenue, format: {:currency, "EUR"}, title: "Revenue"], color: :channel,
           title: "Online keeps growing", subtitle: "Monthly revenue by channel, 2025–2026", source: "Made-up data", curve: :monotone)
@@ -317,6 +318,7 @@ defmodule FudeDev.GalleryLive do
       />
       <.chart
         id="status"
+        export
         locale={@locale}
         chart={Fude.donut(Data.status(), value: :orders, color: :status, title: "Orders by status")}
       />
@@ -354,6 +356,7 @@ defmodule FudeDev.GalleryLive do
       />
       <.chart
         id="profit"
+        export
         locale={@locale}
         chart={Fude.waterfall(Data.profit(), x: :step, y: [field: :amount, format: {:currency, "EUR"}], start: "Revenue", total: "Profit",
           title: "From revenue to profit", subtitle: "Third quarter, in euros")}
@@ -365,6 +368,7 @@ defmodule FudeDev.GalleryLive do
       />
       <.chart
         id="world"
+        export
         locale={@locale}
         chart={Fude.choropleth(Data.countries(), region: :country, color: [field: :users, title: "Users"],
           title: "Where the users are", subtitle: "Users by country", source: "Made-up data; Natural Earth")}

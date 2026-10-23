@@ -28,6 +28,9 @@ export const Fude = {
       },
     };
     hook.chart = new Chart(hook.el, transport);
+    hook.handleEvent("fude:export", (payload) => {
+      if (payload.id === hook.chart?.id && (payload.format === "svg" || payload.format === "png")) void hook.chart?.download(payload.format);
+    });
     hook.handleEvent("fude:append", (payload) => {
       if (payload.id === hook.chart?.id) hook.chart?.append(payload.wire as Config, (payload.max as number | null) ?? null);
     });

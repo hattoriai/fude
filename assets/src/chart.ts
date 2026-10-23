@@ -8,6 +8,7 @@ import { formatTime, formatter, tickFormatter, timeTickFormatter } from "./forma
 import { position, type Position } from "./scale";
 import { draw, easeOut, tween, type Datum, type Paint, type PathShape, type Shape } from "./shapes";
 import { loadMap, type LoadedMap } from "./maps";
+import { png, save, svgDocument, SvgContext } from "./export";
 import type { Config, Layer, Scale } from "./wire";
 
 export interface Transport {
@@ -72,6 +73,11 @@ export class Chart {
     this.theme = readTheme(el);
     this.plot = el.querySelector<HTMLElement>(".fude-plot");
     this.formatSingles();
+    el.addEventListener("click", (event) => {
+      const button = (event.target as Element).closest?.("[data-fude-export]");
+      const format = button?.getAttribute("data-fude-export");
+      if (format === "svg" || format === "png") void this.download(format);
+    });
     if (!this.plot) return;
     this.build(this.plot);
     this.render(true);
@@ -101,6 +107,59 @@ export class Chart {
     this.config = merge(this.config, wire, max);
     this.raw = this.el.dataset.fude ?? "{}";
     if (this.plot) this.render(true);
+  }
+
+  /** The chart as a standalone SVG: its words, legend, grid, marks and axes. */
+  toSVG(): string {
+    const ctx = new SvgContext();
+    const hover = this.hover;
+    const highlight = this.highlight;
+    this.hover = null;
+    this.highlight = null;
+    const paint = this.paintOptions();
+    for (const shape of this.shapes) draw(ctx as unknown as CanvasRenderingContext2D, shape, paint);
+    this.hover = hover;
+    this.highlight = highlight;
+    const color = this.config.scales?.color;
+    const legend =
+      this.config.legend !== false && color?.type === "ordinal" && (color.domain ?? []).length > 1
+        ? (color.domain ?? []).map((name, i) => ({ name: String(name), color: this.color(i) }))
+        : [];
+    return svgDocument({
+      width: this.layout?.width ?? this.stage.clientWidth,
+      stageHeight: this.layout?.height ?? this.stage.clientHeight,
+      font: this.theme.font,
+      surface: this.theme.surface,
+      text: this.theme.text,
+      secondary: this.theme.secondary,
+      muted: this.theme.muted,
+      title: this.config.title,
+      subtitle: this.config.subtitle,
+      caption: this.config.caption,
+      source: this.config.source,
+      legend,
+      ramp: this.exportRamp(),
+      grid: this.grid,
+      marks: ctx.parts,
+      axes: this.svg,
+    });
+  }
+
+  private exportRamp(): { stops: string[]; low: string; high: string; title?: string } | null {
+    const scale = this.config.scales?.color;
+    if (!scale || scale.type !== "sequential" || this.config.legend === false) return null;
+    const [d0, d1] = (scale.domain as [number, number] | null) ?? [0, 1];
+    const format = formatter(scale.format, this.locale);
+    const stops = [0, 0.25, 0.5, 0.75, 1].map((t) => this.sequential(d0 + (d1 - d0) * t));
+    return { stops, low: format(d0), high: format(d1), title: scale.title };
+  }
+
+  /** Saves the chart as a file: "svg", or "png" (at twice its size). */
+  async download(format: "svg" | "png"): Promise<void> {
+    const svg = this.toSVG();
+    const blob = format === "svg" ? new Blob([svg], { type: "image/svg+xml" }) : await png(svg);
+    const name = (this.config.title ?? this.id).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "chart";
+    save(blob, `${name}.${format}`);
   }
 
   destroy(): void {

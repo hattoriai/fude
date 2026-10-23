@@ -54,6 +54,11 @@ defmodule Fude.Components do
     default: true,
     doc: "whether the data table is on the page (under a toggle)"
 
+  attr :export, :boolean,
+    default: false,
+    doc:
+      "whether the chart has buttons that save it as SVG and PNG (see also `Fude.Live.export/3`)"
+
   attr :class, :any, default: nil, doc: "classes for the chart's element"
   attr :rest, :global
 
@@ -102,6 +107,10 @@ defmodule Fude.Components do
       <p :if={@wire["caption"] || @wire["source"]} class="fude-foot">
         <span :if={@wire["caption"]} class="fude-caption">{@wire["caption"]}</span>
         <span :if={@wire["source"]} class="fude-source">{@wire["source"]}</span>
+      </p>
+      <p :if={@export and @errors == [] and @wire["layers"] && !@wire["facet"]} class="fude-export">
+        <button type="button" data-fude-export="svg">SVG</button>
+        <button type="button" data-fude-export="png">PNG</button>
       </p>
     </figure>
     """

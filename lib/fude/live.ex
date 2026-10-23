@@ -30,6 +30,16 @@ defmodule Fude.Live do
   alias Fude.{Chart, Compile}
 
   @doc """
+  Has the browser save the chart of an id as a file: `:svg`, or `:png`
+  at twice its size. The file has the chart's title, legend and source,
+  as on the page.
+  """
+  @spec export(Phoenix.LiveView.Socket.t(), String.t(), :svg | :png) ::
+          Phoenix.LiveView.Socket.t()
+  def export(socket, id, format) when format in [:svg, :png],
+    do: Phoenix.LiveView.push_event(socket, "fude:export", %{id: id, format: format})
+
+  @doc """
   Sends new rows to the chart of an id, made with the chart they belong to
   (without its data). Options:
 
