@@ -308,19 +308,24 @@ defmodule Fude.Compile do
     channels = layer.channels |> Map.delete(:tooltip) |> Map.to_list()
     aggregated = aggregated(kind, channels)
 
-    if @query.pushable?(aggregated) do
+    # The fields of a tooltip are read with the data, not pushed down: a
+    # group takes the first of a field that is not a number.
+    if @query.pushable?(aggregated) and not Map.has_key?(layer.channels, :tooltip) do
       {rows, bins, data} = @query.rows(query, channels, aggregated, &bins_of/3)
       marks(kind, layer, %{rows: rows, bins: bins}, data)
     else
       fields =
-        for {_name, %Channel{field: field}} <- channels, is_binary(field), uniq: true, do: field
+        for {_name, %Channel{field: field}} <- channels ++ tips(layer),
+            is_binary(field),
+            uniq: true,
+            do: field
 
       table(layer, @query.data(query, fields))
     end
   end
 
   defp table(%Layer{kind: kind} = layer, data) do
-    layer = normalize(layer)
+    layer = layer |> normalize() |> type_tips(data)
     rows = rows(layer, data)
     marks(kind, layer, rows, data)
   end
@@ -338,18 +343,38 @@ defmodule Fude.Compile do
 
   defp normalize(layer), do: layer
 
+  # The fields of a layer's tooltip, as channels of the rows: each under
+  # {:tooltip, index}, a name no channel has.
+  defp tips(%Layer{channels: channels}) do
+    channels
+    |> Map.get(:tooltip, [])
+    |> Enum.with_index(fn channel, i -> {{:tooltip, i}, channel} end)
+  end
+
+  # Each field of the tooltip with its type, so that a time is written as
+  # one.
+  defp type_tips(%Layer{channels: %{tooltip: tips} = channels} = layer, data) do
+    tips = Enum.map(tips, &%{&1 | type: &1.type || x_type(&1, data)})
+    %{layer | channels: %{channels | tooltip: tips}}
+  end
+
+  defp type_tips(layer, _data), do: layer
+
   # The rows of a layer: the data with each channel's value, its time
   # unit taken and its bin found, then grouped by the channels that are
   # not aggregated, with the others aggregated. A bar or an area sums the
   # values of a group when its channel has no aggregate, so that a bar is
   # one bar.
-  defp rows(%Layer{kind: kind, channels: channels}, data) do
+  defp rows(%Layer{kind: kind, channels: channels} = layer, data) do
     channels = channels |> Map.delete(:tooltip) |> Map.to_list()
 
     bins =
       Map.new(for {name, %Channel{bin: bin} = c} <- channels, bin, do: {name, bin_spec(c, data)})
 
     aggregated = aggregated(kind, channels)
+    tips = tips(layer)
+    aggregated = Map.merge(aggregated, tip_aggregates(tips, aggregated, data))
+    channels = channels ++ tips
 
     rows =
       cond do
@@ -384,6 +409,24 @@ defmodule Fude.Compile do
         fun = channel.aggregate || implicit_aggregate(implicit, kind, name, channel),
         into: %{},
         do: {name, fun}
+  end
+
+  # How a group of rows takes the fields of its tooltip: by their own
+  # aggregate, else a sum of numbers and the first of anything else. Rows
+  # that are not grouped keep their values.
+  defp tip_aggregates(_tips, aggregated, _data) when aggregated == %{}, do: %{}
+
+  defp tip_aggregates(tips, _aggregated, data) do
+    Map.new(tips, fn {name, channel} ->
+      fun =
+        cond do
+          channel.aggregate -> channel.aggregate
+          channel.field && x_type(channel, data) == :number -> :sum
+          true -> :first
+        end
+
+      {name, fun}
+    end)
   end
 
   defp implicit_aggregate(nil, _kind, _name, _channel), do: nil
@@ -460,6 +503,8 @@ defmodule Fude.Compile do
   defp start(_fun), do: nil
 
   defp add(_fun, acc, nil), do: acc
+  defp add(:first, nil, value), do: value
+  defp add(:first, acc, _value), do: acc
   defp add(:count, acc, _value), do: acc + 1
   defp add(fun, acc, value) when fun in [:median, :distinct], do: [value | acc]
   defp add(_fun, acc, value) when not is_number(value), do: acc
@@ -621,17 +666,23 @@ defmodule Fude.Compile do
       channels: %{x: :x, y: :y},
       horizontal: true,
       stack: :center,
-      scales: %{
-        "y" => band(layer.channels.x, data, rows, :x, layer.channels),
-        "x" => %{
-          "type" => "linear",
-          "domain" => [-max / 2, max / 2],
-          "nice" => false,
-          "title" => Channel.title(layer.channels.y),
-          "format" => format(layer.channels.y)
+      scales:
+        %{
+          "y" => band(layer.channels.x, data, rows, :x, layer.channels),
+          "x" => %{
+            "type" => "linear",
+            "domain" => [-max / 2, max / 2],
+            "nice" => false,
+            "title" => Channel.title(layer.channels.y),
+            "format" => format(layer.channels.y)
+          }
         }
-      },
-      options: %{funnel: true}
+        |> put_color(layer.channels[:color], data, rows)
+        |> stage_legend(layer.channels),
+      options:
+        layer.options
+        |> Map.take([:step, :labels])
+        |> Map.put(:funnel, true)
     }
   end
 
@@ -701,7 +752,7 @@ defmodule Fude.Compile do
       channels: %{x: :x, y: :y},
       stack: stack,
       scales: put_color(scales, color, data, rows),
-      options: Map.take(layer.options, [:curve, :points, :labels])
+      options: Map.take(layer.options, [:curve, :points, :labels, :area, :value])
     }
   end
 
@@ -777,11 +828,18 @@ defmodule Fude.Compile do
       case color do
         %Channel{} = channel ->
           if x_type(channel, data) == :number or channel.aggregate do
-            Map.put(scales, "color", %{
-              "type" => "sequential",
-              "domain" => extent(rows, :color) |> pair(),
-              "title" => Channel.title(channel)
-            })
+            Map.put(
+              scales,
+              "color",
+              scheme(
+                %{
+                  "type" => "sequential",
+                  "domain" => extent(rows, :color) |> pair(),
+                  "title" => Channel.title(channel)
+                },
+                channel
+              )
+            )
           else
             put_color(scales, color, data, rows)
           end
@@ -1087,27 +1145,58 @@ defmodule Fude.Compile do
     Enum.sort_by(values, &Map.get(totals, &1, 0), order)
   end
 
+  # A funnel colored by its stages has no legend: its axis names them.
+  defp stage_legend(%{"color" => color} = scales, %{
+         x: %Channel{field: field},
+         color: %Channel{field: field}
+       }),
+       do: %{scales | "color" => Map.put(color, "legend", false)}
+
+  defp stage_legend(scales, _channels), do: scales
+
   defp put_color(scales, nil, _data, _rows), do: scales
 
   defp put_color(scales, %Channel{} = channel, data, rows) do
     if x_type(channel, data) == :number and channel.field do
-      Map.put(scales, "color", %{
-        "type" => "sequential",
-        "domain" => extent(rows, :color) |> pair(),
-        "title" => Channel.title(channel),
-        "format" => format(channel)
-      })
+      Map.put(
+        scales,
+        "color",
+        scheme(
+          %{
+            "type" => "sequential",
+            "domain" => extent(rows, :color) |> pair(),
+            "title" => Channel.title(channel),
+            "format" => format(channel)
+          },
+          channel
+        )
+      )
     else
       values = rows |> Enum.map(& &1[:color]) |> Enum.reject(&is_nil/1) |> Enum.uniq()
 
       values = order(values, channel.sort, rows, :color, nil)
 
-      Map.put(scales, "color", %{
-        "type" => "ordinal",
-        "domain" => values,
-        "title" => Channel.title(channel)
-      })
+      Map.put(
+        scales,
+        "color",
+        scheme(
+          %{"type" => "ordinal", "domain" => values, "title" => Channel.title(channel)},
+          channel
+        )
+      )
     end
+  end
+
+  # A color scale's scheme: its name or its list of colors, and the middle
+  # of a diverging one (0 unless given).
+  defp scheme(scale, %Channel{scheme: nil}), do: scale
+
+  defp scheme(scale, %Channel{scheme: scheme, mid: mid}) do
+    mid = if is_atom(scheme) and Channel.diverging?(scheme), do: mid || 0, else: mid
+
+    scale
+    |> Map.put("scheme", if(is_atom(scheme), do: Atom.to_string(scheme), else: scheme))
+    |> Map.put("mid", mid)
   end
 
   defp extent(rows, name) do
@@ -1226,13 +1315,35 @@ defmodule Fude.Compile do
   defp encoder(_scale), do: & &1
 
   # The fields of the tooltip beyond the channels: their titles, formats
-  # and values, by row.
-  defp tooltip(%{layer: %Layer{channels: channels}}, _rows) do
-    case channels[:tooltip] do
-      nil -> []
-      list -> Enum.map(list, &%{"title" => Channel.title(&1), "format" => format(&1)})
-    end
+  # and values, by row; a time as milliseconds, with its unit.
+  defp tooltip(%{layer: %Layer{} = layer}, rows) do
+    Enum.map(tips(layer), fn {name, channel} ->
+      values = Enum.map(rows, &tip_value(&1[name]))
+
+      %{
+        "title" => Channel.title(channel),
+        "format" => format(channel),
+        "time" => if(channel.type == :time, do: time_unit(channel, values)),
+        "values" => values
+      }
+    end)
   end
+
+  # A time's unit: its channel's, or a day when every value is a midnight
+  # (a date), or "" for a time of a day.
+  defp time_unit(%Channel{time: unit}, _values) when not is_nil(unit), do: Atom.to_string(unit)
+
+  defp time_unit(_channel, values) do
+    if Enum.all?(values, &(not is_integer(&1) or rem(&1, 86_400_000) == 0)),
+      do: "day",
+      else: ""
+  end
+
+  defp tip_value(value) when is_number(value) or is_binary(value) or is_boolean(value),
+    do: value
+
+  defp tip_value(nil), do: nil
+  defp tip_value(value), do: to_string(value)
 
   defp dump(value) when is_atom(value) and not is_boolean(value) and not is_nil(value),
     do: Atom.to_string(value)

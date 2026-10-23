@@ -45,6 +45,131 @@ defmodule Fude.CompileTest do
     end
   end
 
+  describe "the fields of a tooltip" do
+    test "go with each mark: as they are where the marks are the rows" do
+      rows = [%{x: 1, y: 2, plan: "pro", m: 0.5}, %{x: 2, y: 3, plan: "free", m: 0.25}]
+
+      wire =
+        compile!(
+          Fude.scatter(rows, x: :x, y: :y, tooltip: [:plan, [field: :m, format: :percent]])
+        )
+
+      assert [
+               %{"title" => "Plan", "values" => ["pro", "free"], "time" => nil},
+               %{"format" => "percent", "values" => [0.5, 0.25]}
+             ] = hd(wire["layers"])["tooltip"]
+    end
+
+    test "are aggregated where marks group rows: their own aggregate, a sum, or the first" do
+      rows = [
+        %{r: "N", v: 1, o: 3, note: "a", d: ~D[2026-01-02]},
+        %{r: "N", v: 2, o: 4, note: "b", d: ~D[2026-01-03]},
+        %{r: "S", v: 5, o: 1, note: "c", d: ~D[2026-02-01]}
+      ]
+
+      wire = compile!(Fude.bar(rows, x: :r, y: :v, tooltip: [:o, :note, :d, {:max, :o}]))
+      [o, note, d, max] = hd(wire["layers"])["tooltip"]
+      assert o["values"] == [7, 1]
+      assert note["values"] == ["a", "c"]
+      assert %{"time" => "day", "values" => [_, _]} = d
+      assert max["values"] == [4, 1]
+    end
+
+    test "reach the regions of a map (#17)" do
+      data = %{
+        columns: ["country", "users", "plan"],
+        rows: [["PRT", 120, "pro"], ["ESP", 80, "free"]]
+      }
+
+      wire = compile!(Fude.choropleth(data, region: :country, color: :users, tooltip: [:plan]))
+      assert [%{"title" => "Plan", "values" => values}] = hd(wire["layers"])["tooltip"]
+      assert Enum.sort(values) == ["free", "pro"]
+    end
+  end
+
+  describe "color schemes" do
+    test "go on the color scale, a diverging one with its middle" do
+      rows = [%{a: "x", b: "y", m: -3}, %{a: "y", b: "y", m: 8}]
+
+      wire = compile!(Fude.heatmap(rows, x: :a, y: :b, color: [field: :m, scheme: :red_blue]))
+
+      assert %{"type" => "sequential", "scheme" => "red_blue", "mid" => 0} =
+               wire["scales"]["color"]
+
+      wire = compile!(Fude.heatmap(rows, x: :a, y: :b, color: [field: :m, scheme: :green]))
+      assert %{"scheme" => "green"} = color = wire["scales"]["color"]
+      refute Map.has_key?(color, "mid")
+
+      wire =
+        compile!(Fude.bar(rows, x: :a, y: :m, color: [field: :a, scheme: ["#111111", "#eeeeee"]]))
+
+      assert %{"type" => "ordinal", "scheme" => ["#111111", "#eeeeee"]} = wire["scales"]["color"]
+
+      assert compile!(Fude.heatmap(rows, x: :a, y: :b, color: :m))["scales"]["color"]
+             |> Map.has_key?("scheme")
+             |> Kernel.not()
+    end
+
+    test "a scheme is a name of the set or a list of colors" do
+      assert_raise ArgumentError, ~r/:scheme of :color must be/, fn ->
+        Fude.heatmap([], x: :a, y: :b, color: [field: :m, scheme: :rainbow])
+      end
+
+      assert_raise ArgumentError, ~r/:scheme of :color must be/, fn ->
+        Fude.heatmap([], x: :a, y: :b, color: [field: :m, scheme: ["#fff"]])
+      end
+    end
+  end
+
+  describe "funnels" do
+    @stages [%{stage: "Visited", n: 100}, %{stage: "Signed up", n: 40}, %{stage: "Paid", n: 10}]
+
+    test "color: :stage colors each stage, with no legend: the axis names them" do
+      wire = compile!(Fude.funnel(@stages, x: :stage, y: :n, color: :stage))
+      assert %{"type" => "ordinal", "legend" => false} = wire["scales"]["color"]
+      assert hd(wire["layers"])["columns"]["color"] == [0, 1, 2]
+    end
+
+    test "a color of another field has its legend" do
+      rows = Enum.map(@stages, &Map.put(&1, :kind, if(&1.n > 20, do: "top", else: "bottom")))
+      wire = compile!(Fude.funnel(rows, x: :stage, y: :n, color: :kind))
+      refute Map.has_key?(wire["scales"]["color"], "legend")
+    end
+
+    test "steps and labels go to the browser; with none, the funnel is as before" do
+      wire = compile!(Fude.funnel(@stages, x: :stage, y: :n, step: true, labels: :inside))
+
+      assert %{"funnel" => true, "step" => true, "labels" => "inside"} =
+               hd(wire["layers"])["options"]
+
+      assert hd(compile!(Fude.funnel(@stages, x: :stage, y: :n))["layers"])["options"] == %{
+               "funnel" => true
+             }
+
+      assert_raise ArgumentError,
+                   ~r/:labels of a funnel chart must be one of :inside, :outside, false/,
+                   fn ->
+                     Fude.funnel(@stages, x: :stage, y: :n, labels: :left)
+                   end
+    end
+  end
+
+  describe "sparklines" do
+    test "an area, its points and its last value go to the browser" do
+      days = for d <- 1..5, do: %{d: d, v: d * d}
+      wire = compile!(Fude.sparkline(days, x: :d, y: :v, area: true, points: :last, value: true))
+
+      assert %{"area" => true, "points" => "last", "value" => true} =
+               hd(wire["layers"])["options"]
+
+      assert_raise ArgumentError,
+                   ~r/:points of a sparkline chart must be one of :last, :extremes, false/,
+                   fn ->
+                     Fude.sparkline(days, x: :d, y: :v, points: true)
+                   end
+    end
+  end
+
   describe "digits" do
     test "go on the wire after the format" do
       wire = compile!(Fude.number([%{n: 1.5}], value: [field: :n, format: :number, digits: 0]))

@@ -45,8 +45,25 @@ test.describe("the gallery", () => {
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");
     await expect(page.locator("#status .fude-live")).toHaveText(/Shipped\. 1,630 · 23\.8%/);
+    // The fields of the tooltip after the chart's own values.
+    await expect(page.locator("#status .fude-live")).toHaveText(/Days, on average: 2\.4/);
     await page.keyboard.press("Escape");
     await expect(page.locator("#status .fude-tooltip")).not.toHaveClass(/fude-tooltip-on/);
+  });
+
+  test("a funnel's labels go inside the bars that hold them, outside the others", async ({ page }) => {
+    await openPage(page);
+    // A color for each stage, and no legend: the axis names the stages.
+    await expect(page.locator("#signups-stages .fude-legend")).toBeHidden();
+    const inside = page.locator('#signups-stages svg text[text-anchor="middle"]', { hasText: "48,210" });
+    await expect(inside).toHaveCount(1);
+    const outside = page.locator('#signups-stages svg text[text-anchor="start"]', { hasText: "1,210" });
+    await expect(outside).toHaveCount(1);
+  });
+
+  test("a sparkline writes its last value at the end of its line", async ({ page }) => {
+    await openPage(page);
+    await expect(page.locator("#visits-spark-area svg text")).toHaveText(/^[\d.]+k$/);
   });
 
   test("the legend of a line chart hides a series", async ({ page }) => {

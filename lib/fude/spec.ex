@@ -522,12 +522,24 @@ defmodule Fude.Spec do
   defp channel_key("digits", digits),
     do: {:error, "must be a whole number from 0 to 20, got: #{inspect(digits)}"}
 
+  defp channel_key("scheme", scheme) when is_list(scheme) do
+    if Channel.colors?(scheme),
+      do: {:ok, :scheme, scheme},
+      else:
+        {:error, "must be a list of two colors or more (\"#0b6e4f\"), got: #{inspect(scheme)}"}
+  end
+
+  defp channel_key("scheme", scheme), do: atom(:scheme, scheme, Channel.schemes())
+  defp channel_key("mid", mid) when is_number(mid), do: {:ok, :mid, mid}
+  defp channel_key("mid", mid), do: {:error, "must be a number, got: #{inspect(mid)}"}
   defp channel_key("axis", axis), do: atom(:axis, axis, Channel.axes())
   defp channel_key("scale", scale) when is_map(scale), do: scale(scale)
   defp channel_key("scale", scale), do: {:error, "must be a map, got: #{inspect(scale)}"}
 
   defp channel_key(key, _value) do
-    keys = ~w(field type aggregate time bin sort format digits title scale stack value axis)
+    keys =
+      ~w(field type aggregate time bin sort format digits scheme mid title scale stack value axis)
+
     {:error, "is not a key of a channel" <> Fude.Names.suggest(key, keys)}
   end
 

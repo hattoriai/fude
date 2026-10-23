@@ -102,6 +102,32 @@ defmodule Fude.ComponentsTest do
     assert LazyHTML.text(LazyHTML.query(doc, ".fude-meta .fude-label")) == "vs May"
   end
 
+  test "a sparkline with no height fills its box; with one, it has that height" do
+    days = for d <- 1..5, do: %{d: d, v: d}
+    assigns = %{chart: Fude.sparkline(days, x: :d, y: :v)}
+    html = rendered_to_string(~H|<.chart id="s" chart={@chart} />|)
+    assert html =~ ~s(class="fude-plot fude-plot-fill")
+    assert html =~ "min-height: 48px"
+
+    html = rendered_to_string(~H|<.chart id="s" chart={@chart} height={80} />|)
+    refute html =~ "fude-plot-fill"
+    assert html =~ "height: 80px"
+  end
+
+  test "the shared legend of small multiples takes the color's scheme" do
+    rows = for r <- ~w(N S), c <- ~w(a b), do: %{r: r, c: c, m: 1, v: 2}
+
+    assigns = %{
+      chart:
+        Fude.bar(rows, x: :m, y: :v, color: [field: :c, scheme: ["#123456", "#abcdef"]])
+        |> Fude.facet(:r)
+    }
+
+    html = rendered_to_string(~H|<.chart id="f" chart={@chart} />|)
+    assert html =~ "background: #123456"
+    assert html =~ "background: #abcdef"
+  end
+
   test "needs a chart or a spec" do
     assigns = %{}
 

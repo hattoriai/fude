@@ -91,7 +91,12 @@ defmodule Fude.Layer do
     sparkline: %{
       channels: [:x, :y],
       needs: [:x, :y],
-      options: [curve: {:in, [:linear, :monotone, :step]}]
+      options: [
+        curve: {:in, [:linear, :monotone, :step]},
+        area: :boolean,
+        points: {:in, [:last, :extremes, false]},
+        value: :boolean
+      ]
     },
     number: %{channels: [:value], needs: [:value], options: [label: :string, align: @align]},
     trend: %{
@@ -109,7 +114,11 @@ defmodule Fude.Layer do
       needs: [:x, :y],
       options: [total: :string, start: :string, labels: :boolean]
     },
-    funnel: %{channels: [:x, :y, :tooltip], needs: [:x, :y], options: []},
+    funnel: %{
+      channels: [:x, :y, :color, :tooltip],
+      needs: [:x, :y],
+      options: [step: :boolean, labels: {:in, [:inside, :outside, false]}]
+    },
     gauge: %{
       channels: [:value],
       needs: [:value],
@@ -163,10 +172,26 @@ defmodule Fude.Layer do
       end)
 
     case Enum.reject(spec.needs, &Map.has_key?(layer.channels, &1)) do
-      [] -> layer
+      [] -> stages(layer)
       missing -> raise ArgumentError, "Fude: a #{kind} chart needs #{list(missing)}"
     end
   end
+
+  # A funnel's `color: :stage` colors each stage: its color is its x.
+  defp stages(
+         %__MODULE__{
+           kind: :funnel,
+           channels: %{color: %Channel{field: "stage"} = color} = channels
+         } = layer
+       ) do
+    %{x: x} = channels
+
+    if x.field != "stage" and color == Channel.new(:color, :stage),
+      do: %{layer | channels: %{channels | color: %Channel{field: x.field}}},
+      else: layer
+  end
+
+  defp stages(layer), do: layer
 
   defp tooltip(fields) when is_list(fields) and not is_tuple(hd(fields)),
     do: Enum.map(fields, &Channel.new(:tooltip, &1))

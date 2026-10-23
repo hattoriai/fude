@@ -9,6 +9,14 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The fields of a `tooltip` channel never reached the tooltip (#17): only
+  their titles went to the browser, and it did not show them. Their
+  values now go with each mark (aggregated where a mark groups rows: by
+  the field's own aggregate, a sum of numbers, or the first value; times
+  as times), and the tooltip shows them after the chart's own values, on
+  a hovered mark and for each series on a crosshair. A chart from a
+  `Fude.query/2` with tooltip fields reads them with its data, rather
+  than aggregating in the database.
 - Stacked bars and areas stacked their series in the order of the rows,
   so rows ordered by x only (a query `ORDER BY month`) gave each stack its
   own order: the bands of an area crossed and swapped from one x to the
@@ -22,6 +30,25 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A color scheme for a chart (#7): `scheme` on a `color` channel, by
+  name, each in light and dark and readable with the common colour vision
+  deficiencies: sequential `:blue` (the default), `:green`, `:orange`,
+  `:purple`, `:gray`, `:viridis`; diverging `:red_blue` and `:red_green`,
+  through a neutral at `mid` (0 unless given); categorical
+  `:categorical` (the default) and `:okabe_ito`. Or a list of colors: a
+  ramp for numbers, a color for each category. Each named scheme is a
+  custom property (`--fude-scheme-green`). In a spec, `"scheme"` and
+  `"mid"` on the channel; saved specs keep their colors.
+- Funnels (#8): `color` (`color: :stage` a color for each stage, with no
+  legend), `step: true` (each stage lighter than the one before), and
+  `labels: :inside | :outside | false` (`:outside` as before); a label
+  inside a bar too narrow for it goes outside, and one inside takes the
+  text color that reads on its bar.
+- Sparklines (#9): `area: true` (a fill under the line, fading down),
+  `points: :last | :extremes`, and `value: true` (the last value at the
+  end of the line, in y's format). With no height, a sparkline fills the
+  height of its box, and is 48 pixels in a box with none.
+- The SVG export draws gradients.
 - `digits` on a channel: how many decimals `:number`, `:compact`,
   `:percent` and currencies write, from 0 to 20
   (`value: [field: :revenue, format: :number, digits: 0]` writes

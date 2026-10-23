@@ -97,8 +97,8 @@ defmodule Fude.Components do
       <div
         :if={@errors == [] and @wire["layers"] && !@wire["facet"]}
         id={"#{@id}-plot"}
-        class="fude-plot"
-        style={"height: #{@plot_height}px"}
+        class={["fude-plot", @fill && "fude-plot-fill"]}
+        style={if @fill, do: "min-height: #{@plot_height}px", else: "height: #{@plot_height}px"}
         role="img"
         aria-label={@wire["description"]}
         phx-update="ignore"
@@ -195,18 +195,23 @@ defmodule Fude.Components do
   # The legend of an ordinal color, with the colors of its places or its
   # roles, as the browser has them.
   defp legend(%{"type" => "ordinal", "domain" => domain} = scale) when length(domain) > 1 do
-    roles = scale["roles"]
-
     domain
     |> Enum.with_index()
-    |> Enum.map(fn {name, i} -> {to_string(name), swatch(roles, i)} end)
+    |> Enum.map(fn {name, i} -> {to_string(name), swatch(scale, i)} end)
   end
 
   defp legend(_scale), do: []
 
-  defp swatch(roles, i) when is_list(roles), do: "var(--fude-#{Enum.at(roles, i)})"
-  defp swatch(_roles, i) when i < 8, do: "var(--fude-series-#{i + 1})"
-  defp swatch(_roles, _i), do: "var(--fude-muted)"
+  defp swatch(%{"roles" => roles}, i) when is_list(roles), do: "var(--fude-#{Enum.at(roles, i)})"
+
+  defp swatch(%{"scheme" => colors}, i) when is_list(colors),
+    do: Enum.at(colors, i, "var(--fude-muted)")
+
+  defp swatch(%{"scheme" => "okabe_ito"}, i) when i < 8,
+    do: "var(--fude-scheme-okabe-ito-#{i + 1})"
+
+  defp swatch(_scale, i) when i < 8, do: "var(--fude-series-#{i + 1})"
+  defp swatch(_scale, _i), do: "var(--fude-muted)"
 
   attr :id, :string, required: true
   attr :single, :map, required: true
@@ -345,6 +350,8 @@ defmodule Fude.Components do
       config: config,
       kind: wire["kind"] || "chart",
       plot_height: assigns.height || wire["height"] || default_height(wire["kind"]),
+      # A sparkline with no height fills its box, at least as high as its default.
+      fill: wire["kind"] == "sparkline" and is_nil(assigns.height || wire["height"]),
       heads: heads,
       rows: rows
     )

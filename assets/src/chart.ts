@@ -3,10 +3,10 @@
 // (axes, labels, legend, tooltip) as DOM, and draws again in place when
 // the config changes, moving each mark from where it was.
 
-import { alpha, ramp, readTheme, type Theme } from "./theme";
+import { alpha, mix, ramp, readTheme, rgb, type Theme } from "./theme";
 import { formatTime, formatter, parseFormat, tickFormatter, timeTickFormatter } from "./format";
 import { position, type Position } from "./scale";
-import { draw, easeOut, tween, type Datum, type Paint, type PathShape, type Shape } from "./shapes";
+import { draw, easeOut, tween, type Datum, type Paint, type PathPoint, type PathShape, type Shape } from "./shapes";
 import { loadMap, type LoadedMap } from "./maps";
 import { png, save, svgDocument, SvgContext } from "./export";
 import { categorical, dataValue, datumOf, fraction, matches, same, type Datum as PlaceDatum, type Place } from "./places";
@@ -404,11 +404,11 @@ export class Chart {
       right -= widest + 8;
     }
 
-    // A funnel has no value axis; its labels take the right.
-    const funnel = (this.config.layers ?? []).some((layer) => layer.options.funnel === true);
+    // A funnel has no value axis; its labels outside the bars take the right.
+    const funnel = (this.config.layers ?? []).find((layer) => layer.options.funnel === true);
     if (funnel) {
       bottom = height - 2;
-      right = width - pad - Math.min(width * 0.3, 120);
+      right = funnel.options.labels === false || funnel.options.labels === "inside" ? width - pad : width - pad - Math.min(width * 0.3, 120);
     }
 
     let left = pad;
@@ -429,6 +429,30 @@ export class Chart {
       right -= Math.max(0, ...probe.ticks.map((tick, i) => this.measure(format(tick, i, probe.ticks)))) + 10;
     }
     if (!axes) top = 4;
+    // A sparkline's dots need room at the edges, and its last value on the right.
+    if (this.config.kind === "sparkline") {
+      const layer = this.config.layers?.[0];
+      if (layer?.options.points === "last" || layer?.options.points === "extremes") {
+        top = 6;
+        bottom = height - 6;
+        left = 6;
+        right = width - 6;
+      }
+      const last = layer ? this.sparkValue(layer) : null;
+      if (last) right -= this.measure(last.text) + 10;
+    }
+    // Labels inside a funnel's bars: room on the right for those that do not fit.
+    if (funnel && funnel.options.labels === "inside" && xs?.domain) {
+      const span = Math.abs((xs.domain[1] as number) - (xs.domain[0] as number)) || 1;
+      const words = this.funnelWords(funnel);
+      for (let pass = 0; pass < 3; pass++) {
+        const out = words.filter(({ v, text }) => this.measure(text) + 16 > ((right - left) * Math.abs(v)) / span);
+        const need = out.length ? Math.min(width * 0.3, Math.max(...out.map(({ text }) => this.measure(text))) + 12) : 0;
+        const next = width - pad - need;
+        if (next === right) break;
+        right = next;
+      }
+    }
     if (right - left < 40) right = left + 40;
 
     layout.left = left;
@@ -446,6 +470,31 @@ export class Chart {
       layout.labels = this.placeLabels(labels, layout);
     }
     return layout;
+  }
+
+  // A sparkline's last value, in its y format, when it writes it.
+  private sparkValue(layer: Layer): { row: number; text: string } | null {
+    if (layer.options.value !== true) return null;
+    const ys = layer.columns.y ?? [];
+    for (let row = layer.n - 1; row >= 0; row--) {
+      const v = ys[row];
+      if (v != null) return { row, text: formatter(this.config.scales?.y?.format, this.locale)(v) };
+    }
+    return null;
+  }
+
+  // The words of a funnel's stages: each value, with its share of the first.
+  private funnelWords(layer: Layer): { row: number; v: number; text: string }[] {
+    const value = formatter(this.config.scales?.x?.format, this.locale);
+    const percent = formatter("percent", this.locale);
+    const words: { row: number; v: number; text: string }[] = [];
+    for (let row = 0; row < layer.n; row++) {
+      const v = layer.columns.x?.[row];
+      if (v == null) continue;
+      const share = layer.columns.share?.[row];
+      words.push({ row, v, text: share == null || row === 0 ? value(v) : `${value(v)} · ${percent(share)}` });
+    }
+    return words;
   }
 
   private bandPadding(axis: "x" | "y"): number {
@@ -509,17 +558,41 @@ export class Chart {
 
   private color(series: number | null | undefined): string {
     if (series === null || series === undefined) return this.theme.series[0]!;
+    const scale = this.config.scales?.color;
     // A color by its role (a waterfall's increase), not by its place.
-    const role = this.config.scales?.color?.roles?.[series];
+    const role = scale?.roles?.[series];
     if (role && this.theme.roles[role]) return this.theme.roles[role]!;
+    const scheme = scale?.scheme;
+    if (scheme) {
+      // A list of colors, or a categorical order: a color for each
+      // category; a ramp: its colors spread over the categories in order.
+      const steps = this.steps(scheme);
+      if (Array.isArray(scheme) || scheme === "categorical" || scheme === "okabe_ito") return steps[series] ?? this.theme.muted;
+      const n = scale?.domain?.length ?? 1;
+      return ramp(steps, n > 1 ? series / (n - 1) : 0.5);
+    }
     return this.theme.series[series] ?? this.theme.muted;
+  }
+
+  // The colors of a scheme: its own list, or the theme's by its name.
+  private steps(scheme: string | string[] | undefined): string[] {
+    if (Array.isArray(scheme)) return scheme;
+    return (scheme && this.theme.schemes[scheme]) || this.theme.sequential;
   }
 
   private sequential(value: number | null | undefined): string {
     const scale = this.config.scales?.color;
     const [d0, d1] = (scale?.domain as [number, number] | null) ?? [0, 1];
-    const t = value === null || value === undefined || d1 === d0 ? 0.5 : (value - d0) / (d1 - d0);
-    return ramp(this.theme.sequential, t);
+    const steps = this.steps(scale?.scheme);
+    if (value === null || value === undefined) return ramp(steps, 0.5);
+    const mid = scale?.mid;
+    if (mid !== undefined && mid !== null) {
+      // Diverging: the middle step at mid, and as far from it on each side
+      // for the same distance.
+      const reach = Math.max(Math.abs(d0 - mid), Math.abs(d1 - mid)) || 1;
+      return ramp(steps, 0.5 + (value - mid) / (2 * reach));
+    }
+    return ramp(steps, d1 === d0 ? 0.5 : (value - d0) / (d1 - d0));
   }
 
   private colorOf(layer: Layer, row: number): string {
@@ -663,7 +736,9 @@ export class Chart {
         layer.stack === "center" ? "all" : !isOuter ? "none" : horizontal ? (positive ? "right" : "left") : positive ? "top" : "bottom";
       const key = `${index}:${this.keyOf(catScale, catCol[i])}|${this.keyOf(scales.color, series)}`;
       const datum = { layer: index, row: i, series };
-      const color = this.colorOf(layer, i);
+      let color = this.colorOf(layer, i);
+      // A funnel in steps: each stage lighter than the one before.
+      if (layer.options.step === true && !colors && layer.n > 1) color = mix(color, this.theme.surface, (0.62 * i) / (layer.n - 1));
       if (horizontal) {
         const x = Math.min(p0, p1);
         shapes.push({ type: "rect", key, x, y: lo, w: Math.abs(p1 - p0), h: thickness, color, round, from: { x: base, y: lo, w: 0, h: thickness }, datum });
@@ -688,6 +763,9 @@ export class Chart {
     const bySeries = new Map<number, PathShape>();
     const curve = (layer.options.curve as PathShape["curve"]) ?? (this.config.kind === "sparkline" ? "monotone" : "linear");
 
+    // A sparkline's area: under its line, fading down to nothing.
+    const spark = this.config.kind === "sparkline";
+    const sparkArea = spark && layer.options.area === true;
     for (let i = 0; i < layer.n; i++) {
       const series = colors ? (colors[i] ?? -1) : -1;
       if (series >= 0 && this.hidden.has(series)) continue;
@@ -695,17 +773,18 @@ export class Chart {
       if (!path) {
         const area = layer.mark === "area";
         path = {
-          type: layer.mark as "line" | "area",
+          type: sparkArea ? "area" : (layer.mark as "line" | "area"),
           key: `${index}:${series < 0 ? "" : this.keyOf(scales.color, series)}`,
           points: [],
           color: series < 0 ? this.layerColor(layer) : this.color(series),
           curve,
-          fill: area ? (layer.stack ? 0.78 : 0.12) : 0,
+          fill: sparkArea ? 1 : area ? (layer.stack ? 0.78 : 0.12) : 0,
           width: area && layer.stack ? 0 : this.theme.line,
           baseline,
           series: series < 0 ? null : series,
           layer: index,
           dots: layer.options.points === true,
+          gradient: sparkArea,
         };
         bySeries.set(series, path);
       }
@@ -722,6 +801,19 @@ export class Chart {
     }
     for (const path of bySeries.values()) {
       shapes.push(path);
+      // A sparkline's dots: at its last value, or at its last, lowest and highest.
+      if (spark && (layer.options.points === "last" || layer.options.points === "extremes")) {
+        const drawn = path.points.filter((point) => point.y !== null);
+        const marks = new Set<PathPoint>();
+        if (drawn.length) marks.add(drawn[drawn.length - 1]!);
+        if (layer.options.points === "extremes" && drawn.length > 1) {
+          marks.add(drawn.reduce((a, b) => (b.y! < a.y! ? b : a)));
+          marks.add(drawn.reduce((a, b) => (b.y! > a.y! ? b : a)));
+        }
+        for (const point of marks) {
+          shapes.push({ type: "dot", key: `${path.key}:mark:${point.k}`, x: point.x, y: point.y!, r: 3, color: path.color, ring: true, datum: { layer: index, row: point.row, series: path.series } });
+        }
+      }
       // A dot at the end of a line with a direct label.
       if (layout.labels.length && path.type === "line") {
         const last = [...path.points].reverse().find((point) => point.y !== null);
@@ -911,8 +1003,21 @@ export class Chart {
     const { scales = {}, axes = true } = this.config;
     const theme = this.theme;
     svg.style.fontFamily = theme.font;
-    if (!axes) return;
     const { x, y } = layout;
+
+    // A sparkline's last value, next to the end of its line.
+    const sparkLayer = this.config.kind === "sparkline" ? this.config.layers?.[0] : undefined;
+    const last = sparkLayer ? this.sparkValue(sparkLayer) : null;
+    if (last && x && y) {
+      const xv = sparkLayer!.columns.x?.[last.row];
+      const yv = sparkLayer!.columns.y?.[last.row];
+      if (xv != null && yv != null) {
+        const px = x.kind === "band" || x.kind === "point" ? x.at(xv) + (x.kind === "band" ? x.bandwidth / 2 : 0) : x.at(xv);
+        text(svg, last.text, px + 8, Math.min(layout.height - 8, Math.max(8, y.at(yv))), { anchor: "start", baseline: "middle", fill: theme.text, tabular: true });
+      }
+    }
+
+    if (!axes) return;
 
     // The value axis: hairline grids at its ticks, labels beside them.
     if (y && scales.y) {
@@ -1001,18 +1106,22 @@ export class Chart {
       }
     });
 
-    // A funnel's stages: each value, with its share of the first stage.
+    // A funnel's stages: each value, with its share of the first stage,
+    // inside its bar when asked and it fits, in the color that reads on it.
     (this.config.layers ?? []).forEach((layer, index) => {
-      if (layer.mark !== "bar" || layer.options.funnel !== true) return;
-      const value = formatter(scales.x?.format, this.locale);
-      const percent = formatter("percent", this.locale);
+      if (layer.mark !== "bar" || layer.options.funnel !== true || layer.options.labels === false) return;
+      const words = new Map(this.funnelWords(layer).map((w) => [w.row, w.text]));
+      const inside = layer.options.labels === "inside";
       for (const shape of this.shapes) {
         if (shape.type !== "rect" || shape.datum.layer !== index) continue;
-        const v = layer.columns.x?.[shape.datum.row];
-        const share = layer.columns.share?.[shape.datum.row];
-        if (v == null) continue;
-        const words = share == null || shape.datum.row === 0 ? value(v) : `${value(v)} · ${percent(share)}`;
-        text(svg, words, shape.x + shape.w + 8, shape.y + shape.h / 2, { anchor: "start", baseline: "middle", fill: theme.secondary, halo: theme.surface });
+        const label = words.get(shape.datum.row);
+        if (label === undefined) continue;
+        const cy = shape.y + shape.h / 2;
+        if (inside && this.measure(label) + 16 <= shape.w && shape.h >= 14) {
+          text(svg, label, shape.x + shape.w / 2, cy, { anchor: "middle", baseline: "middle", fill: onColor(shape.color), tabular: true });
+        } else {
+          text(svg, label, shape.x + shape.w + 8, cy, { anchor: "start", baseline: "middle", fill: theme.secondary, halo: theme.surface, tabular: true });
+        }
       }
     });
 
@@ -1504,8 +1613,60 @@ export class Chart {
     return formatter(scale.format, this.locale)(value);
   }
 
-  // The rows of the tooltip: a title, then each value with its series.
+  // The rows of the tooltip: a title, then each value with its series,
+  // then the fields of the layer's tooltip.
   private tipRows(): { title: string; rows: { value: string; name: string; color: string | null }[] } | null {
+    const tip = this.markRows();
+    const hover = this.hover;
+    if (!tip || !hover) return tip;
+    const layers = this.config.layers ?? [];
+    if (hover.kind === "x") {
+      // At a crosshair, the fields of each series, named by it.
+      const color = this.config.scales?.color;
+      for (const layer of layers) {
+        if (!layer.tooltip.length) continue;
+        for (const row of this.rowsAt(layer, hover.k)) {
+          const series = layer.columns.color?.[row];
+          if (series != null && this.hidden.has(series)) continue;
+          const of = series == null || color?.type !== "ordinal" ? "" : this.valueText(series, color);
+          tip.rows.push(...this.tipFields(layer, row).map((field) => ({ ...field, name: of ? `${field.name} · ${of}` : field.name })));
+        }
+      }
+    } else {
+      const layer = layers[hover.datum.layer];
+      if (layer) tip.rows.push(...this.tipFields(layer, hover.datum.row));
+    }
+    return tip;
+  }
+
+  // The rows of a layer at a place of x, by its key: one for each series.
+  private rowsAt(layer: Layer, k: string): number[] {
+    const xs = this.scalesOf(layer).x;
+    const rows: number[] = [];
+    for (let i = 0; i < layer.n; i++) if (this.keyOf(xs, layer.columns.x?.[i]) === k) rows.push(i);
+    return rows;
+  }
+
+  // The values of the fields of a layer's tooltip at a row: a number in its
+  // format, a time in full, a text as it is.
+  private tipFields(layer: Layer, row: number): { value: string; name: string; color: string | null }[] {
+    const rows: { value: string; name: string; color: string | null }[] = [];
+    for (const field of layer.tooltip) {
+      const value = field.values?.[row];
+      if (value === null || value === undefined) continue;
+      let text: string;
+      if (typeof value === "number") {
+        text = field.time !== null && field.time !== undefined ? formatTime(value, field.time || undefined, this.locale) : formatter(field.format, this.locale)(value);
+      } else {
+        text = String(value);
+      }
+      rows.push({ value: text, name: field.title ?? "", color: null });
+    }
+    return rows;
+  }
+
+  // The rows of the marks at the pointer.
+  private markRows(): { title: string; rows: { value: string; name: string; color: string | null }[] } | null {
     const hover = this.hover;
     const scales = this.config.scales ?? {};
     const layers = this.config.layers ?? [];
@@ -1659,7 +1820,7 @@ export class Chart {
       return;
     }
     if (color && color.type === "sequential") return this.renderRamp(color);
-    if (!color || color.type !== "ordinal") {
+    if (!color || color.type !== "ordinal" || color.legend === false) {
       legend.hidden = true;
       return;
     }
@@ -1735,7 +1896,12 @@ export function merge(config: Config, add: Config, max: number | null): Config {
       columns[name] = max && all.length > max ? all.slice(all.length - max) : all;
     }
     const n = Object.values(columns)[0]?.length ?? 0;
-    return { ...layer, columns, n };
+    // The fields of the tooltip: their values follow the rows that stay.
+    const tooltip = layer.tooltip.map((field, f) => {
+      const all = (field.values ?? []).concat(more.tooltip[f]?.values ?? []);
+      return { ...field, values: max && all.length > max ? all.slice(all.length - max) : all };
+    });
+    return { ...layer, columns, n, tooltip };
   });
 
   // Numbers and times: the extent of the rows that stay (with zero, if
@@ -1784,6 +1950,16 @@ function line(parent: Element, x1: number, y1: number, x2: number, y2: number, s
 function dashed(parent: Element, x1: number, y1: number, x2: number, y2: number, stroke: string): void {
   line(parent, x1, y1, x2, y2, stroke);
   (parent.lastChild as SVGElement).setAttribute("stroke-dasharray", "4 4");
+}
+
+// The text that reads on a color: white on a dark one, ink on a light one,
+// by the color's relative luminance.
+function onColor(color: string): string {
+  const [r, g, b] = rgb(color).map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.3 ? "#16161a" : "#ffffff";
 }
 
 function text(

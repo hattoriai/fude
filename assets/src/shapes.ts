@@ -1,4 +1,4 @@
-import { mix } from "./theme";
+import { alpha, mix } from "./theme";
 
 // The shapes a chart draws, in pixels, each with the key that keeps its
 // identity from one render to the next: a bar moves to its new height, a
@@ -47,6 +47,8 @@ export interface PathShape {
   series: number | null;
   layer: number;
   dots: boolean;
+  /** The fill of an area fades from its line down to nothing (a sparkline's). */
+  gradient?: boolean;
 }
 
 export interface DotShape {
@@ -307,7 +309,15 @@ function drawPath(ctx: CanvasRenderingContext2D, s: PathShape, paint: Paint, opa
       trace(ctx, bottom, s.curve, false);
       ctx.closePath();
       ctx.globalAlpha = opacity * focus * s.fill;
-      ctx.fillStyle = s.color;
+      if (s.gradient) {
+        const top = Math.min(...run.map((point) => point.y as number));
+        const gradient = ctx.createLinearGradient(0, top, 0, s.baseline);
+        gradient.addColorStop(0, alpha(s.color, 0.32));
+        gradient.addColorStop(1, alpha(s.color, 0));
+        ctx.fillStyle = gradient;
+      } else {
+        ctx.fillStyle = s.color;
+      }
       ctx.fill();
     }
     if (s.width > 0) {

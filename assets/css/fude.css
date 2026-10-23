@@ -34,6 +34,27 @@
   --fude-series-8: #e34948;
   /* The ramp of a number's color, low to high: steps of one hue. */
   --fude-sequential: #cde2fb, #9ec5f4, #6da7ec, #3987e5, #256abf, #184f95, #0d366b;
+  /* The schemes a color channel names (scheme: :green): ramps light to
+     dark, diverging ones through a neutral middle, each of one hue or
+     ordered by lightness, so that they read with any colour vision.
+     :blue is --fude-sequential; :red_green runs from a red-magenta, as
+     ColorBrewer's PiYG, which the common deficiencies tell from green. */
+  --fude-scheme-green: #d3efd9, #a6dcb3, #74c58c, #42a866, #2a8a4d, #1b6b3a, #0f4a27;
+  --fude-scheme-orange: #fde0c5, #fbbf8a, #f69a4f, #e8772a, #c25a14, #96420c, #682c06;
+  --fude-scheme-purple: #e4dcf8, #c6b7f0, #a693e6, #8571d9, #6650c0, #4c3896, #33246b;
+  --fude-scheme-gray: #e6e5e1, #cac8c1, #aaa79f, #8a877f, #6b6862, #4d4b47, #302f2c;
+  --fude-scheme-viridis: #440154, #443983, #31688e, #21918c, #35b779, #90d743, #fde725;
+  --fude-scheme-red-blue: #b2182b, #ef8a62, #fddbc7, #f7f7f7, #d1e5f0, #67a9cf, #2166ac;
+  --fude-scheme-red-green: #c51b7d, #e9a3c9, #fde0ef, #f7f7f7, #e6f5d0, #a1d76a, #4d9221;
+  /* Okabe and Ito's categorical order, made for colour vision deficiencies. */
+  --fude-scheme-okabe-ito-1: #0072b2;
+  --fude-scheme-okabe-ito-2: #e69f00;
+  --fude-scheme-okabe-ito-3: #009e73;
+  --fude-scheme-okabe-ito-4: #cc79a7;
+  --fude-scheme-okabe-ito-5: #56b4e9;
+  --fude-scheme-okabe-ito-6: #d55e00;
+  --fude-scheme-okabe-ito-7: #f0e442;
+  --fude-scheme-okabe-ito-8: #5e5c58;
   /* A region of a map with no value. */
   --fude-map-empty: #ebeae5;
   /* The bars of a waterfall, by what they do. */
@@ -77,6 +98,14 @@
   --fude-series-8: #e66767;
   /* On ink, the ramp starts dark: low values recede into the surface. */
   --fude-sequential: #16263b, #173f6e, #1c5cab, #2a78d6, #5598e7, #86b6ef, #b7d3f6;
+  /* On ink, the ramps start dark, and the middle of a diverging one is the surface's. */
+  --fude-scheme-green: #142a1b, #1a4a2c, #22703f, #2f9655, #55b877, #8fd3a1, #c3ead0;
+  --fude-scheme-orange: #331b0b, #5c2f10, #8f4612, #c4621a, #e8823d, #f2aa75, #f8cfab;
+  --fude-scheme-purple: #1f1838, #33275f, #4a3a8f, #6650c0, #8a78dc, #b0a3ea, #d5ccf5;
+  --fude-scheme-gray: #232322, #3a3937, #55534f, #72706a, #94918a, #b8b5ae, #dcdad4;
+  --fude-scheme-red-blue: #f07a6c, #b8443d, #6a2a28, #2a2a2e, #24405f, #2f6aa3, #6aa6e6;
+  --fude-scheme-red-green: #e66fb0, #a8417a, #5e2645, #2a2a2e, #33482a, #5f9a3c, #9fd46a;
+  --fude-scheme-okabe-ito-8: #9a988f;
   --fude-map-empty: #2a2a2e;
   --fude-increase: #199e70;
   --fude-decrease: #e66767;
@@ -164,6 +193,17 @@
   display: flex;
   flex-direction: column;
   width: 100%;
+}
+
+/* A sparkline with no height fills the height its box gives it. */
+.fude:has(> .fude-plot-fill) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.fude-plot-fill {
+  flex: 1 1 auto;
 }
 
 .fude-legend {
