@@ -19,7 +19,7 @@ export interface RectShape {
   h: number;
   color: string;
   /** Which corners are round: the end of a bar away from its baseline. */
-  round: "top" | "bottom" | "left" | "right" | "none";
+  round: "top" | "bottom" | "left" | "right" | "all" | "none";
   /** Where the shape grows from when it is new. */
   from: { x: number; y: number; w: number; h: number };
   datum: Datum;
@@ -208,7 +208,17 @@ function drawRect(ctx: CanvasRenderingContext2D, s: RectShape, paint: Paint, opa
   ctx.fillStyle = s.color;
   const r = Math.min(paint.radius, s.w / 2, s.h / 2);
   const [tl, tr, br, bl] =
-    s.round === "top" ? [r, r, 0, 0] : s.round === "bottom" ? [0, 0, r, r] : s.round === "right" ? [0, r, r, 0] : s.round === "left" ? [r, 0, 0, r] : [0, 0, 0, 0];
+    s.round === "top"
+      ? [r, r, 0, 0]
+      : s.round === "bottom"
+        ? [0, 0, r, r]
+        : s.round === "right"
+          ? [0, r, r, 0]
+          : s.round === "left"
+            ? [r, 0, 0, r]
+            : s.round === "all"
+              ? [r, r, r, r]
+              : [0, 0, 0, 0];
   ctx.beginPath();
   ctx.moveTo(s.x + tl, s.y);
   ctx.lineTo(s.x + s.w - tr, s.y);

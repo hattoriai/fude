@@ -13,6 +13,8 @@ export interface Scale {
   unit?: string;
   time?: string;
   bins?: { start: number; step: number };
+  /** The roles of an ordinal scale's values, which pick their colors. */
+  roles?: string[];
 }
 
 export interface Layer {
@@ -20,7 +22,7 @@ export interface Layer {
   n: number;
   columns: Record<string, (number | null)[]>;
   horizontal: boolean;
-  stack: "zero" | "normalize" | "center" | null;
+  stack: "zero" | "normalize" | "center" | "waterfall" | null;
   options: Record<string, unknown>;
   tooltip: { title: string | null; format: string | null }[];
 }

@@ -23,6 +23,9 @@ defmodule Fude.Layer do
           | :number
           | :trend
           | :progress
+          | :waterfall
+          | :funnel
+          | :gauge
           | :choropleth
           | :bubble_map
 
@@ -88,6 +91,17 @@ defmodule Fude.Layer do
     number: %{channels: [:value], needs: [:value], options: [label: :string]},
     trend: %{channels: [:value, :compare], needs: [:value], options: [label: :string]},
     progress: %{channels: [:value], needs: [:value], options: [label: :string, goal: :number]},
+    waterfall: %{
+      channels: [:x, :y, :tooltip],
+      needs: [:x, :y],
+      options: [total: :string, start: :string, labels: :boolean]
+    },
+    funnel: %{channels: [:x, :y, :tooltip], needs: [:x, :y], options: []},
+    gauge: %{
+      channels: [:value],
+      needs: [:value],
+      options: [label: :string, min: :number, max: :number, target: :number]
+    },
     choropleth: %{
       channels: [:region, :color, :tooltip],
       needs: [:region, :color],

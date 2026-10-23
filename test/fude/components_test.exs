@@ -60,4 +60,13 @@ defmodule Fude.ComponentsTest do
       rendered_to_string(~H|<.chart id="x" />|)
     end
   end
+
+  test "draws a gauge on the server, as a meter" do
+    assigns = %{chart: Fude.gauge([%{p: 75}], value: :p, target: 90, label: "Score")}
+    html = rendered_to_string(~H|<.chart id="score" chart={@chart} />|)
+    doc = LazyHTML.from_fragment(html)
+    assert LazyHTML.attribute(LazyHTML.query(doc, "[role=meter]"), "aria-valuenow") == ["75"]
+    assert Enum.count(LazyHTML.query(doc, "path.fude-gauge-value")) == 1
+    assert Enum.count(LazyHTML.query(doc, "line.fude-gauge-target")) == 1
+  end
 end

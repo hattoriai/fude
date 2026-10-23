@@ -36,6 +36,10 @@
   --fude-sequential: #cde2fb, #9ec5f4, #6da7ec, #3987e5, #256abf, #184f95, #0d366b;
   /* A region of a map with no value. */
   --fude-map-empty: #ebeae5;
+  /* The bars of a waterfall, by what they do. */
+  --fude-increase: #1baf7a;
+  --fude-decrease: #e34948;
+  --fude-total: #5e5c58;
   --fude-up: #006300;
   --fude-down: #c62828;
   /* Marks: the thickest bar, the round end of a bar, the gap between
@@ -74,6 +78,9 @@
   /* On ink, the ramp starts dark: low values recede into the surface. */
   --fude-sequential: #16263b, #173f6e, #1c5cab, #2a78d6, #5598e7, #86b6ef, #b7d3f6;
   --fude-map-empty: #2a2a2e;
+  --fude-increase: #199e70;
+  --fude-decrease: #e66767;
+  --fude-total: #9a988f;
   --fude-up: #0ca30c;
   --fude-down: #e66767;
   --fude-tooltip-background: #222226;
@@ -383,6 +390,44 @@
 
 .fude-down {
   color: var(--fude-down);
+}
+
+.fude-gauge {
+  position: relative;
+  align-items: center;
+  max-width: 16rem;
+  text-align: center;
+}
+
+.fude-gauge svg {
+  width: 100%;
+  overflow: visible;
+}
+
+.fude-gauge .fude-value {
+  margin-top: -2.75rem;
+  font-size: 2.25rem;
+}
+
+.fude-gauge-track,
+.fude-gauge-value {
+  fill: none;
+  stroke-width: 16;
+  stroke-linecap: round;
+}
+
+.fude-gauge-track {
+  stroke: color-mix(in oklab, var(--fude-series-1) 18%, var(--fude-surface));
+}
+
+.fude-gauge-value {
+  stroke: var(--fude-series-1);
+}
+
+.fude-gauge-target {
+  stroke: var(--fude-text);
+  stroke-width: 2.5;
+  stroke-linecap: round;
 }
 
 .fude-progress {

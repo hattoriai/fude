@@ -142,6 +142,28 @@ defmodule FudeDev.Data do
 
   def kpis, do: [%{mrr: 184_320.5, last: 171_240.0, done: 68}]
 
+  def profit do
+    [
+      %{step: "Revenue", amount: 420_000},
+      %{step: "Services", amount: 85_000},
+      %{step: "Refunds", amount: -32_000},
+      %{step: "Salaries", amount: -210_000},
+      %{step: "Rent", amount: -48_000},
+      %{step: "Marketing", amount: -61_000},
+      %{step: "Tax", amount: -38_000}
+    ]
+  end
+
+  def signups do
+    [
+      %{stage: "Visited", people: 48_210},
+      %{stage: "Started sign-up", people: 9_870},
+      %{stage: "Confirmed email", people: 6_120},
+      %{stage: "Made a page", people: 3_480},
+      %{stage: "Invited someone", people: 1_210}
+    ]
+  end
+
   # Users by country, by ISO code; a few by name.
   def countries do
     codes =
@@ -190,7 +212,7 @@ defmodule FudeDev.Layouts do
           nav { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem; font-size: 0.875rem; }
           nav a { color: inherit; }
           .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 3rem 3rem; }
-          .numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 2rem; margin-bottom: 3rem; }
+          .numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 2rem; margin-bottom: 3rem; align-items: start; }
           button { font: inherit; }
         </style>
         <script type="importmap">
@@ -246,6 +268,7 @@ defmodule FudeDev.GalleryLive do
       <.chart id="mrr" locale={@locale} chart={Fude.number(Data.kpis(), value: [field: :mrr, format: {:currency, "EUR"}], label: "Monthly recurring revenue")} />
       <.chart id="mrr-trend" locale={@locale} chart={Fude.trend(Data.kpis(), value: [field: :mrr, format: :compact], compare: :last, label: "vs last month")} />
       <.chart id="done" locale={@locale} chart={Fude.progress(Data.kpis(), value: :done, goal: 100, label: "Onboarding done, of 100")} />
+      <.chart id="uptime" locale={@locale} chart={Fude.gauge([%{p: 72.4}], value: [field: :p, format: :number], target: 80, label: "Score, of 100")} />
       <.chart id="visits-spark" locale={@locale} chart={Fude.sparkline(Data.daily(), x: :day, y: :visits, title: "Visits, 90 days")} />
     </div>
     <p><button phx-click="shuffle">Change the data</button></p>
@@ -302,6 +325,17 @@ defmodule FudeDev.GalleryLive do
         id="revenue-area"
         locale={@locale}
         chart={Fude.area(monthly(@shuffled), x: :month, y: [field: :revenue, format: :compact, title: "Revenue"], color: :channel, title: "Revenue, stacked")}
+      />
+      <.chart
+        id="profit"
+        locale={@locale}
+        chart={Fude.waterfall(Data.profit(), x: :step, y: [field: :amount, format: {:currency, "EUR"}], start: "Revenue", total: "Profit",
+          title: "From revenue to profit", subtitle: "Third quarter, in euros")}
+      />
+      <.chart
+        id="signups"
+        locale={@locale}
+        chart={Fude.funnel(Data.signups(), x: :stage, y: [field: :people, title: "People"], title: "Where people leave", subtitle: "Sign-ups in October")}
       />
       <.chart
         id="world"

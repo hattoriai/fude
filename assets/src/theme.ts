@@ -11,6 +11,8 @@ export interface Theme {
   baseline: string;
   surface: string;
   empty: string;
+  /** The colors of roles: a waterfall's increase, decrease and total. */
+  roles: Record<string, string>;
   series: string[];
   sequential: string[];
   barMax: number;
@@ -45,6 +47,11 @@ export function readTheme(el: Element): Theme {
     baseline: get("--fude-baseline", "#c3c2b7"),
     surface: get("--fude-surface", "#fcfcfb"),
     empty: get("--fude-map-empty", "#e8e7e1"),
+    roles: {
+      increase: get("--fude-increase", "#1baf7a"),
+      decrease: get("--fude-decrease", "#e34948"),
+      total: get("--fude-total", "#5e5c58"),
+    },
     series,
     sequential: get("--fude-sequential", SEQUENTIAL)
       .split(",")

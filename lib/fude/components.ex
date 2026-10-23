@@ -110,6 +110,38 @@ defmodule Fude.Components do
   attr :single, :map, required: true
   attr :kind, :string, required: true
 
+  defp single(%{kind: "gauge"} = assigns) do
+    assigns = assign(assigns, :gauge, gauge(assigns.single))
+
+    ~H"""
+    <div
+      class="fude-single fude-gauge"
+      role="meter"
+      aria-valuemin={@single["min"]}
+      aria-valuemax={@single["max"]}
+      aria-valuenow={@single["value"]}
+      aria-label={@single["label"]}
+    >
+      <svg viewBox="0 0 200 112" aria-hidden="true">
+        <path class="fude-gauge-track" d={@gauge.track} />
+        <path :if={@gauge.value} class="fude-gauge-value" d={@gauge.value} />
+        <line
+          :if={@gauge.target}
+          class="fude-gauge-target"
+          x1={elem(@gauge.target, 0)}
+          y1={elem(@gauge.target, 1)}
+          x2={elem(@gauge.target, 2)}
+          y2={elem(@gauge.target, 3)}
+        />
+      </svg>
+      <data class="fude-value" value={plain(@single["value"])} data-format={@single["format"]}>
+        {plain(@single["value"]) || "—"}
+      </data>
+      <span :if={@single["label"]} class="fude-label">{@single["label"]}</span>
+    </div>
+    """
+  end
+
   defp single(assigns) do
     ~H"""
     <div class="fude-single">
@@ -200,6 +232,39 @@ defmodule Fude.Components do
   end
 
   defp datasets(%Chart{data: name}, data), do: %{name => data}
+
+  # The arcs of a gauge, from the left over the top to the right: its track,
+  # its value, and a tick at its target.
+  @cx 100
+  @cy 100
+  @r 80
+
+  defp gauge(%{"value" => value, "min" => min, "max" => max} = single) do
+    share = fn v -> if is_number(v) and max > min, do: min(1, max(0, (v - min) / (max - min))) end
+
+    %{
+      track: arc(0, 1),
+      value: if((t = share.(value)) && t > 0, do: arc(0, t)),
+      target: if(t = share.(single["target"]), do: tick(t))
+    }
+  end
+
+  defp arc(from, to) do
+    {x0, y0} = at(from, @r)
+    {x1, y1} = at(to, @r)
+    "M#{x0} #{y0} A#{@r} #{@r} 0 0 1 #{x1} #{y1}"
+  end
+
+  defp tick(t) do
+    {x0, y0} = at(t, @r - 14)
+    {x1, y1} = at(t, @r + 14)
+    {x0, y0, x1, y1}
+  end
+
+  defp at(t, r) do
+    angle = :math.pi() * (1 - t)
+    {Float.round(@cx + r * :math.cos(angle), 2), Float.round(@cy - r * :math.sin(angle), 2)}
+  end
 
   defp change(%{"value" => value, "compare" => compare})
        when is_number(value) and is_number(compare) and compare != 0,

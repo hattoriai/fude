@@ -142,4 +142,30 @@ defmodule Fude.CompileTest do
       assert {:ok, ^chart} = chart |> Fude.Spec.dump() |> Fude.Spec.load()
     end
   end
+
+  describe "waterfalls, funnels and gauges" do
+    test "a waterfall carries a running total, with a start and an end that stand on zero" do
+      data = [%{s: "Start", v: 100}, %{s: "Sales", v: 40}, %{s: "Costs", v: -50}]
+      wire = compile!(Fude.waterfall(data, x: :s, y: :v, start: "Start", total: "End"))
+      %{"layers" => [%{"columns" => columns, "stack" => "waterfall"}]} = wire
+
+      assert columns["y0"] == [0, 100, 140, 0]
+      assert columns["y1"] == [100, 140, 90, 90]
+      assert wire["scales"]["x"]["domain"] == ["Start", "Sales", "Costs", "End"]
+      assert wire["scales"]["color"]["roles"] == ["increase", "decrease", "total"]
+    end
+
+    test "a funnel gives each stage its share of the first" do
+      data = [%{s: "Visit", n: 1000}, %{s: "Buy", n: 90}]
+      %{"layers" => [layer]} = compile!(Fude.funnel(data, x: :s, y: :n))
+      assert layer["columns"]["share"] == [1.0, 0.09]
+      assert layer["horizontal"]
+      assert layer["columns"]["x0"] == [-500.0, -45.0]
+    end
+
+    test "a gauge is a single value with its range and target" do
+      wire = compile!(Fude.gauge([%{p: 72}], value: :p, min: 50, max: 90, target: 80))
+      assert %{"value" => 72, "min" => 50, "max" => 90, "target" => 80} = wire["single"]
+    end
+  end
 end

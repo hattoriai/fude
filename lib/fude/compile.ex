@@ -67,7 +67,7 @@ defmodule Fude.Compile do
   end
 
   defp build(chart, data) do
-    single? = Chart.kind(chart) in [:number, :trend, :progress]
+    single? = Chart.kind(chart) in [:number, :trend, :progress, :gauge]
 
     base = %{
       "v" => @v,
@@ -105,7 +105,10 @@ defmodule Fude.Compile do
       "label" => options[:label] || Channel.title(channels[:value]),
       "format" => format(channels[:value]),
       "compare" => if(kind == :trend, do: compare(channels[:compare], channels[:value], data)),
-      "goal" => if(kind == :progress, do: options[:goal] || 100)
+      "goal" => if(kind == :progress, do: options[:goal] || 100),
+      "min" => if(kind == :gauge, do: options[:min] || 0),
+      "max" => if(kind == :gauge, do: options[:max] || 100),
+      "target" => options[:target]
     }
   end
 
@@ -372,6 +375,91 @@ defmodule Fude.Compile do
 
   # -- Marks of the kinds ------------------------------------------------------
 
+  # A waterfall: each step a bar from the total before it to the total
+  # after it, colored by whether it goes up or down; a first bar named as
+  # the start, and a last bar of the end, are totals that stand on zero.
+  defp marks(:waterfall, layer, %{rows: rows}, data) do
+    start = layer.options[:start]
+
+    {rows, total} =
+      Enum.map_reduce(rows, 0, fn row, total ->
+        value = row[:y] || 0
+
+        if start && row[:x] == start,
+          do: {Map.merge(row, %{y0: 0, y1: value, color: "Total"}), value},
+          else:
+            {Map.merge(row, %{y0: total, y1: total + value, color: change(value)}), total + value}
+      end)
+
+    rows =
+      case layer.options[:total] do
+        nil -> rows
+        name -> rows ++ [%{x: name, y: total, y0: 0, y1: total, color: "Total"}]
+      end
+
+    values = Enum.flat_map(rows, &[&1.y0, &1.y1])
+    x = band(layer.channels.x, data, rows, :x, layer.channels)
+
+    y =
+      number(layer.channels.y, data, if(values == [], do: nil, else: Enum.min_max(values)),
+        zero: true,
+        stack: false
+      )
+
+    colors =
+      Enum.filter(["Increase", "Decrease", "Total"], fn name ->
+        Enum.any?(rows, &(&1.color == name))
+      end)
+
+    %{
+      mark: "bar",
+      layer: layer,
+      rows: rows,
+      channels: %{x: :x, y: :y},
+      stack: :waterfall,
+      scales: %{
+        "x" => x,
+        "y" => y,
+        "color" => %{"type" => "ordinal", "domain" => colors, "roles" => roles(colors)}
+      },
+      options: Map.merge(%{connectors: true}, Map.take(layer.options, [:labels]))
+    }
+  end
+
+  # A funnel: centered bars, each with its share of the first stage.
+  defp marks(:funnel, layer, %{rows: rows}, data) do
+    first = rows |> List.first(%{}) |> Map.get(:y)
+
+    rows =
+      Enum.map(rows, fn row ->
+        value = row[:y] || 0
+        share = if is_number(first) and first != 0, do: value / first
+        Map.merge(row, %{y0: -value / 2, y1: value / 2, share: share})
+      end)
+
+    max = rows |> Enum.map(&abs(&1[:y] || 0)) |> Enum.max(fn -> 1 end)
+
+    %{
+      mark: "bar",
+      layer: layer,
+      rows: rows,
+      channels: %{x: :x, y: :y},
+      horizontal: true,
+      stack: :center,
+      scales: %{
+        "y" => band(layer.channels.x, data, rows, :x, layer.channels),
+        "x" => %{
+          "type" => "linear",
+          "domain" => [-max / 2, max / 2],
+          "nice" => false,
+          "title" => Channel.title(layer.channels.y),
+          "format" => format(layer.channels.y)
+        }
+      },
+      options: %{funnel: true}
+    }
+  end
+
   defp marks(kind, layer, %{rows: rows, bins: bins}, data) when kind in [:bar, :histogram] do
     horizontal = layer.options[:horizontal] == true
     {x, y} = {layer.channels.x, layer.channels.y}
@@ -608,6 +696,12 @@ defmodule Fude.Compile do
 
   defp sort_key(nil), do: {1, 0}
   defp sort_key(value), do: {0, value}
+
+  defp change(value) when value < 0, do: "Decrease"
+  defp change(_value), do: "Increase"
+
+  # The colors of a waterfall's bars, by their role rather than their order.
+  defp roles(names), do: Enum.map(names, &(&1 |> String.downcase()))
 
   # -- Stacks ------------------------------------------------------------------
 
@@ -868,7 +962,7 @@ defmodule Fude.Compile do
     present = rows |> List.first(%{}) |> Map.keys()
 
     columns =
-      [:x, :x2, :y, :y0, :y1, :color, :size, :value, :a0, :a1, :text, :region]
+      [:x, :x2, :y, :y0, :y1, :color, :size, :value, :a0, :a1, :text, :region, :share]
       |> Enum.filter(&(&1 in present))
       |> Map.new(fn name ->
         target = column_name(name, swap)
@@ -1024,6 +1118,8 @@ defmodule Fude.Compile do
   defp kind_name(:heatmap), do: "heatmap"
   defp kind_name(:sparkline), do: "sparkline"
   defp kind_name(:choropleth), do: "map"
+  defp kind_name(:waterfall), do: "waterfall chart"
+  defp kind_name(:funnel), do: "funnel"
   defp kind_name(:bubble_map), do: "map"
   defp kind_name(kind), do: "#{kind} chart"
 

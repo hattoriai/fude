@@ -63,6 +63,11 @@ defmodule Fude do
     number: "One number, large, with a `label`.",
     trend: "One number with its change from `compare`.",
     progress: "One number on a bar towards a `goal`.",
+    waterfall:
+      "A waterfall: how each change of `y` (a step on `x`) moves a running total; `total` adds a bar of the end, `start` names the first bar as a total.",
+    funnel: "A funnel: the stages on `x` with their `y`, each with its share of the first.",
+    gauge:
+      "One number on an arc from `min` to `max` (0 and 100 when not given), with a `target`.",
     choropleth:
       "A map of regions colored by `color`: each `region` an ISO code (`\"PRT\"`, `\"PT\"`), a number code or a name; `map` is `\"world\"` (the default) or `\"us-states\"`.",
     bubble_map: "A map with a circle at each `region`, sized by `size`."

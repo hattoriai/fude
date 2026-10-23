@@ -321,6 +321,13 @@ export class Chart {
       right -= widest + 8;
     }
 
+    // A funnel has no value axis; its labels take the right.
+    const funnel = (this.config.layers ?? []).some((layer) => layer.options.funnel === true);
+    if (funnel) {
+      bottom = height - 2;
+      right = width - pad - Math.min(width * 0.3, 120);
+    }
+
     let left = pad;
     if (axes && ys) {
       if (ys.type === "band") {
@@ -340,6 +347,8 @@ export class Chart {
     layout.right = right;
     layout.bottom = bottom;
     if (xs) layout.x = position(xs, [left, right], xs.type === "time" ? 90 : 80, this.bandPadding("x"));
+    // Names of categories on two lines take a line more below.
+    if (this.wrapsLabels(layout)) layout.bottom = bottom = bottom - 14;
     // Categories run down from the top; numbers up from the bottom.
     if (ys) layout.y = position(ys, ys.type === "band" || ys.type === "point" ? [top, bottom] : [bottom, top], 44, this.bandPadding("y"));
 
@@ -407,6 +416,9 @@ export class Chart {
 
   private color(series: number | null | undefined): string {
     if (series === null || series === undefined) return this.theme.series[0]!;
+    // A color by its role (a waterfall's increase), not by its place.
+    const role = this.config.scales?.color?.roles?.[series];
+    if (role && this.theme.roles[role]) return this.theme.roles[role]!;
     return this.theme.series[series] ?? this.theme.muted;
   }
 
@@ -522,14 +534,15 @@ export class Chart {
       let p1 = val.at(v1);
       const positive = v1 >= v0;
       // The surface gap between stacked segments: at the inner end.
-      if (layer.stack && v0 !== 0) {
+      if (layer.stack && layer.stack !== "waterfall" && layer.stack !== "center" && v0 !== 0) {
         if (horizontal) p0 += positive ? gap : -gap;
         else p0 += positive ? -gap : gap;
       }
       const k = String(catCol[i]);
       const end = outer.get(k);
       const isOuter = !layer.stack || !end || (positive ? v1 >= end.max : v1 <= end.min);
-      const round = !isOuter ? "none" : horizontal ? (positive ? "right" : "left") : positive ? "top" : "bottom";
+      const round =
+        layer.stack === "center" ? "all" : !isOuter ? "none" : horizontal ? (positive ? "right" : "left") : positive ? "top" : "bottom";
       const key = `${index}:${this.keyOf(catScale, catCol[i])}|${this.keyOf(scales.color, series)}`;
       const datum = { layer: index, row: i, series };
       const color = this.colorOf(layer, i);
@@ -798,14 +811,17 @@ export class Chart {
       }
     }
 
-    if (x && scales.x) {
+    const funnel = (this.config.layers ?? []).some((layer) => layer.options.funnel === true);
+    if (x && scales.x && !funnel) {
       const format = this.tickFormat(scales.x, x);
       const ticks = this.thinTicks(x, format);
       const vertical = x.kind !== "band" && x.kind !== "point";
-      for (const [tick, label] of ticks) {
+      for (const [tick, lines] of ticks) {
         const px = x.kind === "band" ? x.at(tick) + x.bandwidth / 2 : Math.round(x.at(tick)) + 0.5;
         if (vertical && y && (y.kind === "band" || this.isHorizontalBars())) line(grid, px, layout.top, px, layout.bottom, tick === 0 ? theme.baseline : theme.grid);
-        text(svg, label, px, layout.bottom + 16, { anchor: "middle", baseline: "alphabetic", fill: theme.muted, tabular: true });
+        lines.forEach((label, i) => {
+          text(svg, label, px, layout.bottom + 16 + i * 14, { anchor: "middle", baseline: "alphabetic", fill: theme.muted, tabular: true });
+        });
       }
       // The baseline under bars and columns.
       if (!vertical || (y && y.kind !== "band")) {
@@ -838,6 +854,34 @@ export class Chart {
       text(svg, label.text, lx + 12, label.y, { anchor: "start", baseline: "middle", fill: theme.text });
     }
 
+    // The connectors of a waterfall: from the end of each bar to the next.
+    (this.config.layers ?? []).forEach((layer, index) => {
+      if (layer.mark !== "bar" || layer.options.connectors !== true || !y) return;
+      const bars = this.shapes.filter((shape) => shape.type === "rect" && shape.datum.layer === index) as Extract<Shape, { type: "rect" }>[];
+      bars.sort((a, b) => a.datum.row - b.datum.row);
+      for (let i = 0; i + 1 < bars.length; i++) {
+        const level = layer.columns.y1?.[bars[i]!.datum.row];
+        if (level == null) continue;
+        const py = Math.round(y.at(level)) + 0.5;
+        line(svg, bars[i]!.x + bars[i]!.w, py, bars[i + 1]!.x, py, theme.muted);
+      }
+    });
+
+    // A funnel's stages: each value, with its share of the first stage.
+    (this.config.layers ?? []).forEach((layer, index) => {
+      if (layer.mark !== "bar" || layer.options.funnel !== true) return;
+      const value = formatter(scales.x?.format, this.locale);
+      const percent = formatter("percent", this.locale);
+      for (const shape of this.shapes) {
+        if (shape.type !== "rect" || shape.datum.layer !== index) continue;
+        const v = layer.columns.x?.[shape.datum.row];
+        const share = layer.columns.share?.[shape.datum.row];
+        if (v == null) continue;
+        const words = share == null || shape.datum.row === 0 ? value(v) : `${value(v)} · ${percent(share)}`;
+        text(svg, words, shape.x + shape.w + 8, shape.y + shape.h / 2, { anchor: "start", baseline: "middle", fill: theme.secondary, halo: theme.surface });
+      }
+    });
+
     // Value labels at the ends of bars.
     (this.config.layers ?? []).forEach((layer, index) => {
       if (layer.mark !== "bar" || layer.options.labels !== true) return;
@@ -861,13 +905,46 @@ export class Chart {
   }
 
   // The tick labels that fit, at least a label's width apart.
-  private thinTicks(x: Position, format: (value: number, index: number, ticks: number[]) => string): [number, string][] {
+  // The tick labels that fit, at least a label's width apart. The names of
+  // categories wrap onto two lines first, as a graphics desk sets them;
+  // only names that do not fit on two lines are thinned.
+  private thinTicks(x: Position, format: (value: number, index: number, ticks: number[]) => string): [number, string[]][] {
     const labels = x.ticks.map((tick, i) => [tick, format(tick, i, x.ticks)] as [number, string]);
-    if (labels.length < 2) return labels;
-    const widest = Math.max(...labels.map(([, label]) => this.measure(label)));
+    if (labels.length < 2) return labels.map(([tick, label]) => [tick, [label]]);
     const spacing = Math.abs(x.at(x.ticks[1]!) - x.at(x.ticks[0]!));
+    const room = Math.max(1, spacing - 8);
+    if (x.kind === "band") {
+      const wrapped = labels.map(([tick, label]) => [tick, this.wrap(label, room)] as [number, string[] | null]);
+      if (wrapped.every(([, lines]) => lines !== null)) return wrapped as [number, string[]][];
+      // Staggered: every other name on a second line, each with two bands.
+      const wide = Math.max(1, spacing * 2 - 8);
+      if (labels.every(([, label]) => this.measure(label) <= wide)) {
+        return labels.map(([tick, label], i) => [tick, i % 2 === 0 ? [label] : ["", label]]);
+      }
+    }
+    const widest = Math.max(...labels.map(([, label]) => this.measure(label)));
     const every = Math.max(1, Math.ceil((widest + 10) / Math.max(1, spacing)));
-    return labels.filter((_, i) => i % every === 0);
+    return labels.filter((_, i) => i % every === 0).map(([tick, label]) => [tick, [label]]);
+  }
+
+  // A label in at most two lines of a width, or null when it does not fit.
+  private wrap(label: string, width: number): string[] | null {
+    if (this.measure(label) <= width) return [label];
+    const words = label.split(/\s+/);
+    if (words.length < 2) return null;
+    for (let i = words.length - 1; i > 0; i--) {
+      const first = words.slice(0, i).join(" ");
+      const second = words.slice(i).join(" ");
+      if (this.measure(first) <= width && this.measure(second) <= width) return [first, second];
+    }
+    return null;
+  }
+
+  private wrapsLabels(layout: Layout): boolean {
+    const { x } = layout;
+    const xs = this.config.scales?.x;
+    if (!x || !xs || x.kind !== "band" || this.config.axes === false) return false;
+    return this.thinTicks(x, this.tickFormat(xs, x)).some(([, lines]) => lines.length > 1);
   }
 
   // -- Hover, keyboard and tooltip -------------------------------------------
@@ -1091,7 +1168,13 @@ export class Chart {
         const valueScale = horizontal ? scales.x : scales.y;
         const value = (horizontal ? c.x : c.y)?.[row];
         const name = series === null ? (valueScale?.title ?? "") : this.valueText(series, scales.color);
-        return { title, rows: [{ value: this.valueText(value, { ...valueScale!, format: valueScale?.format === "percent" ? undefined : valueScale?.format } as Scale), name, color }] };
+        const rows: { value: string; name: string; color: string | null }[] = [
+          { value: this.valueText(value, { ...valueScale!, format: valueScale?.format === "percent" ? undefined : valueScale?.format } as Scale), name, color },
+        ];
+        // A waterfall's step: its change, and the total after it.
+        if (layer.stack === "waterfall" && c.y1) rows.push({ value: this.valueText(c.y1[row], valueScale), name: "Total", color: null });
+        if (layer.options.funnel === true && c.share && row > 0) rows.push({ value: formatter("percent", this.locale)(c.share[row] ?? 0), name: "of the first", color: null });
+        return { title, rows };
       }
       case "arc": {
         const share = (c.a1?.[row] ?? 0) - (c.a0?.[row] ?? 0);
