@@ -50,6 +50,8 @@ defmodule Fude.MixProject do
     [
       {:bandit, "~> 1.5", only: :dev},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      # Decimal values in the tests of the data; Fude itself only recognizes them.
+      {:decimal, "~> 3.0", only: :test},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
       {:esbuild, "~> 0.10", only: :dev, runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},

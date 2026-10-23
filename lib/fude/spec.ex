@@ -81,7 +81,11 @@ defmodule Fude.Spec do
       end
 
     if opts[:data] && chart.datasets != %{} do
-      Map.put(spec, "datasets", Map.new(chart.datasets, fn {name, data} -> {name, Fude.Data.rows(data)} end))
+      Map.put(
+        spec,
+        "datasets",
+        Map.new(chart.datasets, fn {name, data} -> {name, Fude.Data.rows(data)} end)
+      )
     else
       spec
     end
@@ -119,11 +123,20 @@ defmodule Fude.Spec do
     |> Map.from_struct()
     |> Enum.reject(fn {_key, value} -> is_nil(value) end)
     |> Map.new(fn
-      {:format, {:currency, code}} -> {"format", "currency:" <> code}
-      {:bin, %{} = bin} -> {"bin", Map.new(bin, fn {k, v} -> {Atom.to_string(k), v} end)}
-      {:scale, scale} -> {"scale", Map.new(scale, fn {k, v} -> {Atom.to_string(k), dump_value(v)} end)}
-      {:sort, sort} when is_list(sort) -> {"sort", sort}
-      {key, value} -> {Atom.to_string(key), dump_value(value)}
+      {:format, {:currency, code}} ->
+        {"format", "currency:" <> code}
+
+      {:bin, %{} = bin} ->
+        {"bin", Map.new(bin, fn {k, v} -> {Atom.to_string(k), v} end)}
+
+      {:scale, scale} ->
+        {"scale", Map.new(scale, fn {k, v} -> {Atom.to_string(k), dump_value(v)} end)}
+
+      {:sort, sort} when is_list(sort) ->
+        {"sort", sort}
+
+      {key, value} ->
+        {Atom.to_string(key), dump_value(value)}
     end)
   end
 
@@ -153,8 +166,11 @@ defmodule Fude.Spec do
   @spec load!(t()) :: Chart.t()
   def load!(spec) do
     case load(spec) do
-      {:ok, chart} -> chart
-      {:error, errors} -> raise ArgumentError, "Fude: the spec is not valid:\n" <> format_errors(errors)
+      {:ok, chart} ->
+        chart
+
+      {:error, errors} ->
+        raise ArgumentError, "Fude: the spec is not valid:\n" <> format_errors(errors)
     end
   end
 
@@ -172,15 +188,18 @@ defmodule Fude.Spec do
   defp migrate(%{"fude" => @version} = spec), do: {:ok, spec}
 
   defp migrate(%{"fude" => version}) when is_integer(version) and version > @version do
-    {:error, [%{path: ["fude"], message: "is version #{version}, newer than this Fude's (#{@version})"}]}
+    {:error,
+     [%{path: ["fude"], message: "is version #{version}, newer than this Fude's (#{@version})"}]}
   end
 
   defp migrate(%{"fude" => version}) do
-    {:error, [%{path: ["fude"], message: "must be a version of the spec, got: #{inspect(version)}"}]}
+    {:error,
+     [%{path: ["fude"], message: "must be a version of the spec, got: #{inspect(version)}"}]}
   end
 
   defp migrate(_spec) do
-    {:error, [%{path: ["fude"], message: "is missing: a Fude spec carries its version, \"fude\" => 1"}]}
+    {:error,
+     [%{path: ["fude"], message: "is missing: a Fude spec carries its version, \"fude\" => 1"}]}
   end
 
   @chart_keys ~w(fude title subtitle caption source description data height layers datasets)
@@ -190,13 +209,26 @@ defmodule Fude.Spec do
 
     acc =
       Enum.reduce(spec, acc, fn
-        {"fude", _}, acc -> acc
-        {"layers", _}, acc -> acc
-        {"datasets", datasets}, acc -> load_datasets(datasets, acc)
-        {key, value}, acc when key in ~w(title subtitle caption source description) -> word(key, value, acc)
-        {"data", name}, acc -> data_name(name, acc)
-        {"height", height}, acc -> height(height, acc)
-        _other, acc -> acc
+        {"fude", _}, acc ->
+          acc
+
+        {"layers", _}, acc ->
+          acc
+
+        {"datasets", datasets}, acc ->
+          load_datasets(datasets, acc)
+
+        {key, value}, acc when key in ~w(title subtitle caption source description) ->
+          word(key, value, acc)
+
+        {"data", name}, acc ->
+          data_name(name, acc)
+
+        {"height", height}, acc ->
+          height(height, acc)
+
+        _other, acc ->
+          acc
       end)
 
     case spec do
@@ -229,17 +261,24 @@ defmodule Fude.Spec do
 
   defp word(key, value, acc), do: error(acc, [key], "must be text, got: #{inspect(value)}")
 
-  defp data_name(name, {chart, errors}) when is_binary(name) and name != "", do: {%{chart | data: name}, errors}
-  defp data_name(name, acc), do: error(acc, ["data"], "must be the name of the data, got: #{inspect(name)}")
+  defp data_name(name, {chart, errors}) when is_binary(name) and name != "",
+    do: {%{chart | data: name}, errors}
 
-  defp height(height, {chart, errors}) when is_integer(height) and height > 0, do: {%{chart | height: height}, errors}
-  defp height(height, acc), do: error(acc, ["height"], "must be a whole number of pixels, got: #{inspect(height)}")
+  defp data_name(name, acc),
+    do: error(acc, ["data"], "must be the name of the data, got: #{inspect(name)}")
+
+  defp height(height, {chart, errors}) when is_integer(height) and height > 0,
+    do: {%{chart | height: height}, errors}
+
+  defp height(height, acc),
+    do: error(acc, ["height"], "must be a whole number of pixels, got: #{inspect(height)}")
 
   defp load_datasets(datasets, {chart, errors}) when is_map(datasets) do
     {%{chart | datasets: Map.merge(chart.datasets, datasets)}, errors}
   end
 
-  defp load_datasets(other, acc), do: error(acc, ["datasets"], "must be a map of names to rows, got: #{inspect(other)}")
+  defp load_datasets(other, acc),
+    do: error(acc, ["datasets"], "must be a map of names to rows, got: #{inspect(other)}")
 
   @kind_names Map.new(Layer.kinds(), &{Atom.to_string(&1), &1})
 
@@ -251,7 +290,10 @@ defmodule Fude.Spec do
         {%{chart | layers: chart.layers ++ [layer_struct]}, errors}
 
       {:ok, name} ->
-        message = "must be a kind of chart, got: #{inspect(name)}" <> Fude.Names.suggest(to_string(name), Map.keys(@kind_names))
+        message =
+          "must be a kind of chart, got: #{inspect(name)}" <>
+            Fude.Names.suggest(to_string(name), Map.keys(@kind_names))
+
         error({chart, errors}, path ++ ["kind"], message)
 
       :error ->
@@ -274,21 +316,38 @@ defmodule Fude.Spec do
 
           Map.has_key?(channels, key) ->
             case load_channel(value, path ++ [key]) do
-              {:ok, channel} -> {%{layer | channels: Map.put(layer.channels, channels[key], channel)}, errors}
-              {:error, more} -> {layer, more ++ errors}
+              {:ok, channel} ->
+                {%{layer | channels: Map.put(layer.channels, channels[key], channel)}, errors}
+
+              {:error, more} ->
+                {layer, more ++ errors}
             end
 
           Map.has_key?(options, key) ->
             {atom, check} = options[key]
 
             case load_option(check, value) do
-              {:ok, value} -> {%{layer | options: Map.put(layer.options, atom, value)}, errors}
-              :error -> {layer, [%{path: path ++ [key], message: "must be #{Layer.describe(check)}, got: #{inspect(value)}"} | errors]}
+              {:ok, value} ->
+                {%{layer | options: Map.put(layer.options, atom, value)}, errors}
+
+              :error ->
+                {layer,
+                 [
+                   %{
+                     path: path ++ [key],
+                     message: "must be #{Layer.describe(check)}, got: #{inspect(value)}"
+                   }
+                   | errors
+                 ]}
             end
 
           true ->
             names = Map.keys(channels) ++ Map.keys(options)
-            message = "is not a key of a #{kind} chart; it takes #{Enum.join(names, ", ")}" <> Fude.Names.suggest(key, names)
+
+            message =
+              "is not a key of a #{kind} chart; it takes #{Enum.join(names, ", ")}" <>
+                Fude.Names.suggest(key, names)
+
             {layer, [%{path: path ++ [key], message: message} | errors]}
         end
       end)
@@ -297,7 +356,10 @@ defmodule Fude.Spec do
 
     errors =
       Enum.reduce(missing, errors, fn name, errors ->
-        [%{path: path ++ [Atom.to_string(name)], message: "is missing: a #{kind} chart needs it"} | errors]
+        [
+          %{path: path ++ [Atom.to_string(name)], message: "is missing: a #{kind} chart needs it"}
+          | errors
+        ]
       end)
 
     {layer, errors}
@@ -310,7 +372,8 @@ defmodule Fude.Spec do
     end
   end
 
-  defp load_option(check, value), do: if(Layer.check_option(check, value), do: {:ok, value}, else: :error)
+  defp load_option(check, value),
+    do: if(Layer.check_option(check, value), do: {:ok, value}, else: :error)
 
   defp load_tooltip(list, path, layer, errors) when is_list(list) do
     {channels, errors} =
@@ -327,11 +390,14 @@ defmodule Fude.Spec do
   end
 
   defp load_tooltip(other, path, layer, errors),
-    do: {layer, [%{path: path, message: "must be a list of channels, got: #{inspect(other)}"} | errors]}
+    do:
+      {layer,
+       [%{path: path, message: "must be a list of channels, got: #{inspect(other)}"} | errors]}
 
   @doc false
   # A channel of a spec: a field's name, or a map.
-  def load_channel(field, _path) when is_binary(field) and field != "", do: {:ok, %Channel{field: field}}
+  def load_channel(field, _path) when is_binary(field) and field != "",
+    do: {:ok, %Channel{field: field}}
 
   def load_channel(map, path) when is_map(map) do
     {channel, errors} =
@@ -343,19 +409,25 @@ defmodule Fude.Spec do
       end)
 
     errors =
-      if is_nil(channel.field) and is_nil(channel.value) and channel.aggregate != :count and errors == [],
-        do: [%{path: path, message: "needs a \"field\" or a \"value\""}],
-        else: errors
+      if is_nil(channel.field) and is_nil(channel.value) and channel.aggregate != :count and
+           errors == [],
+         do: [%{path: path, message: "needs a \"field\" or a \"value\""}],
+         else: errors
 
     if errors == [], do: {:ok, channel}, else: {:error, errors}
   end
 
   def load_channel(other, path),
-    do: {:error, [%{path: path, message: "must be a field's name or a map, got: #{inspect(other)}"}]}
+    do:
+      {:error,
+       [%{path: path, message: "must be a field's name or a map, got: #{inspect(other)}"}]}
 
   defp channel_key("field", field) when is_binary(field) and field != "", do: {:ok, :field, field}
   defp channel_key("value", value), do: {:ok, :value, value}
-  defp channel_key("title", title) when is_binary(title) or title == false, do: {:ok, :title, title}
+
+  defp channel_key("title", title) when is_binary(title) or title == false,
+    do: {:ok, :title, title}
+
   defp channel_key("type", type), do: atom(:type, type, Channel.types())
   defp channel_key("aggregate", aggregate), do: atom(:aggregate, aggregate, Channel.aggregates())
   defp channel_key("time", unit), do: atom(:time, unit, Channel.time_units())
@@ -364,9 +436,15 @@ defmodule Fude.Spec do
   defp channel_key("sort", sort) when is_list(sort), do: {:ok, :sort, sort}
   defp channel_key("sort", sort), do: atom(:sort, sort, Channel.sorts())
   defp channel_key("bin", bin) when is_boolean(bin), do: {:ok, :bin, bin}
-  defp channel_key("bin", %{"count" => count}) when is_integer(count) and count > 0, do: {:ok, :bin, %{count: count}}
-  defp channel_key("bin", %{"step" => step}) when is_number(step) and step > 0, do: {:ok, :bin, %{step: step}}
-  defp channel_key("bin", bin), do: {:error, "must be true, or {\"count\": n} or {\"step\": n}, got: #{inspect(bin)}"}
+
+  defp channel_key("bin", %{"count" => count}) when is_integer(count) and count > 0,
+    do: {:ok, :bin, %{count: count}}
+
+  defp channel_key("bin", %{"step" => step}) when is_number(step) and step > 0,
+    do: {:ok, :bin, %{step: step}}
+
+  defp channel_key("bin", bin),
+    do: {:error, "must be true, or {\"count\": n} or {\"step\": n}, got: #{inspect(bin)}"}
 
   defp channel_key("format", "currency:" <> code) when byte_size(code) == 3,
     do: {:ok, :format, {:currency, code}}
@@ -384,11 +462,20 @@ defmodule Fude.Spec do
     Enum.reduce_while(map, {:ok, :scale, %{}}, fn {key, value}, {:ok, :scale, scale} ->
       result =
         case {key, value} do
-          {"type", type} -> atom(:type, type, Channel.scale_types())
-          {"domain", domain} when is_list(domain) -> {:ok, :domain, domain}
-          {"zero", zero} when is_boolean(zero) -> {:ok, :zero, zero}
-          {"nice", nice} when is_boolean(nice) -> {:ok, :nice, nice}
-          {key, value} -> {:error, "has #{inspect(key)} = #{inspect(value)}, which is not a key of a scale"}
+          {"type", type} ->
+            atom(:type, type, Channel.scale_types())
+
+          {"domain", domain} when is_list(domain) ->
+            {:ok, :domain, domain}
+
+          {"zero", zero} when is_boolean(zero) ->
+            {:ok, :zero, zero}
+
+          {"nice", nice} when is_boolean(nice) ->
+            {:ok, :nice, nice}
+
+          {key, value} ->
+            {:error, "has #{inspect(key)} = #{inspect(value)}, which is not a key of a scale"}
         end
 
       case result do
@@ -414,5 +501,6 @@ defmodule Fude.Spec do
       if(is_binary(value), do: Fude.Names.suggest(value, names), else: "")
   end
 
-  defp error({chart, errors}, path, message), do: {chart, [%{path: path, message: message} | errors]}
+  defp error({chart, errors}, path, message),
+    do: {chart, [%{path: path, message: message} | errors]}
 end

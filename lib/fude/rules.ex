@@ -89,7 +89,9 @@ defmodule Fude.Rules do
         {i1, i2, inc}
       end
 
-    if i2 < i1 and 0.5 <= count and count < 2, do: spec(start, stop, count * 2), else: {i1, i2, inc}
+    if i2 < i1 and 0.5 <= count and count < 2,
+      do: spec(start, stop, count * 2),
+      else: {i1, i2, inc}
   end
 
   # As JavaScript's Math.round: halves go up.
@@ -130,10 +132,22 @@ defmodule Fude.Rules do
         {start, stop}
 
       step > 0 ->
-        nice(Float.floor(start / step) * step, Float.ceil(stop / step) * step, count, step, left - 1)
+        nice(
+          Float.floor(start / step) * step,
+          Float.ceil(stop / step) * step,
+          count,
+          step,
+          left - 1
+        )
 
       step < 0 ->
-        nice(Float.ceil(start * step) / step, Float.floor(stop * step) / step, count, step, left - 1)
+        nice(
+          Float.ceil(start * step) / step,
+          Float.floor(stop * step) / step,
+          count,
+          step,
+          left - 1
+        )
 
       true ->
         {start, stop}
@@ -160,7 +174,8 @@ defmodule Fude.Rules do
 
   @doc "The bin of a value among the bins `{start, step, n}`: from 0 to `n - 1`."
   @spec bin({number(), number(), pos_integer()}, number()) :: non_neg_integer()
-  def bin({start, step, n}, value), do: value |> Kernel.-(start) |> Kernel./(step) |> floor() |> max(0) |> min(n - 1)
+  def bin({start, step, n}, value),
+    do: value |> Kernel.-(start) |> Kernel./(step) |> floor() |> max(0) |> min(n - 1)
 
   @doc """
   The start of a time's unit: `:minute`, `:hour`, `:day`, `:week` (from

@@ -107,6 +107,7 @@ defmodule Fude.Channel do
   """
   @spec new(atom(), term()) :: t()
   def new(_name, %__MODULE__{} = channel), do: channel
+
   def new(_name, field) when is_atom(field) and not is_boolean(field) and not is_nil(field),
     do: %__MODULE__{field: Atom.to_string(field)}
 
@@ -187,7 +188,11 @@ defmodule Fude.Channel do
     do: Atom.to_string(field)
 
   defp field!(name, field),
-    do: raise(ArgumentError, "Fude: the field of #{inspect(name)} must be an atom or a string, got: #{inspect(field)}")
+    do:
+      raise(
+        ArgumentError,
+        "Fude: the field of #{inspect(name)} must be an atom or a string, got: #{inspect(field)}"
+      )
 
   defp expected(:type), do: Enum.map_join(@types, ", ", &inspect/1)
   defp expected(:aggregate), do: Enum.map_join(@aggregates, ", ", &inspect/1)
@@ -199,7 +204,8 @@ defmodule Fude.Channel do
   defp expected(:bin), do: "true, or count: n or step: n"
 
   defp expected(_key),
-    do: "one of :field, :type, :aggregate, :time, :bin, :sort, :format, :title, :scale, :stack, :value"
+    do:
+      "one of :field, :type, :aggregate, :time, :bin, :sort, :format, :title, :scale, :stack, :value"
 
   defp bad(name, value) do
     "Fude: #{inspect(name)} must be a field, {aggregate, field}, {unit, field}, {:bin, field}, " <>
@@ -221,5 +227,13 @@ defmodule Fude.Channel do
   def title(%__MODULE__{aggregate: :count, field: nil}), do: "Count"
   def title(%__MODULE__{field: nil}), do: nil
   def title(%__MODULE__{aggregate: :count}), do: "Count"
-  def title(%__MODULE__{field: field}), do: field
+  def title(%__MODULE__{field: field}), do: humanize(field)
+
+  # A field's name as words: "order_total" is "Order total".
+  defp humanize(field) do
+    case field |> String.replace("_", " ") |> String.trim() do
+      "" -> field
+      words -> String.upcase(String.first(words)) <> String.slice(words, 1..-1//1)
+    end
+  end
 end

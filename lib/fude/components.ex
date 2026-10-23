@@ -39,15 +39,21 @@ defmodule Fude.Components do
 
   attr :data, :any,
     default: nil,
-    doc: "the chart's data, for a spec or a chart made without it; a map of names for a chart of several"
+    doc:
+      "the chart's data, for a spec or a chart made without it; a map of names for a chart of several"
 
-  attr :height, :integer, default: nil, doc: "the height of the plot in pixels; the chart's own, or 320"
+  attr :height, :integer,
+    default: nil,
+    doc: "the height of the plot in pixels; the chart's own, or 320"
 
   attr :locale, :string,
     default: nil,
     doc: "the locale that writes numbers and dates; the browser's unless given"
 
-  attr :table, :boolean, default: true, doc: "whether the data table is on the page (under a toggle)"
+  attr :table, :boolean,
+    default: true,
+    doc: "whether the data table is on the page (under a toggle)"
+
   attr :class, :any, default: nil, doc: "classes for the chart's element"
   attr :rest, :global
 
@@ -57,7 +63,7 @@ defmodule Fude.Components do
     ~H"""
     <figure
       id={@id}
-      class={["fude", "fude-#{@kind}", @class]}
+      class={["fude", "fude-kind-#{@kind}", @class]}
       phx-hook="Fude"
       data-fude={@config}
       aria-labelledby={@wire["title"] && "#{@id}-title"}
@@ -88,7 +94,7 @@ defmodule Fude.Components do
             <tr><th :for={head <- @heads} scope="col">{head}</th></tr>
           </thead>
           <tbody>
-            <tr :for={row <- @rows}><td :for={cell <- row}>{cell}</td></tr>
+            <tr :for={row <- @rows}><td :for={cell <- row}>{plain(cell)}</td></tr>
           </tbody>
         </table>
       </details>
@@ -134,7 +140,7 @@ defmodule Fude.Components do
 
   defp prepare(assigns) do
     {wire, errors} = compile(assigns)
-    {heads, rows} = if errors == [] and assigns.table, do: table(wire), else: {[], []}
+    {heads, rows} = if errors == [] and assigns.table, do: Compile.table(wire), else: {[], []}
 
     config =
       wire
@@ -163,8 +169,12 @@ defmodule Fude.Components do
 
   defp compile(%{spec: spec, data: data}) when is_map(spec) do
     case Spec.load(spec) do
-      {:ok, chart} -> result(chart, Compile.compile(chart, datasets(chart, data)))
-      {:error, errors} -> {%{"v" => 1}, ["The chart's spec is not valid: " <> String.trim(Spec.format_errors(errors))]}
+      {:ok, chart} ->
+        result(chart, Compile.compile(chart, datasets(chart, data)))
+
+      {:error, errors} ->
+        {%{"v" => 1},
+         ["The chart's spec is not valid: " <> String.trim(Spec.format_errors(errors))]}
     end
   end
 
@@ -173,7 +183,11 @@ defmodule Fude.Components do
   end
 
   defp result(_chart, {:ok, wire}), do: {wire, []}
-  defp result(chart, {:error, errors}), do: {%{"v" => 1, "kind" => Atom.to_string(Chart.kind(chart) || :chart), "title" => chart.title}, errors}
+
+  defp result(chart, {:error, errors}),
+    do:
+      {%{"v" => 1, "kind" => Atom.to_string(Chart.kind(chart) || :chart), "title" => chart.title},
+       errors}
 
   # The data given to the component: the chart's own data, or a map of
   # names for a chart of several datasets.
@@ -187,72 +201,23 @@ defmodule Fude.Components do
 
   defp datasets(%Chart{data: name}, data), do: %{name => data}
 
-  # The table of the data that the chart draws: the first layer's columns
-  # by their titles, the categories by their names.
-  defp table(%{"layers" => [layer | _], "scales" => scales}) do
-    columns =
-      [{"x", "x"}, {"x2", "x"}, {"y", "y"}, {"color", "color"}, {"size", "size"}, {"value", nil}]
-      |> Enum.filter(fn {name, _scale} -> Map.has_key?(layer["columns"], name) end)
-      |> Enum.reject(fn {name, _} -> name == "x2" end)
-
-    heads =
-      Enum.map(columns, fn
-        {"value", _} -> "Value"
-        {name, scale} -> get_in(scales, [scale, "title"]) || name
-      end)
-
-    values =
-      Enum.map(columns, fn {name, scale_name} ->
-        scale = scales[scale_name]
-        Enum.map(layer["columns"][name], &cell(&1, scale))
-      end)
-
-    rows =
-      case values do
-        [] -> []
-        values -> values |> Enum.zip() |> Enum.map(&Tuple.to_list/1)
-      end
-
-    {heads, Enum.take(rows, 1000)}
-  end
-
-  defp table(_wire), do: {[], []}
-
-  defp cell(nil, _scale), do: ""
-
-  defp cell(index, %{"type" => type, "domain" => domain} = scale) when type in ["band", "point", "ordinal"] do
-    domain |> Enum.at(index) |> cell_value(scale)
-  end
-
-  defp cell(value, scale), do: cell_value(value, scale)
-
-  defp cell_value(value, %{"type" => "time", "unit" => "day"}) when is_integer(value), do: day(value)
-  defp cell_value(value, %{"time" => "day"}) when is_integer(value), do: day(value)
-  defp cell_value(value, %{"time" => unit}) when is_integer(value) and unit in ~w(week month quarter year), do: day(value)
-
-  defp cell_value(value, %{"type" => "time"}) when is_integer(value),
-    do: value |> DateTime.from_unix!(:millisecond) |> DateTime.to_iso8601()
-
-  defp cell_value(value, %{"time" => _unit}) when is_integer(value),
-    do: value |> DateTime.from_unix!(:millisecond) |> DateTime.to_iso8601()
-
-  defp cell_value(value, _scale), do: plain(value)
-
-  defp day(ms), do: ~D[1970-01-01] |> Date.add(Integer.floor_div(ms, 86_400_000)) |> Date.to_iso8601()
-
-  defp plain(nil), do: nil
-  defp plain(value) when is_float(value), do: :erlang.float_to_binary(value, [:short])
-  defp plain(value), do: to_string(value)
-
-  defp change(%{"value" => value, "compare" => compare}) when is_number(value) and is_number(compare) and compare != 0,
-    do: (value - compare) / abs(compare)
+  defp change(%{"value" => value, "compare" => compare})
+       when is_number(value) and is_number(compare) and compare != 0,
+       do: (value - compare) / abs(compare)
 
   defp change(_single), do: nil
 
   defp percent(change), do: "#{if change >= 0, do: "+", else: ""}#{Float.round(change * 100, 1)}%"
 
-  defp share(%{"value" => value, "goal" => goal}) when is_number(value) and is_number(goal) and goal > 0,
-    do: (value / goal * 100) |> min(100) |> max(0) |> Float.round(2)
+  defp share(%{"value" => value, "goal" => goal})
+       when is_number(value) and is_number(goal) and goal > 0,
+       do: (value / goal * 100) |> min(100) |> max(0) |> Float.round(2)
 
   defp share(_single), do: 0
+
+  defp plain(nil), do: nil
+  defp plain(value) when is_float(value), do: :erlang.float_to_binary(value, [:short])
+  defp plain(%Date{} = date), do: Date.to_iso8601(date)
+  defp plain(%DateTime{} = time), do: DateTime.to_iso8601(time)
+  defp plain(value), do: to_string(value)
 end

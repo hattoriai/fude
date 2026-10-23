@@ -1,0 +1,117 @@
+/*
+ * Fude in the Sumi theme.
+ *
+ * Load this file after fude.css. It gives every --fude-* property a Sumi
+ * value, in this order, as masu-sumi.css and koyomi-sumi.css do:
+ *
+ *   1. the Sumi tokens of the page: --font-body, --color-sumi-blade,
+ *      --sumi-text-muted, and the theme colours of the Sumi daisyUI themes
+ *      (--color-base-100, -300, --color-base-content, --radius-box);
+ *   2. the short --sumi-* names (--sumi-font, --sumi-ink, --sumi-paper,
+ *      --sumi-line, --sumi-muted, --sumi-accent, --sumi-radius), for a
+ *      page that sets them itself;
+ *   3. the Sumi palette below, so that the charts look like Sumi on a
+ *      page with no Sumi tokens.
+ *
+ * The series open with the blade, then blue, aqua, violet, yellow, magenta
+ * and green: an order checked for colour vision deficiencies on paper and
+ * on ink (each colour told apart from the next one, and the first three
+ * from each other, for scatter plots and maps). An eighth series is grey:
+ * fold the rest into "Other".
+ *
+ * Dark and light: on a page with the Sumi themes, the charts follow them.
+ * Without them, the built-in palette follows the data-theme attribute
+ * ("dark" or "light") first, then prefers-color-scheme.
+ */
+
+/* The Sumi palette, light. */
+:root,
+[data-theme] {
+  --fude-sumi-paper: oklch(96% 0.01 85);
+  --fude-sumi-line: oklch(89% 0.014 80);
+  --fude-sumi-ink: oklch(15% 0.003 270);
+  --fude-sumi-muted: oklch(15% 0.003 270 / 0.65);
+  --fude-sumi-series-2: #2a78d6;
+  --fude-sumi-series-3: #1baf7a;
+  --fude-sumi-series-4: #6250d6;
+  --fude-sumi-series-5: #eda100;
+  --fude-sumi-series-6: #e87ba4;
+  --fude-sumi-series-7: #008300;
+  --fude-sumi-series-8: #8a867e;
+  --fude-sumi-sequential-low: #fbd9cb;
+  --fude-sumi-sequential-high: #7a2208;
+}
+
+/* The Sumi palette, dark: data-theme="dark", or a dark preference on a page
+   that does not ask for light. */
+[data-theme="dark"] {
+  --fude-sumi-paper: oklch(12% 0.003 270);
+  --fude-sumi-line: oklch(20% 0.005 270);
+  --fude-sumi-ink: oklch(95% 0.012 85);
+  --fude-sumi-muted: oklch(95% 0.012 85 / 0.55);
+  --fude-sumi-series-2: #3987e5;
+  --fude-sumi-series-3: #199e70;
+  --fude-sumi-series-4: #9085e9;
+  --fude-sumi-series-5: #c98500;
+  --fude-sumi-series-6: #d55181;
+  --fude-sumi-series-7: #008300;
+  --fude-sumi-series-8: #7d7a74;
+  --fude-sumi-sequential-low: #3a1a10;
+  --fude-sumi-sequential-high: #f6a283;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fude-sumi-paper: oklch(12% 0.003 270);
+    --fude-sumi-line: oklch(20% 0.005 270);
+    --fude-sumi-ink: oklch(95% 0.012 85);
+    --fude-sumi-muted: oklch(95% 0.012 85 / 0.55);
+    --fude-sumi-series-2: #3987e5;
+    --fude-sumi-series-3: #199e70;
+    --fude-sumi-series-4: #9085e9;
+    --fude-sumi-series-5: #c98500;
+    --fude-sumi-series-6: #d55181;
+    --fude-sumi-series-7: #008300;
+    --fude-sumi-series-8: #7d7a74;
+    --fude-sumi-sequential-low: #3a1a10;
+    --fude-sumi-sequential-high: #f6a283;
+  }
+}
+
+/* The mapping. */
+:root,
+[data-theme] {
+  /* Type */
+  --fude-font: var(--font-body, var(--sumi-font, "Outfit", system-ui, sans-serif));
+  --fude-font-size: 0.9375rem;
+
+  /* Words and lines */
+  --fude-text: var(--color-base-content, var(--sumi-ink, var(--fude-sumi-ink)));
+  --fude-secondary: color-mix(in oklab, var(--color-base-content, var(--sumi-ink, var(--fude-sumi-ink))) 72%, transparent);
+  --fude-muted: var(--sumi-text-muted, var(--sumi-muted, var(--fude-sumi-muted)));
+  --fude-surface: var(--color-base-100, var(--sumi-paper, var(--fude-sumi-paper)));
+  --fude-border: var(--color-base-300, var(--sumi-line, var(--fude-sumi-line)));
+  --fude-grid: color-mix(in oklab, var(--color-base-300, var(--sumi-line, var(--fude-sumi-line))) 75%, var(--color-base-100, var(--sumi-paper, var(--fude-sumi-paper))));
+  --fude-baseline: color-mix(in oklab, var(--color-base-content, var(--sumi-ink, var(--fude-sumi-ink))) 35%, transparent);
+  --fude-accent: var(--color-sumi-blade, var(--sumi-accent, #e84a1c));
+
+  /* The series: the blade first. */
+  --fude-series-1: var(--color-sumi-blade, var(--sumi-accent, #e84a1c));
+  --fude-series-2: var(--fude-sumi-series-2);
+  --fude-series-3: var(--fude-sumi-series-3);
+  --fude-series-4: var(--fude-sumi-series-4);
+  --fude-series-5: var(--fude-sumi-series-5);
+  --fude-series-6: var(--fude-sumi-series-6);
+  --fude-series-7: var(--fude-sumi-series-7);
+  --fude-series-8: var(--fude-sumi-series-8);
+  --fude-sequential-low: var(--fude-sumi-sequential-low);
+  --fude-sequential-high: var(--fude-sumi-sequential-high);
+
+  /* The tooltip: paper, as the page. */
+  --fude-tooltip-background: var(--color-base-100, var(--sumi-paper, var(--fude-sumi-paper)));
+  --fude-tooltip-border: var(--color-base-300, var(--sumi-line, var(--fude-sumi-line)));
+  --fude-focus-ring: 0 0 0 2px var(--fude-surface), 0 0 0 4px var(--color-sumi-blade, var(--sumi-accent, #e84a1c));
+
+  /* Shape */
+  --fude-radius: var(--radius-box, var(--sumi-radius, 0.25rem));
+}

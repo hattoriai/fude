@@ -48,7 +48,8 @@ defmodule Fude.Compile do
         if names == [] do
           "#{name}: the chart has no data"
         else
-          "#{name}: the field #{inspect(channel.field)} is not in the data" <> Fude.Names.suggest(channel.field, names)
+          "#{name}: the field #{inspect(channel.field)} is not in the data" <>
+            Fude.Names.suggest(channel.field, names)
         end
       end
 
@@ -99,7 +100,8 @@ defmodule Fude.Compile do
 
   defp first_value(%Channel{value: value}, _data) when not is_nil(value), do: value
 
-  defp first_value(%Channel{aggregate: aggregate, field: field}, data) when not is_nil(aggregate) do
+  defp first_value(%Channel{aggregate: aggregate, field: field}, data)
+       when not is_nil(aggregate) do
     aggregate(aggregate, Data.column(data, field))
   end
 
@@ -135,7 +137,11 @@ defmodule Fude.Compile do
   # histogram with no y.
   defp normalize(%Layer{kind: :histogram, channels: channels, options: options} = layer) do
     x = %{channels.x | bin: channels.x.bin || %{count: options[:bins] || 20}}
-    %{layer | channels: Map.merge(channels, %{x: x, y: %Channel{aggregate: :count, title: "Count"}})}
+
+    %{
+      layer
+      | channels: Map.merge(channels, %{x: x, y: %Channel{aggregate: :count, title: "Count"}})
+    }
   end
 
   defp normalize(layer), do: layer
@@ -147,24 +153,31 @@ defmodule Fude.Compile do
   # one bar.
   defp rows(%Layer{kind: kind, channels: channels}, data) do
     channels = Map.delete(channels, :tooltip) |> Map.to_list()
-    bins = Map.new(for {name, %Channel{bin: bin} = c} <- channels, bin, do: {name, bin_spec(c, data)})
+
+    bins =
+      Map.new(for {name, %Channel{bin: bin} = c} <- channels, bin, do: {name, bin_spec(c, data)})
 
     values =
       Enum.map(0..(data.count - 1)//1, fn index ->
-        Map.new(channels, fn {name, channel} -> {name, row_value(channel, data, index, bins[name])} end)
+        Map.new(channels, fn {name, channel} ->
+          {name, row_value(channel, data, index, bins[name])}
+        end)
       end)
 
     # A layer of constants only (a rule at y: 1000) is one row.
     values =
-      if Enum.all?(channels, fn {_name, channel} -> is_nil(channel.field) and channel.aggregate != :count end),
-        do: [Map.new(channels, fn {name, channel} -> {name, channel.value} end)],
-        else: values
+      if Enum.all?(channels, fn {_name, channel} ->
+           is_nil(channel.field) and channel.aggregate != :count
+         end),
+         do: [Map.new(channels, fn {name, channel} -> {name, channel.value} end)],
+         else: values
 
     implicit = if kind in [:bar, :area, :heatmap, :pie, :donut], do: :sum
 
     aggregated =
       for {name, %Channel{} = channel} <- channels,
-          channel.aggregate || (implicit && name in value_channels(kind) && channel.field && !channel.bin),
+          channel.aggregate ||
+            (implicit && name in value_channels(kind) && channel.field && !channel.bin),
           into: %{},
           do: {name, channel.aggregate || implicit}
 
@@ -177,7 +190,12 @@ defmodule Fude.Compile do
         values
         |> Enum.group_by(&Map.take(&1, keys))
         |> Enum.map(fn {key, group} ->
-          Map.merge(key, Map.new(aggregated, fn {name, fun} -> {name, aggregate(fun, Enum.map(group, & &1[name]))} end))
+          Map.merge(
+            key,
+            Map.new(aggregated, fn {name, fun} ->
+              {name, aggregate(fun, Enum.map(group, & &1[name]))}
+            end)
+          )
         end)
         |> order_groups(values, keys)
       end
@@ -242,7 +260,9 @@ defmodule Fude.Compile do
 
   @doc false
   def aggregate(:count, values), do: Enum.count(values, &(not is_nil(&1)))
-  def aggregate(:distinct, values), do: values |> Enum.reject(&is_nil/1) |> Enum.uniq() |> length()
+
+  def aggregate(:distinct, values),
+    do: values |> Enum.reject(&is_nil/1) |> Enum.uniq() |> length()
 
   def aggregate(fun, values) do
     case Enum.filter(values, &is_number/1) do
@@ -284,7 +304,11 @@ defmodule Fude.Compile do
         {start, step, _n} ->
           scale = bin_scale(x, start, step, rows)
           rows = rows |> Enum.reject(&is_nil(&1[:x])) |> Enum.sort_by(& &1[:x])
-          {Enum.map(rows, &Map.merge(&1, %{x: start + &1[:x] * step, x2: start + (&1[:x] + 1) * step})), scale}
+
+          {Enum.map(
+             rows,
+             &Map.merge(&1, %{x: start + &1[:x] * step, x2: start + (&1[:x] + 1) * step})
+           ), scale}
       end
 
     y_scale = number(y, data, y_extent, zero: true, stack: stack)
@@ -345,12 +369,23 @@ defmodule Fude.Compile do
 
     scales =
       if size do
-        Map.put(scales, "size", %{"type" => "sqrt", "domain" => extent(rows, :size) |> with_zero(), "title" => Channel.title(size)})
+        Map.put(scales, "size", %{
+          "type" => "sqrt",
+          "domain" => extent(rows, :size) |> with_zero(),
+          "title" => Channel.title(size)
+        })
       else
         scales
       end
 
-    %{mark: "point", layer: layer, rows: rows, channels: %{x: :x, y: :y}, scales: scales, options: %{}}
+    %{
+      mark: "point",
+      layer: layer,
+      rows: rows,
+      channels: %{x: :x, y: :y},
+      scales: scales,
+      options: %{}
+    }
   end
 
   defp marks(kind, layer, %{rows: rows}, data) when kind in [:pie, :donut] do
@@ -372,7 +407,10 @@ defmodule Fude.Compile do
       rows: rows,
       channels: %{},
       scales: scales,
-      options: %{inner: if(kind == :donut, do: layer.options[:inner] || 0.6, else: 0), labels: layer.options[:labels] != false}
+      options: %{
+        inner: if(kind == :donut, do: layer.options[:inner] || 0.6, else: 0),
+        labels: layer.options[:labels] != false
+      }
     }
   end
 
@@ -389,7 +427,11 @@ defmodule Fude.Compile do
       case color do
         %Channel{} = channel ->
           if x_type(channel, data) == :number or channel.aggregate do
-            Map.put(scales, "color", %{"type" => "sequential", "domain" => extent(rows, :color), "title" => Channel.title(channel)})
+            Map.put(scales, "color", %{
+              "type" => "sequential",
+              "domain" => extent(rows, :color) |> pair(),
+              "title" => Channel.title(channel)
+            })
           else
             put_color(scales, color, data, rows)
           end
@@ -398,7 +440,14 @@ defmodule Fude.Compile do
           scales
       end
 
-    %{mark: "rect", layer: layer, rows: rows, channels: %{x: :x, y: :y}, scales: scales, options: Map.take(layer.options, [:labels])}
+    %{
+      mark: "rect",
+      layer: layer,
+      rows: rows,
+      channels: %{x: :x, y: :y},
+      scales: scales,
+      options: Map.take(layer.options, [:labels])
+    }
   end
 
   defp marks(:rule, layer, %{rows: rows}, data) do
@@ -409,7 +458,14 @@ defmodule Fude.Compile do
         {Atom.to_string(name), continuous_or_band(channel, data, rows, name, layer.channels)}
       end
 
-    %{mark: "rule", layer: layer, rows: rows, channels: %{x: :x, y: :y}, scales: scales, options: Map.take(layer.options, [:label, :dashed])}
+    %{
+      mark: "rule",
+      layer: layer,
+      rows: rows,
+      channels: %{x: :x, y: :y},
+      scales: scales,
+      options: Map.take(layer.options, [:label, :dashed])
+    }
   end
 
   defp marks(:text, layer, %{rows: rows}, data) do
@@ -418,7 +474,14 @@ defmodule Fude.Compile do
         {Atom.to_string(name), continuous_or_band(channel, data, rows, name, layer.channels)}
       end
 
-    %{mark: "text", layer: layer, rows: rows, channels: %{x: :x, y: :y}, scales: scales, options: %{}}
+    %{
+      mark: "text",
+      layer: layer,
+      rows: rows,
+      channels: %{x: :x, y: :y},
+      scales: scales,
+      options: %{}
+    }
   end
 
   defp position(axis, false), do: Atom.to_string(axis)
@@ -456,7 +519,9 @@ defmodule Fude.Compile do
     stacked =
       case mode do
         :normalize ->
-          totals = Enum.group_by(stacked, & &1[by], &abs(&1[:y] || 0)) |> Map.new(fn {k, v} -> {k, Enum.sum(v)} end)
+          totals =
+            Enum.group_by(stacked, & &1[by], &abs(&1[:y] || 0))
+            |> Map.new(fn {k, v} -> {k, Enum.sum(v)} end)
 
           Enum.map(stacked, fn row ->
             total = totals[row[by]]
@@ -464,8 +529,13 @@ defmodule Fude.Compile do
           end)
 
         :center ->
-          totals = Enum.group_by(stacked, & &1[by], &(&1[:y] || 0)) |> Map.new(fn {k, v} -> {k, Enum.sum(v)} end)
-          Enum.map(stacked, fn row -> %{row | y0: row.y0 - totals[row[by]] / 2, y1: row.y1 - totals[row[by]] / 2} end)
+          totals =
+            Enum.group_by(stacked, & &1[by], &(&1[:y] || 0))
+            |> Map.new(fn {k, v} -> {k, Enum.sum(v)} end)
+
+          Enum.map(stacked, fn row ->
+            %{row | y0: row.y0 - totals[row[by]] / 2, y1: row.y1 - totals[row[by]] / 2}
+          end)
 
         _ ->
           stacked
@@ -479,7 +549,10 @@ defmodule Fude.Compile do
 
   defp x_type(%Channel{type: type}, _data) when type in [:number, :time], do: type
   defp x_type(%Channel{type: type}, _data) when type in [:category, :ordinal], do: :category
-  defp x_type(%Channel{aggregate: aggregate}, _data) when aggregate in [:count, :distinct], do: :number
+
+  defp x_type(%Channel{aggregate: aggregate}, _data) when aggregate in [:count, :distinct],
+    do: :number
+
   defp x_type(%Channel{field: nil, value: value}, _data) when is_number(value), do: :number
   defp x_type(%Channel{field: nil}, _data), do: :category
 
@@ -514,7 +587,7 @@ defmodule Fude.Compile do
     do: number(channel, data, extent(rows, name), zero: false, stack: false)
 
   defp unit(%Channel{time: unit}, _field) when not is_nil(unit), do: Atom.to_string(unit)
-  defp unit(_channel, %{unit: :day}), do: "day"
+  defp unit(_channel, %{unit: unit}) when not is_nil(unit), do: Atom.to_string(unit)
   defp unit(_channel, _field), do: nil
 
   defp number(channel, _data, extent, opts) do
@@ -558,12 +631,23 @@ defmodule Fude.Compile do
 
     values =
       cond do
-        is_list(channel.sort) -> channel.sort ++ (values -- channel.sort)
-        time -> Enum.sort(values)
-        channel.sort == :ascending -> Enum.sort(values)
-        channel.sort == :descending -> Enum.sort(values, :desc)
-        channel.sort in [:x, :y, :"-x", :"-y"] -> sort_by_channel(values, rows, name, channel.sort, channels)
-        true -> values
+        is_list(channel.sort) ->
+          channel.sort ++ (values -- channel.sort)
+
+        time ->
+          Enum.sort(values)
+
+        channel.sort == :ascending ->
+          Enum.sort(values)
+
+        channel.sort == :descending ->
+          Enum.sort(values, :desc)
+
+        channel.sort in [:x, :y, :"-x", :"-y"] ->
+          sort_by_channel(values, rows, name, channel.sort, channels)
+
+        true ->
+          values
       end
 
     %{
@@ -587,7 +671,9 @@ defmodule Fude.Compile do
     totals =
       rows
       |> Enum.group_by(& &1[name], &(&1[by] || 0))
-      |> Map.new(fn {key, list} -> {key, if(Enum.all?(list, &is_number/1), do: Enum.sum(list), else: 0)} end)
+      |> Map.new(fn {key, list} ->
+        {key, if(Enum.all?(list, &is_number/1), do: Enum.sum(list), else: 0)}
+      end)
 
     Enum.sort_by(values, &Map.get(totals, &1, 0), order)
   end
@@ -596,7 +682,12 @@ defmodule Fude.Compile do
 
   defp put_color(scales, %Channel{} = channel, data, rows) do
     if x_type(channel, data) == :number and channel.field do
-      Map.put(scales, "color", %{"type" => "sequential", "domain" => extent(rows, :color) |> pair(), "title" => Channel.title(channel), "format" => format(channel)})
+      Map.put(scales, "color", %{
+        "type" => "sequential",
+        "domain" => extent(rows, :color) |> pair(),
+        "title" => Channel.title(channel),
+        "format" => format(channel)
+      })
     else
       values = rows |> Enum.map(& &1[:color]) |> Enum.reject(&is_nil/1) |> Enum.uniq()
 
@@ -608,7 +699,11 @@ defmodule Fude.Compile do
           true -> values
         end
 
-      Map.put(scales, "color", %{"type" => "ordinal", "domain" => values, "title" => Channel.title(channel)})
+      Map.put(scales, "color", %{
+        "type" => "ordinal",
+        "domain" => values,
+        "title" => Channel.title(channel)
+      })
     end
   end
 
@@ -635,8 +730,9 @@ defmodule Fude.Compile do
   defp merge_scale(%{"type" => "band"} = a, %{"type" => "band"} = b),
     do: %{a | "domain" => Enum.uniq(a["domain"] ++ b["domain"])}
 
-  defp merge_scale(%{"domain" => [a0, a1]} = a, %{"domain" => [b0, b1]}) when is_number(a0) and is_number(b0),
-    do: %{a | "domain" => [min(a0, b0), max(a1, b1)]}
+  defp merge_scale(%{"domain" => [a0, a1]} = a, %{"domain" => [b0, b1]})
+       when is_number(a0) and is_number(b0),
+       do: %{a | "domain" => [min(a0, b0), max(a1, b1)]}
 
   defp merge_scale(%{"domain" => nil}, b), do: b
   defp merge_scale(a, _b), do: a
@@ -649,7 +745,10 @@ defmodule Fude.Compile do
 
   defp format(nil), do: nil
   defp format(%Channel{format: {:currency, code}}), do: "currency:" <> code
-  defp format(%Channel{format: format}) when is_atom(format) and not is_nil(format), do: Atom.to_string(format)
+
+  defp format(%Channel{format: format}) when is_atom(format) and not is_nil(format),
+    do: Atom.to_string(format)
+
   defp format(_channel), do: nil
 
   # -- Encoding ----------------------------------------------------------------
@@ -699,8 +798,9 @@ defmodule Fude.Compile do
 
   defp encode_value(nil, _scale), do: nil
 
-  defp encode_value(value, %{"type" => type, "domain" => domain}) when type in ["band", "point", "ordinal"],
-    do: Enum.find_index(domain, &(&1 == value))
+  defp encode_value(value, %{"type" => type, "domain" => domain})
+       when type in ["band", "point", "ordinal"],
+       do: Enum.find_index(domain, &(&1 == value))
 
   defp encode_value(value, _scale), do: value
 
@@ -713,8 +813,71 @@ defmodule Fude.Compile do
     end
   end
 
-  defp dump(value) when is_atom(value) and not is_boolean(value) and not is_nil(value), do: Atom.to_string(value)
+  defp dump(value) when is_atom(value) and not is_boolean(value) and not is_nil(value),
+    do: Atom.to_string(value)
+
   defp dump(value), do: value
+
+  # -- The table ---------------------------------------------------------------
+
+  @doc false
+  # The data that the chart draws, as a table: the first layer's columns
+  # by their titles, a category by its name, a time as a Date (a time of
+  # a day or more) or a DateTime. The page's table and Fude.Test read it.
+  @spec table(map()) :: {[String.t()], [[term()]]}
+  def table(%{"layers" => [layer | _], "scales" => scales}) do
+    columns =
+      [{"x", "x"}, {"y", "y"}, {"color", "color"}, {"size", "size"}, {"value", nil}]
+      |> Enum.filter(fn {name, _scale} -> Map.has_key?(layer["columns"], name) end)
+
+    heads =
+      Enum.map(columns, fn
+        {"value", _} -> "Value"
+        {name, scale} -> get_in(scales, [scale, "title"]) || name
+      end)
+
+    values =
+      Enum.map(columns, fn {name, scale_name} ->
+        scale = scales[scale_name]
+        Enum.map(layer["columns"][name], &cell(&1, scale))
+      end)
+
+    rows =
+      case values do
+        [] -> []
+        values -> values |> Enum.zip() |> Enum.map(&Tuple.to_list/1)
+      end
+
+    {heads, Enum.take(rows, 1000)}
+  end
+
+  def table(_wire), do: {[], []}
+
+  defp cell(nil, _scale), do: nil
+
+  defp cell(index, %{"type" => type, "domain" => domain} = scale)
+       when type in ["band", "point", "ordinal"],
+       do: domain |> Enum.at(index) |> cell_value(scale)
+
+  defp cell(value, scale), do: cell_value(value, scale)
+
+  @days ~w(day week month quarter year)
+
+  defp cell_value(value, %{"type" => "time", "unit" => unit})
+       when is_integer(value) and unit in @days, do: day(value)
+
+  defp cell_value(value, %{"time" => unit}) when is_integer(value) and unit in @days,
+    do: day(value)
+
+  defp cell_value(value, %{"type" => "time"}) when is_integer(value),
+    do: DateTime.from_unix!(value, :millisecond)
+
+  defp cell_value(value, %{"time" => _unit}) when is_integer(value),
+    do: DateTime.from_unix!(value, :millisecond)
+
+  defp cell_value(value, _scale), do: value
+
+  defp day(ms), do: Date.add(~D[1970-01-01], Integer.floor_div(ms, 86_400_000))
 
   # -- Description -------------------------------------------------------------
 
@@ -752,11 +915,13 @@ defmodule Fude.Compile do
   defp kind_name(kind), do: "#{kind} chart"
 
   defp axis_words(_name, nil), do: nil
+
   defp axis_words(name, %{"type" => "band", "domain" => domain} = scale),
     do: "#{name} axis, #{scale["title"] || "categories"}: #{length(domain)} categories"
 
   defp axis_words(name, %{"domain" => [min, max]} = scale),
-    do: "#{name} axis, #{scale["title"] || "values"}: from #{plain(min, scale)} to #{plain(max, scale)}"
+    do:
+      "#{name} axis, #{scale["title"] || "values"}: from #{plain(min, scale)} to #{plain(max, scale)}"
 
   defp axis_words(_name, _scale), do: nil
 

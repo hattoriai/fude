@@ -60,7 +60,11 @@ defmodule Fude.Layer do
       needs: [:x, :y, :size],
       options: []
     },
-    pie: %{channels: [:value, :color, :tooltip], needs: [:value, :color], options: [labels: :boolean]},
+    pie: %{
+      channels: [:value, :color, :tooltip],
+      needs: [:value, :color],
+      options: [labels: :boolean]
+    },
     donut: %{
       channels: [:value, :color, :tooltip],
       needs: [:value, :color],
@@ -74,7 +78,11 @@ defmodule Fude.Layer do
     heatmap: %{channels: [:x, :y, :color, :tooltip], needs: [:x, :y], options: [labels: :boolean]},
     rule: %{channels: [:x, :y, :color], needs: [], options: [label: :string, dashed: :boolean]},
     text: %{channels: [:x, :y, :text, :color], needs: [:text], options: []},
-    sparkline: %{channels: [:x, :y], needs: [:x, :y], options: [curve: {:in, [:linear, :monotone, :step]}]},
+    sparkline: %{
+      channels: [:x, :y],
+      needs: [:x, :y],
+      options: [curve: {:in, [:linear, :monotone, :step]}]
+    },
     number: %{channels: [:value], needs: [:value], options: [label: :string]},
     trend: %{channels: [:value, :compare], needs: [:value], options: [label: :string]},
     progress: %{channels: [:value], needs: [:value], options: [label: :string, goal: :number]}
@@ -105,7 +113,10 @@ defmodule Fude.Layer do
             %{layer | channels: Map.put(layer.channels, key, Channel.new(key, value))}
 
           Keyword.has_key?(spec.options, key) ->
-            %{layer | options: Map.put(layer.options, key, option!(kind, key, spec.options[key], value))}
+            %{
+              layer
+              | options: Map.put(layer.options, key, option!(kind, key, spec.options[key], value))
+            }
 
           true ->
             raise ArgumentError, unknown(kind, key, spec)
@@ -152,7 +163,9 @@ defmodule Fude.Layer do
 
   defp unknown(kind, key, spec) do
     keys = spec.channels ++ Keyword.keys(spec.options)
-    "Fude: a #{kind} chart has no #{inspect(key)}; it takes #{list(keys)}" <> Fude.Names.suggest(key, keys)
+
+    "Fude: a #{kind} chart has no #{inspect(key)}; it takes #{list(keys)}" <>
+      Fude.Names.suggest(key, keys)
   end
 
   defp list(keys), do: Enum.map_join(keys, ", ", &inspect/1)

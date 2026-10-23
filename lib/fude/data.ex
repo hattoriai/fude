@@ -20,7 +20,7 @@ defmodule Fude.Data do
 
   @type type :: :number | :time | :category
 
-  @type field :: %{name: String.t(), type: type(), unit: :day | nil}
+  @type field :: %{name: String.t(), type: type(), unit: :day | :month | :year | nil}
 
   @type t :: %__MODULE__{
           fields: [field()],
@@ -44,7 +44,9 @@ defmodule Fude.Data do
   def new(rows) when is_list(rows) do
     names =
       rows
-      |> Enum.reduce({[], MapSet.new()}, fn row, acc -> Enum.reduce(keys(row), acc, &add_name/2) end)
+      |> Enum.reduce({[], MapSet.new()}, fn row, acc ->
+        Enum.reduce(keys(row), acc, &add_name/2)
+      end)
       |> elem(0)
       |> Enum.reverse()
 
@@ -64,11 +66,18 @@ defmodule Fude.Data do
   defp keys(row) when is_map(row), do: row |> Map.keys() |> Enum.sort_by(&to_string/1)
 
   defp keys(row),
-    do: raise(ArgumentError, "Fude: each row of a chart's data is a map, got: #{inspect(row, limit: 5)}")
+    do:
+      raise(
+        ArgumentError,
+        "Fude: each row of a chart's data is a map, got: #{inspect(row, limit: 5)}"
+      )
 
   defp add_name(key, {names, seen}) do
     name = to_string(key)
-    if MapSet.member?(seen, name), do: {names, seen}, else: {[name | names], MapSet.put(seen, name)}
+
+    if MapSet.member?(seen, name),
+      do: {names, seen},
+      else: {[name | names], MapSet.put(seen, name)}
   end
 
   # A row's value of a field, by its string key or its atom key.
@@ -78,7 +87,9 @@ defmodule Fude.Data do
         value
 
       :error ->
-        Enum.find_value(row, fn {key, value} -> if is_atom(key) and Atom.to_string(key) == name, do: {value} end)
+        Enum.find_value(row, fn {key, value} ->
+          if is_atom(key) and Atom.to_string(key) == name, do: {value}
+        end)
         |> case do
           {value} -> value
           nil -> nil
@@ -107,8 +118,22 @@ defmodule Fude.Data do
 
   defp normalize(name, values) do
     type = infer(values)
-    unit = if type == :time and Enum.all?(values, &(is_nil(&1) or is_struct(&1, Date))), do: :day
+    unit = if type == :time, do: date_unit(values)
     {%{name: name, type: type, unit: unit}, Enum.map(values, &value(&1, type))}
+  end
+
+  # The unit of a column of dates: a year when every date is a first of
+  # January, a month when each is a first of a month, else a day. Times of
+  # day have none.
+  defp date_unit(values) do
+    dates = Enum.reject(values, &is_nil/1)
+
+    cond do
+      not Enum.all?(dates, &is_struct(&1, Date)) -> nil
+      dates != [] and Enum.all?(dates, &(&1.day == 1 and &1.month == 1)) -> :year
+      dates != [] and Enum.all?(dates, &(&1.day == 1)) -> :month
+      true -> :day
+    end
   end
 
   defp infer(values) do

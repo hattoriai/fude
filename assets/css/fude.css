@@ -1,0 +1,387 @@
+/*
+ * Fude chart styles.
+ *
+ * Every colour, space and font comes from a --fude-* custom property. Set
+ * them on .fude (or higher) to theme the charts, or load fude-sumi.css to
+ * map them to the Sumi tokens. The defaults below have no specificity, so
+ * a value set on :root, on an ancestor or on .fude itself wins. The words
+ * around a chart take Kotoba's, Koyomi's and Masu's defaults, so that a
+ * page with all of them looks like one thing.
+ *
+ * The series colours are a validated categorical order: each colour is
+ * told apart from the next one by people with any of the common colour
+ * vision deficiencies. Keep their order when you change them.
+ */
+
+:where(:root) {
+  --fude-font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fude-font-size: 1rem;
+  --fude-text: #1f1f23;
+  --fude-secondary: #52514e;
+  --fude-muted: #6f6d68;
+  --fude-surface: #ffffff;
+  --fude-grid: #e8e7e1;
+  --fude-baseline: #c3c2b7;
+  --fude-border: #d9d9de;
+  --fude-accent: #2f5bd3;
+  --fude-series-1: #2a78d6;
+  --fude-series-2: #eb6834;
+  --fude-series-3: #1baf7a;
+  --fude-series-4: #eda100;
+  --fude-series-5: #e87ba4;
+  --fude-series-6: #008300;
+  --fude-series-7: #6250d6;
+  --fude-series-8: #e34948;
+  --fude-sequential-low: #cde2fb;
+  --fude-sequential-high: #0d366b;
+  --fude-up: #006300;
+  --fude-down: #c62828;
+  /* Marks: the thickest bar, the round end of a bar, the gap between
+     marks that touch, the width of a line, and how long marks move. */
+  --fude-bar-max: 40px;
+  --fude-bar-radius: 4px;
+  --fude-gap: 2px;
+  --fude-line: 2px;
+  --fude-duration: 450;
+  --fude-radius: 6px;
+  --fude-tooltip-background: #ffffff;
+  --fude-tooltip-text: var(--fude-text);
+  --fude-tooltip-border: var(--fude-border);
+  --fude-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --fude-focus-ring: 0 0 0 2px var(--fude-surface), 0 0 0 4px var(--fude-accent);
+}
+
+/* Dark: by the app's own switch, so that a light app stays light. */
+:where(.dark, [data-theme="dark"]) {
+  --fude-text: #ececf0;
+  --fude-secondary: #c3c2b7;
+  --fude-muted: #9a988f;
+  --fude-surface: #17171a;
+  --fude-grid: #2a2a2d;
+  --fude-baseline: #45454a;
+  --fude-border: #34343a;
+  --fude-accent: #7b9cff;
+  --fude-series-1: #3987e5;
+  --fude-series-2: #d95926;
+  --fude-series-3: #199e70;
+  --fude-series-4: #c98500;
+  --fude-series-5: #d55181;
+  --fude-series-6: #008300;
+  --fude-series-7: #9085e9;
+  --fude-series-8: #e66767;
+  --fude-sequential-low: #1e2b3d;
+  --fude-sequential-high: #86b6ef;
+  --fude-up: #0ca30c;
+  --fude-down: #e66767;
+  --fude-tooltip-background: #222226;
+  --fude-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.fude {
+  margin: 0;
+  color: var(--fude-text);
+  font-family: var(--fude-font);
+  font-size: var(--fude-font-size);
+  line-height: 1.4;
+  min-width: 0;
+}
+
+.fude *,
+.fude *::before,
+.fude *::after {
+  box-sizing: border-box;
+}
+
+/* The words: a title and a subtitle above, a caption and a source below,
+   as a graphics desk sets them. */
+.fude-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  margin-bottom: 0.75rem;
+}
+
+.fude-title {
+  font-weight: 600;
+  font-size: 1.0625em;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
+.fude-subtitle {
+  color: var(--fude-secondary);
+  font-size: 0.875em;
+}
+
+.fude-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  margin: 0.5rem 0 0;
+  color: var(--fude-muted);
+  font-size: 0.75em;
+}
+
+.fude-source::before {
+  content: "Source: ";
+}
+
+/* The plot: a legend above, then the stage where the hook draws. */
+.fude-plot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.fude-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.fude-legend[hidden] {
+  display: none;
+}
+
+.fude-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0;
+  border: 0;
+  background: none;
+  color: var(--fude-secondary);
+  font: inherit;
+  font-size: 0.8125em;
+  cursor: default;
+}
+
+.fude-legend-item[aria-pressed] {
+  cursor: pointer;
+}
+
+.fude-legend-item[aria-pressed="false"] {
+  opacity: 0.45;
+}
+
+.fude-legend-item:focus-visible {
+  outline: none;
+  border-radius: 2px;
+  box-shadow: var(--fude-focus-ring);
+}
+
+.fude-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.fude-swatch-line {
+  height: 2px;
+  width: 12px;
+  border-radius: 1px;
+}
+
+.fude-swatch-dot {
+  border-radius: 50%;
+}
+
+.fude-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: var(--fude-radius);
+  touch-action: pan-y;
+}
+
+.fude-stage:focus-visible {
+  outline: none;
+  box-shadow: var(--fude-focus-ring);
+}
+
+.fude-canvas,
+.fude-axes {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+
+.fude-axes {
+  pointer-events: none;
+  font-size: 12px;
+}
+
+.fude-canvas {
+  z-index: 0;
+}
+
+.fude-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  min-width: 7rem;
+  max-width: 16rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--fude-tooltip-border);
+  border-radius: var(--fude-radius);
+  background: var(--fude-tooltip-background);
+  color: var(--fude-tooltip-text);
+  box-shadow: var(--fude-shadow);
+  font-size: 0.8125rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.fude-tooltip-on {
+  opacity: 1;
+}
+
+.fude-tooltip-title {
+  margin-bottom: 0.25rem;
+  color: var(--fude-secondary);
+  font-size: 0.75rem;
+}
+
+.fude-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
+.fude-tooltip-key {
+  flex: none;
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.fude-tooltip-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.fude-tooltip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fude-secondary);
+}
+
+.fude-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The data, under a toggle: the chart for anyone who does not see it. */
+.fude-data {
+  margin-top: 0.5rem;
+  font-size: 0.8125em;
+}
+
+.fude-data summary {
+  width: fit-content;
+  color: var(--fude-muted);
+  cursor: pointer;
+}
+
+.fude-data table {
+  margin-top: 0.5rem;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.fude-data th,
+.fude-data td {
+  padding: 0.25rem 0.75rem 0.25rem 0;
+  border-bottom: 1px solid var(--fude-grid);
+  text-align: left;
+}
+
+.fude-data th {
+  color: var(--fude-secondary);
+  font-weight: 500;
+}
+
+/* One number, large. */
+.fude-single {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fude-value {
+  font-size: 3rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.fude-label {
+  color: var(--fude-secondary);
+  font-size: 0.875em;
+}
+
+.fude-delta {
+  font-size: 0.875em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.fude-up {
+  color: var(--fude-up);
+}
+
+.fude-down {
+  color: var(--fude-down);
+}
+
+.fude-progress {
+  height: 8px;
+  margin-top: 0.5rem;
+  border-radius: 4px;
+  background: color-mix(in oklab, var(--fude-series-1) 18%, var(--fude-surface));
+  overflow: hidden;
+}
+
+.fude-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--fude-series-1);
+  transition: width 450ms ease-out;
+}
+
+.fude-error {
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px dashed var(--fude-border);
+  border-radius: var(--fude-radius);
+  color: var(--fude-secondary);
+  font-size: 0.875em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fude-tooltip,
+  .fude-progress > span {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .fude-stage:focus-visible {
+    outline: 2px solid Highlight;
+  }
+
+  .fude-tooltip {
+    border-color: CanvasText;
+  }
+}
