@@ -62,9 +62,7 @@ defmodule Fude.MixProject do
       {:esbuild, "~> 0.10", only: :dev, runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       # Live charts with others (Fude.Issho): Issho 0.4's shared state.
-      # Until Issho 0.4 is on Hex, its state branch, for work on Fude only;
-      # at the release, {:issho, "~> 0.4", optional: true}.
-      {:issho, github: "hattoriai/issho", branch: "state", only: [:dev, :test]},
+      {:issho, "~> 0.4", optional: true},
       {:lazy_html, "~> 0.1", only: :test},
       {:phoenix, if(@oldest, do: "~> 1.7.14", else: "~> 1.7.14 or ~> 1.8")},
       {:phoenix_html, "~> 4.1"},
