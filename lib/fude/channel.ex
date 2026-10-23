@@ -42,6 +42,14 @@ defmodule Fude.Channel do
       given, `:number` keeps a value's decimals up to 2, `:compact` and
       `:percent` write up to 1, and a currency 2 under 1,000 and none from
       there. An axis's ticks take the decimals their step needs.
+    * `:scheme` - the colors of a `color` channel, by name: sequential
+      `:blue` (the default), `:green`, `:orange`, `:purple`, `:gray`,
+      `:viridis`; diverging `:red_blue`, `:red_green` (around `:mid`);
+      categorical `:categorical` (the default) and `:okabe_ito`. Or a list
+      of colors (`["#0b6e4f", "#f2c14e", "#d1495b"]`): a ramp for numbers,
+      a color for each category, in order.
+    * `:mid` - the value at the middle of a diverging scheme: 0 when not
+      given.
     * `:title` - the title of the axis or the legend; the field's name when
       not given, `false` for none.
     * `:scale` - a keyword list: `:type` (`:linear`, `:log`, `:sqrt`),
@@ -69,6 +77,8 @@ defmodule Fude.Channel do
           sort: atom() | [term()] | nil,
           format: atom() | {atom(), String.t()} | nil,
           digits: non_neg_integer() | nil,
+          scheme: atom() | [String.t()] | nil,
+          mid: number() | nil,
           title: String.t() | false | nil,
           scale: map() | nil,
           stack: atom() | false | nil,
@@ -85,6 +95,8 @@ defmodule Fude.Channel do
     :sort,
     :format,
     :digits,
+    :scheme,
+    :mid,
     :title,
     :scale,
     :stack,
@@ -100,6 +112,10 @@ defmodule Fude.Channel do
   @stacks [:zero, :normalize, :center]
   @scale_types [:linear, :log, :sqrt]
   @axes [:left, :right]
+  @sequential_schemes [:blue, :green, :orange, :purple, :gray, :viridis]
+  @diverging_schemes [:red_blue, :red_green]
+  @categorical_schemes [:categorical, :okabe_ito]
+  @schemes @sequential_schemes ++ @diverging_schemes ++ @categorical_schemes
 
   @doc false
   def aggregates, do: @aggregates
@@ -117,6 +133,21 @@ defmodule Fude.Channel do
   def scale_types, do: @scale_types
   @doc false
   def axes, do: @axes
+  @doc false
+  def schemes, do: @schemes
+  @doc false
+  def diverging?(scheme), do: scheme in @diverging_schemes
+
+  @doc false
+  # A color of a scheme's list: a hex color, or a CSS color function of
+  # plain characters, so that it is safe in a style.
+  def color?(color),
+    do:
+      is_binary(color) and byte_size(color) <= 64 and
+        color =~ ~r/^(#[0-9a-fA-F]{3,8}|[a-z]+\([0-9a-zA-Z.,%\s\/-]*\)|[a-z]+)$/
+
+  @doc false
+  def colors?(list), do: is_list(list) and length(list) >= 2 and Enum.all?(list, &color?/1)
 
   @doc """
   A channel from its short form or its full form (see above). Raises an
@@ -177,6 +208,17 @@ defmodule Fude.Channel do
   defp put(_name, channel, {:digits, digits}) when digits in 0..20,
     do: %{channel | digits: digits}
 
+  defp put(_name, channel, {:scheme, scheme}) when scheme in @schemes,
+    do: %{channel | scheme: scheme}
+
+  defp put(name, channel, {:scheme, scheme}) when is_list(scheme) do
+    if colors?(scheme),
+      do: %{channel | scheme: scheme},
+      else: raise(ArgumentError, bad_key(name, :scheme, scheme, expected(:scheme)))
+  end
+
+  defp put(_name, channel, {:mid, mid}) when is_number(mid), do: %{channel | mid: mid}
+
   defp put(_name, channel, {:title, title}) when is_binary(title) or title == false,
     do: %{channel | title: title}
 
@@ -222,14 +264,19 @@ defmodule Fude.Channel do
   defp expected(:stack), do: Enum.map_join(@stacks, ", ", &inspect/1) <> " or false"
   defp expected(:format), do: Enum.map_join(@formats, ", ", &inspect/1) <> " or {:currency, code}"
   defp expected(:digits), do: "a whole number from 0 to 20"
+
+  defp expected(:scheme),
+    do: Enum.map_join(@schemes, ", ", &inspect/1) <> ", or a list of two colors or more"
+
+  defp expected(:mid), do: "a number"
   defp expected(:title), do: "a string or false"
   defp expected(:bin), do: "true, or count: n or step: n"
   defp expected(:axis), do: ":left or :right"
 
   defp expected(_key),
     do:
-      "one of :field, :type, :aggregate, :time, :bin, :sort, :format, :digits, :title, :scale, " <>
-        ":stack, :value, :axis"
+      "one of :field, :type, :aggregate, :time, :bin, :sort, :format, :digits, :scheme, :mid, " <>
+        ":title, :scale, :stack, :value, :axis"
 
   defp bad(name, value) do
     "Fude: #{inspect(name)} must be a field, {aggregate, field}, {unit, field}, {:bin, field}, " <>

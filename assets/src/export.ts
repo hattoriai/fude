@@ -12,6 +12,21 @@ type Matrix = [number, number, number, number]; // scale x, scale y, translate x
  * The part of CanvasRenderingContext2D that the marks use, writing SVG
  * elements: each fill and stroke a <path>.
  */
+// A linear gradient of the SVG context: its line, in the page's pixels,
+// and its stops, written as a <linearGradient> where a fill uses it.
+class SvgGradient {
+  readonly stops: [number, string][] = [];
+  constructor(
+    readonly x0: number,
+    readonly y0: number,
+    readonly x1: number,
+    readonly y1: number,
+  ) {}
+  addColorStop(offset: number, color: string): void {
+    this.stops.push([offset, color]);
+  }
+}
+
 export class SvgContext {
   globalAlpha = 1;
   fillStyle: string | CanvasGradient | CanvasPattern = "#000";
@@ -43,6 +58,10 @@ export class SvgContext {
   scale(x: number, y: number): void {
     const [sx, sy, tx, ty] = this.matrix;
     this.matrix = [sx * x, sy * y, tx, ty];
+  }
+  createLinearGradient(x0: number, y0: number, x1: number, y1: number): CanvasGradient {
+    const [sx, sy, tx, ty] = this.matrix;
+    return new SvgGradient(tx + x0 * sx, ty + y0 * sy, tx + x1 * sx, ty + y1 * sy) as unknown as CanvasGradient;
   }
   setLineDash(dash: number[]): void {
     this.dash = dash;
@@ -101,7 +120,15 @@ export class SvgContext {
     this.d += "Z";
   }
   fill(path?: Path2D & { d?: string }): void {
-    this.parts.push(this.element(path, `fill="${color(this.fillStyle)}"${this.opacity("fill-opacity")}`));
+    let fill = color(this.fillStyle);
+    if (this.fillStyle instanceof SvgGradient) {
+      const g = this.fillStyle;
+      const id = `fude-gradient-${this.parts.length}`;
+      const stops = g.stops.map(([offset, c]) => `<stop offset="${round(offset)}" stop-color="${escape(c)}"/>`).join("");
+      this.parts.push(`<defs><linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${round(g.x0)}" y1="${round(g.y0)}" x2="${round(g.x1)}" y2="${round(g.y1)}">${stops}</linearGradient></defs>`);
+      fill = `url(#${id})`;
+    }
+    this.parts.push(this.element(path, `fill="${fill}"${this.opacity("fill-opacity")}`));
   }
   stroke(path?: Path2D & { d?: string }): void {
     const dash = this.dash.length ? ` stroke-dasharray="${this.dash.join(" ")}"` : "";

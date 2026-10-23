@@ -11,7 +11,9 @@ ancestor or on `.fude` wins.
 | `--fude-surface` | the paper under the chart: the gaps between marks and the rings of points |
 | `--fude-grid`, `--fude-baseline` | the hairline grid, and the line at zero |
 | `--fude-series-1` to `--fude-series-8` | the colors of the series, in order |
-| `--fude-sequential` | the ramp of a number's color, light to dark, as a list |
+| `--fude-sequential` | the ramp of a number's color, light to dark, as a list (the scheme `:blue`) |
+| `--fude-scheme-green`, `-orange`, `-purple`, `-gray`, `-viridis`, `-red-blue`, `-red-green` | the named schemes of a color channel, each a list |
+| `--fude-scheme-okabe-ito-1` to `-8` | the scheme `:okabe_ito`, in order |
 | `--fude-increase`, `--fude-decrease`, `--fude-total` | a waterfall's bars |
 | `--fude-map-empty` | a region of a map with no value |
 | `--fude-bar-max`, `--fude-bar-radius`, `--fude-gap`, `--fude-line` | the thickest bar, its round end, the gap between marks, a line's width |

@@ -46,3 +46,11 @@ test("leaves the chart it merges into as it was", () => {
   assert.deepEqual(base.layers![0]!.columns.x, [0, 1000, 2000]);
   assert.deepEqual(base.scales!.color!.domain, ["a"]);
 });
+
+test("the fields of the tooltip follow the rows that stay", () => {
+  const tip = (values: (number | string | null)[]) => [{ title: "Note", format: null, values }];
+  const a: Config = { ...base, layers: [{ ...base.layers![0]!, tooltip: tip(["x", "y", "z"]) }] };
+  const b: Config = { ...more, layers: [{ ...more.layers![0]!, tooltip: tip(["w"]) }] };
+  assert.deepEqual(merge(a, b, null).layers![0]!.tooltip[0]!.values, ["x", "y", "z", "w"]);
+  assert.deepEqual(merge(a, b, 2).layers![0]!.tooltip[0]!.values, ["z", "w"]);
+});

@@ -144,6 +144,18 @@ defmodule Fude.QueryTest do
     assert Compile.table(from_db) == Compile.table(in_memory(chart, orders))
   end
 
+  test "reads the fields of a tooltip with the data, as in memory", %{orders: orders} do
+    chart = Fude.bar(x: :status, y: {:sum, :total}, tooltip: [:items, :channel])
+    from_db = chart |> Fude.put_data(Fude.query(Order, @repo)) |> compile!()
+    memory = in_memory(chart, orders)
+    tips = fn wire -> hd(wire["layers"])["tooltip"] end
+
+    assert [%{"title" => _, "values" => items}, %{"values" => channels}] = tips.(from_db)
+    assert Enum.all?(items, &is_number/1)
+    assert Enum.all?(channels, &is_binary/1)
+    assert tips.(from_db) == tips.(memory)
+  end
+
   test "keeps the query's own where" do
     query = from(o in Order, where: o.status == "returned")
     wire = Fude.bar(query |> Fude.query(@repo), x: :status, y: {:count, :id}) |> compile!()

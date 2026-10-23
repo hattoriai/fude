@@ -107,10 +107,10 @@ defmodule FudeDev.Data do
 
   def status do
     [
-      %{status: "Delivered", orders: 4120},
-      %{status: "Shipped", orders: 1630},
-      %{status: "Processing", orders: 870},
-      %{status: "Returned", orders: 240}
+      %{status: "Delivered", orders: 4120, days: 3.2},
+      %{status: "Shipped", orders: 1630, days: 2.4},
+      %{status: "Processing", orders: 870, days: 0.8},
+      %{status: "Returned", orders: 240, days: 9.5}
     ]
   end
 
@@ -182,6 +182,18 @@ defmodule FudeDev.Data do
       %{step: "Marketing", amount: -61_000},
       %{step: "Tax", amount: -38_000}
     ]
+  end
+
+  # The change of the margin, in points, by region and quarter: some down.
+  def margins do
+    for {region, r} <- Enum.with_index(@regions),
+        {quarter, q} <- Enum.with_index(~w(Q1 Q2 Q3 Q4)) do
+      %{
+        region: region,
+        quarter: quarter,
+        change: Float.round(14 * noise({:m, r, q}) - 6 + q * 1.5, 1)
+      }
+    end
   end
 
   def signups do
@@ -300,6 +312,11 @@ defmodule FudeDev.GalleryLive do
       <.chart id="done" locale={@locale} chart={Fude.progress(Data.kpis(), value: :done, goal: 100, label: "Onboarding done, of 100")} />
       <.chart id="uptime" locale={@locale} chart={Fude.gauge([%{p: 72.4}], value: [field: :p, format: :number], target: 80, label: "Score, of 100")} />
       <.chart id="visits-spark" locale={@locale} chart={Fude.sparkline(Data.daily(), x: :day, y: :visits, title: "Visits, 90 days")} />
+      <.chart
+        id="visits-spark-area"
+        locale={@locale}
+        chart={Fude.sparkline(Data.daily(), x: :day, y: [field: :visits, format: :compact], area: true, points: :extremes, value: true, title: "Visits, with their range")}
+      />
     </div>
     <p><button phx-click="shuffle">Change the data</button></p>
     <div class="grid">
@@ -334,7 +351,7 @@ defmodule FudeDev.GalleryLive do
         id="status"
         export
         locale={@locale}
-        chart={Fude.donut(Data.status(), value: :orders, color: :status, title: "Orders by status")}
+        chart={Fude.donut(Data.status(), value: :orders, color: :status, tooltip: [[field: :days, title: "Days, on average"]], title: "Orders by status")}
       />
       <.chart
         id="regions-horizontal"
@@ -387,6 +404,22 @@ defmodule FudeDev.GalleryLive do
         id="signups"
         locale={@locale}
         chart={Fude.funnel(Data.signups(), x: :stage, y: [field: :people, title: "People"], title: "Where people leave", subtitle: "Sign-ups in October")}
+      />
+      <.chart
+        id="signups-stages"
+        locale={@locale}
+        chart={Fude.funnel(Data.signups(), x: :stage, y: [field: :people, title: "People"], color: :stage, labels: :inside, title: "A color for each stage", subtitle: "Labels inside the bars, outside where they do not fit")}
+      />
+      <.chart
+        id="signups-steps"
+        locale={@locale}
+        chart={Fude.funnel(Data.signups(), x: :stage, y: [field: :people, title: "People"], step: true, labels: :inside, title: "What is left at each stage")}
+      />
+      <.chart
+        id="margins"
+        locale={@locale}
+        chart={Fude.heatmap(Data.margins(), x: :quarter, y: :region, color: [field: :change, title: "Margin change, points", scheme: :red_green],
+          title: "Where the margin fell", subtitle: "A diverging scheme around zero")}
       />
       <.chart
         id="world"

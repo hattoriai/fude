@@ -15,6 +15,12 @@ export interface Scale {
   bins?: { start: number; step: number };
   /** The roles of an ordinal scale's values, which pick their colors. */
   roles?: string[];
+  /** A color scale's scheme: a name of the theme's, or a list of colors. */
+  scheme?: string | string[];
+  /** The value at the middle of a diverging scheme. */
+  mid?: number;
+  /** False for a color with no legend: a funnel's stages, which its axis names. */
+  legend?: boolean;
 }
 
 export interface Layer {
@@ -26,7 +32,8 @@ export interface Layer {
   horizontal: boolean;
   stack: "zero" | "normalize" | "center" | "waterfall" | null;
   options: Record<string, unknown>;
-  tooltip: { title: string | null; format: string | null }[];
+  /** The fields of the tooltip beyond the channels: a value for each row; a time in milliseconds, with its unit ("" for a time of a day). */
+  tooltip: { title: string | null; format: string | null; time?: string | null; values?: (number | string | boolean | null)[] }[];
 }
 
 export interface Single {

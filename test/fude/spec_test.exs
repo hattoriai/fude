@@ -83,6 +83,56 @@ defmodule Fude.SpecTest do
       assert message =~ "a whole number from 0 to 20"
     end
 
+    test "writes and reads a scheme, its middle, and a list of colors" do
+      for color <- [
+            [field: :margin, scheme: :red_blue, mid: 5],
+            [field: :status, scheme: ["#0b6e4f", "#f2c14e", "#d1495b"]]
+          ] do
+        chart = Fude.heatmap(nil, x: :a, y: :b, color: color)
+        assert Spec.load(Spec.dump(chart)) == {:ok, chart}
+      end
+
+      assert %{"color" => %{"scheme" => "red_blue", "mid" => 5}} =
+               Spec.dump(
+                 Fude.heatmap(nil, x: :a, y: :b, color: [field: :m, scheme: :red_blue, mid: 5])
+               )
+
+      assert {:error, [%{path: ["color", "scheme"], message: message}]} =
+               Spec.load(%{
+                 "fude" => 1,
+                 "kind" => "heatmap",
+                 "x" => "a",
+                 "y" => "b",
+                 "color" => %{"field" => "m", "scheme" => "virdis"}
+               })
+
+      assert message =~ ~s(did you mean "viridis"?)
+
+      assert {:error, [%{path: ["color", "scheme"]}]} =
+               Spec.load(%{
+                 "fude" => 1,
+                 "kind" => "heatmap",
+                 "x" => "a",
+                 "y" => "b",
+                 "color" => %{"field" => "m", "scheme" => ["red; background: url(x)", "#fff"]}
+               })
+    end
+
+    test "writes and reads a funnel's and a sparkline's options; saved ones are unchanged" do
+      for chart <- [
+            Fude.funnel(nil, x: :stage, y: :people, color: :stage, step: true, labels: :inside),
+            Fude.funnel(nil, x: :stage, y: :people, labels: false),
+            Fude.sparkline(nil, x: :day, y: :visits, area: true, points: :extremes, value: true)
+          ] do
+        assert Spec.load(Spec.dump(chart)) == {:ok, chart}
+      end
+
+      assert {:ok, %Fude.Chart{layers: [%{options: options}]}} =
+               Spec.load(%{"fude" => 1, "kind" => "sparkline", "x" => "d", "y" => "v"})
+
+      assert options == %{}
+    end
+
     test "writes a currency as code" do
       chart = Fude.bar(x: :region, y: [field: :revenue, format: {:currency, "EUR"}])
       assert %{"y" => %{"format" => "currency:EUR"}} = Spec.dump(chart)
