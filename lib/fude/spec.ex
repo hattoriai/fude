@@ -73,6 +73,7 @@ defmodule Fude.Spec do
       |> put_words(chart)
       |> put_unless("data", chart.data, "data")
       |> put_unless("height", chart.height, nil)
+      |> put_unless("annotations", Enum.map(chart.annotations, &Fude.Annotation.dump/1), [])
 
     spec =
       case chart.layers do
@@ -202,7 +203,7 @@ defmodule Fude.Spec do
      [%{path: ["fude"], message: "is missing: a Fude spec carries its version, \"fude\" => 1"}]}
   end
 
-  @chart_keys ~w(fude title subtitle caption source description data height layers datasets)
+  @chart_keys ~w(fude title subtitle caption source description data height layers datasets annotations)
 
   defp load_chart(spec) do
     acc = {%Chart{}, []}
@@ -226,6 +227,9 @@ defmodule Fude.Spec do
 
         {"height", height}, acc ->
           height(height, acc)
+
+        {"annotations", list}, acc ->
+          annotations(list, acc)
 
         _other, acc ->
           acc
@@ -272,6 +276,20 @@ defmodule Fude.Spec do
 
   defp height(height, acc),
     do: error(acc, ["height"], "must be a whole number of pixels, got: #{inspect(height)}")
+
+  defp annotations(list, acc) when is_list(list) do
+    list
+    |> Enum.with_index()
+    |> Enum.reduce(acc, fn {map, index}, {chart, errors} ->
+      case Fude.Annotation.load(map) do
+        {:ok, annotation} -> {%{chart | annotations: chart.annotations ++ [annotation]}, errors}
+        {:error, message} -> error({chart, errors}, ["annotations", index], message)
+      end
+    end)
+  end
+
+  defp annotations(other, acc),
+    do: error(acc, ["annotations"], "must be a list of annotations, got: #{inspect(other)}")
 
   defp load_datasets(datasets, {chart, errors}) when is_map(datasets) do
     {%{chart | datasets: Map.merge(chart.datasets, datasets)}, errors}

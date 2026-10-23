@@ -168,4 +168,53 @@ defmodule Fude.CompileTest do
       assert %{"value" => 72, "min" => 50, "max" => 90, "target" => 80} = wire["single"]
     end
   end
+
+  describe "annotations" do
+    test "go on the chart's scales: a category by its index, a date in milliseconds" do
+      days = for d <- 0..9, do: %{day: Date.add(~D[2026-01-01], d), n: d}
+
+      wire =
+        days
+        |> Fude.line(x: :day, y: :n)
+        |> Fude.annotate(:band, x: {~D[2026-01-02], ~D[2026-01-04]}, text: "Launch")
+        |> Fude.annotate(:label, x: ~D[2026-01-05], y: 4, text: "Peak")
+        |> compile!()
+
+      assert [%{"type" => "band", "x" => x0, "x2" => x1}, %{"type" => "label", "y" => 4}] =
+               wire["annotations"]
+
+      assert x0 == DateTime.to_unix(~U[2026-01-02 00:00:00Z], :millisecond)
+      assert x1 == DateTime.to_unix(~U[2026-01-04 00:00:00Z], :millisecond)
+
+      wire =
+        @sales
+        |> Fude.bar(x: :region, y: :revenue)
+        |> Fude.annotate(:label, x: "South", text: "!")
+        |> compile!()
+
+      assert [%{"x" => 1}] = wire["annotations"]
+    end
+
+    test "go into the spec and back, a date as its text" do
+      chart =
+        Fude.line(x: :day, y: :n)
+        |> Fude.annotate(:band, x: {~D[2026-01-02], ~D[2026-01-04]}, text: "Launch")
+        |> Fude.annotate(:line, y: 10)
+
+      spec = Fude.Spec.dump(chart)
+
+      assert [
+               %{"type" => "band", "x" => %{"from" => "2026-01-02", "to" => "2026-01-04"}},
+               %{"type" => "line", "y" => 10}
+             ] = spec["annotations"]
+
+      assert {:ok, ^chart} = spec |> JSON.encode!() |> JSON.decode!() |> Fude.Spec.load()
+    end
+
+    test "say what is missing" do
+      assert_raise ArgumentError, ~r/a band needs an x or a y of {from, to}/, fn ->
+        Fude.annotate(Fude.line(x: :day, y: :n), :band, x: 3)
+      end
+    end
+  end
 end

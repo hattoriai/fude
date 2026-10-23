@@ -20,6 +20,7 @@ defmodule Fude.Chart do
           description: String.t() | nil,
           data: String.t(),
           height: pos_integer() | nil,
+          annotations: [Fude.Annotation.t()],
           datasets: %{String.t() => term()}
         }
 
@@ -31,6 +32,7 @@ defmodule Fude.Chart do
             description: nil,
             data: "data",
             height: nil,
+            annotations: [],
             datasets: %{}
 
   @words [:title, :subtitle, :caption, :source, :description]

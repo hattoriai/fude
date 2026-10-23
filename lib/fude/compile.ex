@@ -89,11 +89,71 @@ defmodule Fude.Compile do
       |> Map.put("scales", finish_scales(scales))
       |> Map.put("axes", Chart.kind(chart) != :sparkline and not arcs?(chart))
       |> Map.put("description", chart.description || describe(chart, layers, scales))
+      |> Map.put("annotations", Enum.map(chart.annotations, &annotation(&1, scales)))
     end
   end
 
   defp arcs?(chart),
     do: Enum.all?(chart.layers, &(&1.kind in [:pie, :donut, :choropleth, :bubble_map]))
+
+  # -- Annotations -------------------------------------------------------------
+
+  # An annotation with its places on the chart's scales: a category as its
+  # index, a time in milliseconds; a place that is not on the chart is nil.
+  defp annotation(%Fude.Annotation{} = a, scales) do
+    {x, x2} = places(a.x, scales["x"])
+    {y, y2} = places(a.y, scales["y"])
+
+    %{
+      "type" => Atom.to_string(a.type),
+      "x" => x,
+      "x2" => x2,
+      "y" => y,
+      "y2" => y2,
+      "text" => a.text
+    }
+  end
+
+  defp places({from, to}, scale), do: {place(from, scale), place(to, scale)}
+  defp places(value, scale), do: {place(value, scale), nil}
+
+  defp place(nil, _scale), do: nil
+  defp place(_value, nil), do: nil
+
+  defp place(value, %{"type" => type, "domain" => domain} = scale)
+       when type in ["band", "point"] do
+    value = if scale["time"], do: time(value), else: value
+    Enum.find_index(domain, &(&1 == value or to_string(&1) == to_string(value)))
+  end
+
+  defp place(value, %{"type" => "time"}), do: time(value)
+  defp place(value, _scale) when is_number(value), do: value
+  defp place(_value, _scale), do: nil
+
+  # A time of an annotation: milliseconds, from a date's or a time's text.
+  defp time(value) when is_integer(value), do: value
+
+  defp time(value) when is_binary(value) do
+    case Date.from_iso8601(value) do
+      {:ok, date} -> Data.value(date, :time)
+      {:error, _} -> datetime(value)
+    end
+  end
+
+  defp time(_value), do: nil
+
+  defp datetime(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, time, _offset} ->
+        Data.value(time, :time)
+
+      _ ->
+        case NaiveDateTime.from_iso8601(value) do
+          {:ok, time} -> Data.value(time, :time)
+          _ -> nil
+        end
+    end
+  end
 
   # -- Single values ---------------------------------------------------------
 

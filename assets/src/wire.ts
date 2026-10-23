@@ -50,4 +50,14 @@ export interface Config {
   layers?: Layer[];
   scales?: Record<string, Scale>;
   single?: Single;
+  annotations?: Annotation[];
+}
+
+export interface Annotation {
+  type: "label" | "band" | "line";
+  x: number | null;
+  x2: number | null;
+  y: number | null;
+  y2: number | null;
+  text: string | null;
 }

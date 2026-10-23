@@ -277,7 +277,9 @@ defmodule FudeDev.GalleryLive do
         id="revenue-lines"
         locale={@locale}
         chart={Fude.line(monthly(@shuffled), x: :month, y: [field: :revenue, format: {:currency, "EUR"}, title: "Revenue"], color: :channel,
-          title: "Online keeps growing", subtitle: "Monthly revenue by channel, 2025–2026", source: "Made-up data", curve: :monotone)}
+          title: "Online keeps growing", subtitle: "Monthly revenue by channel, 2025–2026", source: "Made-up data", curve: :monotone)
+          |> Fude.annotate(:band, x: {~D[2025-11-01], ~D[2026-01-01]}, text: "Holidays")
+          |> Fude.annotate(:label, x: ~D[2026-03-01], y: 76_000, text: "The new shop opens")}
       />
       <.chart
         id="revenue-regions"
@@ -319,7 +321,8 @@ defmodule FudeDev.GalleryLive do
         chart={Fude.layers(Data.daily(), [
           Fude.area(x: :day, y: [field: :visits, title: "Visits"]),
           Fude.rule(y: 4000, label: "Goal: 4,000 a day")
-        ], title: "Visits reach the goal", subtitle: "Daily visits, July to September")}
+        ], title: "Visits reach the goal", subtitle: "Daily visits, July to September")
+          |> Fude.annotate(:line, x: ~D[2026-08-17], text: "Campaign")}
       />
       <.chart
         id="revenue-area"

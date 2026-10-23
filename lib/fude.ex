@@ -111,6 +111,20 @@ defmodule Fude do
     |> put_data(data)
   end
 
+  @doc """
+  Writes a note on the chart, at a place of its data (see
+  `Fude.Annotation`):
+
+      chart
+      |> Fude.annotate(:label, x: "North", y: 136_000, text: "Best quarter on record")
+      |> Fude.annotate(:band, x: {~D[2026-03-01], ~D[2026-05-01]}, text: "Launch")
+      |> Fude.annotate(:line, y: 4000, text: "Goal")
+  """
+  @spec annotate(Chart.t(), Fude.Annotation.type(), keyword()) :: Chart.t()
+  def annotate(%Chart{} = chart, type, opts) do
+    %{chart | annotations: chart.annotations ++ [Fude.Annotation.new(type, opts)]}
+  end
+
   @doc "Sets the chart's title, and with `:subtitle`, its subtitle."
   @spec title(Chart.t(), String.t(), keyword()) :: Chart.t()
   def title(%Chart{} = chart, title, opts \\ []) do

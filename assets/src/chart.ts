@@ -895,9 +895,93 @@ export class Chart {
       }
     });
 
+    this.renderAnnotations(layout);
+
     const cross = document.createElementNS(SVG, "g");
     cross.setAttribute("class", "fude-cross");
     svg.append(cross);
+  }
+
+  // The notes on the chart: bands under the marks; lines, and labels with a
+  // line to their point, over them. A label goes where it stays inside the
+  // plot: up and to the right of its point, else left, else below.
+  private renderAnnotations(layout: Layout): void {
+    const { x, y } = layout;
+    const theme = this.theme;
+    const at = (pos: Position | undefined, value: number | null, end = false) => {
+      if (!pos || value === null || value === undefined) return null;
+      if (pos.kind === "band") return pos.at(value) + (end ? pos.bandwidth : 0);
+      if (pos.kind === "point") return pos.at(value);
+      return pos.at(value);
+    };
+    const center = (pos: Position | undefined, value: number | null) => {
+      const p = at(pos, value);
+      return p === null ? null : p + (pos?.kind === "band" ? pos.bandwidth / 2 : 0);
+    };
+
+    for (const note of this.config.annotations ?? []) {
+      if (note.type === "band") {
+        let x0 = layout.left;
+        let x1 = layout.right;
+        let y0 = layout.top;
+        let y1 = layout.bottom;
+        if (note.x !== null && note.x2 !== null) {
+          const a = at(x, note.x);
+          const b = at(x, note.x2, true);
+          if (a === null || b === null) continue;
+          [x0, x1] = [Math.min(a, b), Math.max(a, b)];
+        } else if (note.y !== null && note.y2 !== null) {
+          const a = at(y, note.y);
+          const b = at(y, note.y2, true);
+          if (a === null || b === null) continue;
+          [y0, y1] = [Math.min(a, b), Math.max(a, b)];
+        } else continue;
+        const band = document.createElementNS(SVG, "rect");
+        band.setAttribute("x", String(x0));
+        band.setAttribute("y", String(y0));
+        band.setAttribute("width", String(Math.max(1, x1 - x0)));
+        band.setAttribute("height", String(Math.max(1, y1 - y0)));
+        band.setAttribute("fill", theme.text);
+        band.setAttribute("fill-opacity", "0.06");
+        this.grid.append(band);
+        if (note.text) text(this.svg, note.text, x0 + 6, y0 + 14, { anchor: "start", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface });
+        continue;
+      }
+
+      if (note.type === "line") {
+        const px = center(x, note.x);
+        const py = center(y, note.y);
+        if (py !== null && note.x === null) {
+          dashed(this.svg, layout.left, py, layout.right, py, theme.secondary);
+          if (note.text) text(this.svg, note.text, layout.left + 4, py - 6, { anchor: "start", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface });
+        } else if (px !== null) {
+          dashed(this.svg, px, layout.top, px, layout.bottom, theme.secondary);
+          if (note.text) text(this.svg, note.text, px + 6, layout.top + 12, { anchor: "start", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface });
+        }
+        continue;
+      }
+
+      // A label.
+      const px = center(x, note.x) ?? (layout.left + layout.right) / 2;
+      const py = center(y, note.y) ?? layout.top + 4;
+      if (!note.text) continue;
+      const lines = this.wrap(note.text, 150) ?? [note.text];
+      const width = Math.max(...lines.map((line) => this.measure(line)));
+      const right = px + 18 + width < layout.right;
+      const below = py - 24 - lines.length * 14 < layout.top;
+      const tx = right ? px + 18 : px - 18;
+      const ty = below ? py + 28 : py - 22 - (lines.length - 1) * 14;
+      line(this.svg, px, py, right ? tx - 4 : tx + 4, below ? ty - 12 : ty + 4 + (lines.length - 1) * 14, theme.secondary);
+      const dot = document.createElementNS(SVG, "circle");
+      dot.setAttribute("cx", String(px));
+      dot.setAttribute("cy", String(py));
+      dot.setAttribute("r", "2.5");
+      dot.setAttribute("fill", theme.text);
+      this.svg.append(dot);
+      lines.forEach((words, i) => {
+        text(this.svg, words, tx, ty + i * 14, { anchor: right ? "start" : "end", baseline: "alphabetic", fill: theme.text, halo: theme.surface });
+      });
+    }
   }
 
   private isHorizontalBars(): boolean {
@@ -1333,6 +1417,11 @@ function line(parent: Element, x1: number, y1: number, x2: number, y2: number, s
   parent.append(el);
 }
 
+function dashed(parent: Element, x1: number, y1: number, x2: number, y2: number, stroke: string): void {
+  line(parent, x1, y1, x2, y2, stroke);
+  (parent.lastChild as SVGElement).setAttribute("stroke-dasharray", "4 4");
+}
+
 function text(
   parent: Element,
   content: string,
@@ -1358,5 +1447,21 @@ function text(
   }
   el.textContent = content;
   parent.append(el);
+  if (options.halo && typeof el.getBBox === "function") {
+    // A plate of the surface behind words over marks: a line under them
+    // does not show between the letters.
+    const box = el.getBBox();
+    if (box.width > 0) {
+      const plate = document.createElementNS(SVG, "rect");
+      plate.setAttribute("x", String(box.x - 3));
+      plate.setAttribute("y", String(box.y - 1));
+      plate.setAttribute("width", String(box.width + 6));
+      plate.setAttribute("height", String(box.height + 2));
+      plate.setAttribute("rx", "2");
+      plate.setAttribute("fill", options.halo);
+      plate.setAttribute("fill-opacity", "0.88");
+      parent.insertBefore(plate, el);
+    }
+  }
 }
 
