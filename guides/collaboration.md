@@ -1,4 +1,4 @@
-# Working together
+# Collaboration
 
 Fude draws charts on its own. A chart that others change too (a report
 two people build at once, a chart an agent makes beside you) is a

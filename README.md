@@ -29,10 +29,10 @@ with it. It gives your app:
   the keyboard (the arrows move through the data, a screen reader says
   each value), and a table of the data under each chart;
 * SVG and PNG files of a chart, from the same drawing as the screen;
-* charts that people and agents make together, with
-  [Issho](https://hex.pm/packages/issho) (`Fude.Issho`): a chart's spec
-  as a room's shared state, the others' pointers on its marks, and tools
-  for agents that change it as people do;
+* collaboration on a chart, with [Issho](https://hex.pm/packages/issho)
+  (`Fude.Issho`): a chart's spec as a room's shared state, the others'
+  pointers on its marks, and tools for agents that change it as people
+  do;
 * `Fude.Test`, to read what a chart shows in `Phoenix.LiveViewTest`
   with no browser.
 
@@ -54,7 +54,7 @@ style sheet.
 | Live | charts follow their assigns and move; `Fude.Live.append/5` streams rows into a window of the last `max` |
 | Specs | `Fude.Spec.dump/1` and `load/1`: JSON with a version, migrated forward; errors with their path and a suggestion (`did you mean "sum"?`) |
 | Interaction | a crosshair and one tooltip for every series on lines and areas, a tooltip on each mark of the others, a legend that highlights and hides, keyboard navigation with announcements |
-| Together | `Fude.Issho`: a chart as an Issho room's shared state, changed by people with `Fude`'s functions and by agents with `read_chart` and `change_chart`, always valid; the others' pointers on its marks |
+| Collaboration | `Fude.Issho`: a chart as an Issho room's shared state, changed by people with `Fude`'s functions and by agents with `read_chart` and `change_chart`, always valid; the others' pointers on its marks |
 | Export | `<.chart export>` buttons and `Fude.Live.export/3`: SVG, and PNG at twice the size |
 | Locales | numbers, currencies and dates in the chart's locale, with the browser's `Intl` |
 | Theming | CSS custom properties, the Sumi theme, dark mode, reduced motion, forced colors |
@@ -196,7 +196,7 @@ from where they were.
 * [Maps](guides/maps.md) - regions colored by a value, circles on a map.
 * [Specs](guides/specs.md) - a chart as data: saving, loading, versions, errors.
 * [Live](guides/live.md) - charts that follow their data, streamed points, export.
-* [Working together](guides/together.md) - shared charts with Issho, for people and agents.
+* [Collaboration](guides/collaboration.md) - shared charts with Issho, for people and agents.
 * [Testing](guides/testing.md) - `Fude.Test` in `Phoenix.LiveViewTest`.
 * [Theming](guides/theming.md) - the custom properties, dark mode, the Sumi theme.
 * [Accessibility](guides/accessibility.md) - what a person who does not see the chart gets.

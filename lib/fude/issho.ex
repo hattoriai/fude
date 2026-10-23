@@ -1,7 +1,7 @@
 if Code.ensure_loaded?(Issho.State) do
   defmodule Fude.Issho do
     @moduledoc ~S"""
-    Charts that people and agents make together, in
+    Collaboration on charts, for people and agents, in
     [Issho](https://hex.pm/packages/issho)'s rooms: a chart's spec is a
     shared state of the room (`Issho.State`), that everyone changes with
     the same functions, and that is a valid chart after every change.

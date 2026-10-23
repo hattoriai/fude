@@ -121,7 +121,7 @@ defmodule Fude.MixProject do
         "guides/maps.md",
         "guides/specs.md",
         "guides/live.md",
-        "guides/together.md",
+        "guides/collaboration.md",
         "guides/testing.md",
         "guides/theming.md",
         "guides/accessibility.md",
@@ -129,14 +129,14 @@ defmodule Fude.MixProject do
         "CHANGELOG.md"
       ],
       groups_for_extras: [
-        Guides: ~r{guides/(quickstart|charts|data|story|maps|specs|live|together)\.md},
+        Guides: ~r{guides/(quickstart|charts|data|story|maps|specs|live|collaboration)\.md},
         "More guides": ~r{guides/(testing|theming|accessibility|limits)\.md}
       ],
       groups_for_modules: [
         Charts: [Fude, Fude.Chart, Fude.Layer, Fude.Channel, Fude.Annotation, Fude.Components],
         Data: [Fude.Data, Fude.Query],
         Live: [Fude.Live],
-        Together: [Fude.Issho, Fude.Issho.Place],
+        Collaboration: [Fude.Issho, Fude.Issho.Place],
         Specs: [Fude.Spec],
         Testing: [Fude.Test]
       ]
