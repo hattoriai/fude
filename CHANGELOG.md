@@ -17,6 +17,17 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The single values (`number`, `trend`, `gauge`, `progress`) fill their
+  box, as a tile of a dashboard does, and are centered in it: the number,
+  the gauge's arc and the progress bar grow with the box (container
+  queries), and the number narrows to fit its width. The box is the
+  chart's `height` when it has one. `align: :start` keeps them at the
+  start at a fixed size, for a number inline in a page; in a spec,
+  `"align": "start"`, and specs without it center.
+- A pass on the single values' type: tabular figures, a trend's change as
+  a pill tinted by its direction, then its label; a progress's label and
+  its share of the goal (`85%`) above a bar with round ends, as thick as
+  `--fude-progress-height`.
 - A right axis: `y: [field: :revenue, axis: :right]` puts a layer on a y
   scale of its own, drawn on the right of the plot, for two measures of
   other units over each other (bars of orders, a line of revenue):

@@ -51,6 +51,39 @@ defmodule Fude.ComponentsTest do
            ]
 
     assert html =~ "width: 85.0%"
+    assert LazyHTML.attribute(LazyHTML.query(doc, "data.fude-share"), "value") == ["0.85"]
+    assert LazyHTML.text(LazyHTML.query(doc, ".fude-progress-head .fude-label")) == "Done"
+  end
+
+  test "centers a single value in a box of the chart's height, sized by its characters" do
+    assigns = %{chart: Fude.number([%{n: 1234}], value: :n, label: "Orders")}
+    html = rendered_to_string(~H|<.chart id="orders" chart={@chart} height={200} />|)
+    doc = LazyHTML.from_fragment(html)
+    single = LazyHTML.query(doc, ".fude-single.fude-single-center")
+    assert LazyHTML.attribute(single, "style") == ["height: 200px"]
+
+    assert LazyHTML.attribute(LazyHTML.query(doc, "data.fude-value"), "style") == [
+             "--fude-chars: 4"
+           ]
+  end
+
+  test "sets a single value at the start, at its own size, when asked" do
+    assigns = %{chart: Fude.number([%{n: 1}], value: :n, align: :start)}
+    html = rendered_to_string(~H|<.chart id="n" chart={@chart} height={200} />|)
+    doc = LazyHTML.from_fragment(html)
+    assert Enum.count(LazyHTML.query(doc, ".fude-single.fude-single-start")) == 1
+    refute html =~ "height: 200px"
+  end
+
+  test "writes a trend's change as a pill before its label" do
+    assigns = %{
+      chart: Fude.trend([%{n: 110, last: 100}], value: :n, compare: :last, label: "vs May")
+    }
+
+    html = rendered_to_string(~H|<.chart id="t" chart={@chart} />|)
+    doc = LazyHTML.from_fragment(html)
+    assert LazyHTML.text(LazyHTML.query(doc, ".fude-meta .fude-delta.fude-up")) =~ "+10.0%"
+    assert LazyHTML.text(LazyHTML.query(doc, ".fude-meta .fude-label")) == "vs May"
   end
 
   test "needs a chart or a spec" do
@@ -68,5 +101,6 @@ defmodule Fude.ComponentsTest do
     assert LazyHTML.attribute(LazyHTML.query(doc, "[role=meter]"), "aria-valuenow") == ["75"]
     assert Enum.count(LazyHTML.query(doc, "path.fude-gauge-value")) == 1
     assert Enum.count(LazyHTML.query(doc, "line.fude-gauge-target")) == 1
+    assert Enum.count(LazyHTML.query(doc, ".fude-dial data.fude-value")) == 1
   end
 end

@@ -35,6 +35,8 @@ export interface Single {
   format: string | null;
   compare: number | null;
   goal: number | null;
+  /** Centered in its box and sized to it, or at the start at a fixed size. */
+  align?: "center" | "start";
 }
 
 export interface Config {

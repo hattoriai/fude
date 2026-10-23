@@ -38,6 +38,10 @@ defmodule Fude.Layer do
 
   defstruct [:id, :kind, channels: %{}, options: %{}]
 
+  # Where a single value sits in its box: centered and sized to it, as a
+  # tile of a dashboard, or at the start, as a number inline in a page.
+  @align {:in, [:center, :start]}
+
   # Each kind: the channels it takes, those it needs, and its options with
   # the check of each value.
   @kinds %{
@@ -89,9 +93,17 @@ defmodule Fude.Layer do
       needs: [:x, :y],
       options: [curve: {:in, [:linear, :monotone, :step]}]
     },
-    number: %{channels: [:value], needs: [:value], options: [label: :string]},
-    trend: %{channels: [:value, :compare], needs: [:value], options: [label: :string]},
-    progress: %{channels: [:value], needs: [:value], options: [label: :string, goal: :number]},
+    number: %{channels: [:value], needs: [:value], options: [label: :string, align: @align]},
+    trend: %{
+      channels: [:value, :compare],
+      needs: [:value],
+      options: [label: :string, align: @align]
+    },
+    progress: %{
+      channels: [:value],
+      needs: [:value],
+      options: [label: :string, goal: :number, align: @align]
+    },
     waterfall: %{
       channels: [:x, :y, :tooltip],
       needs: [:x, :y],
@@ -101,7 +113,7 @@ defmodule Fude.Layer do
     gauge: %{
       channels: [:value],
       needs: [:value],
-      options: [label: :string, min: :number, max: :number, target: :number]
+      options: [label: :string, min: :number, max: :number, target: :number, align: @align]
     },
     choropleth: %{
       channels: [:region, :color, :tooltip],

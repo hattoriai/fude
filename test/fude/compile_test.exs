@@ -254,6 +254,22 @@ defmodule Fude.CompileTest do
       wire = compile!(Fude.gauge([%{p: 72}], value: :p, min: 50, max: 90, target: 80))
       assert %{"value" => 72, "min" => 50, "max" => 90, "target" => 80} = wire["single"]
     end
+
+    test "a single value is centered unless it says start" do
+      assert get_in(compile!(Fude.number([%{n: 1}], value: :n)), ["single", "align"]) == "center"
+
+      assert get_in(compile!(Fude.progress([%{n: 1}], value: :n, align: :start)), [
+               "single",
+               "align"
+             ]) ==
+               "start"
+
+      assert_raise ArgumentError,
+                   ~r/:align of a number chart must be one of :center, :start/,
+                   fn ->
+                     Fude.number([%{n: 1}], value: :n, align: :left)
+                   end
+    end
   end
 
   describe "annotations" do

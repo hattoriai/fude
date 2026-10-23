@@ -238,9 +238,10 @@ export class Chart {
     }
   }
 
-  // The single numbers that the server wrote: in the locale's words.
+  // The single numbers that the server wrote: in the locale's words. The
+  // number's count of characters sizes it to its box (see fude.css).
   private formatSingles(): void {
-    for (const data of this.el.querySelectorAll<HTMLDataElement>("data.fude-value, .fude-delta data")) {
+    for (const data of this.el.querySelectorAll<HTMLDataElement>("data.fude-value, .fude-delta data, data.fude-share")) {
       const value = parseFloat(data.value);
       if (!Number.isFinite(value)) continue;
       const format = data.dataset.format;
@@ -250,6 +251,7 @@ export class Chart {
       } else {
         data.textContent = formatter(format || (Math.abs(value) >= 100000 ? "compact" : null), this.locale)(value);
       }
+      if (data.classList.contains("fude-value")) data.style.setProperty("--fude-chars", String(data.textContent.length));
     }
   }
 
