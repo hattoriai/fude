@@ -21,6 +21,8 @@ export interface Layer {
   mark: MarkType;
   n: number;
   columns: Record<string, (number | null)[]>;
+  /** "right" for a layer on the right axis, of the scale "yRight". */
+  axis?: "right" | null;
   horizontal: boolean;
   stack: "zero" | "normalize" | "center" | "waterfall" | null;
   options: Record<string, unknown>;

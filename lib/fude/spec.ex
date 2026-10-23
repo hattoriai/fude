@@ -517,11 +517,12 @@ defmodule Fude.Spec do
     do: {:ok, :format, {:currency, code}}
 
   defp channel_key("format", format), do: atom(:format, format, Channel.formats())
+  defp channel_key("axis", axis), do: atom(:axis, axis, Channel.axes())
   defp channel_key("scale", scale) when is_map(scale), do: scale(scale)
   defp channel_key("scale", scale), do: {:error, "must be a map, got: #{inspect(scale)}"}
 
   defp channel_key(key, _value) do
-    keys = ~w(field type aggregate time bin sort format title scale stack value)
+    keys = ~w(field type aggregate time bin sort format title scale stack value axis)
     {:error, "is not a key of a channel" <> Fude.Names.suggest(key, keys)}
   end
 

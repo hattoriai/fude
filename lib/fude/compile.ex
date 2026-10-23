@@ -262,12 +262,22 @@ defmodule Fude.Compile do
   # -- Layers ------------------------------------------------------------------
 
   # Each layer's table, then the scales of all the layers together, then
-  # the columns of each layer as the scales encode them.
+  # the columns of each layer as the scales encode them. A layer whose y is
+  # on the right axis has a y scale of its own, "yRight".
   defp layers(layers, data) do
-    tables = Enum.map(layers, &table(&1, data))
+    tables = layers |> Enum.map(&table(&1, data)) |> Enum.map(&right_axis/1)
     scales = Enum.reduce(tables, %{}, &merge_scales(&2, &1.scales))
     {Enum.map(tables, &encode(&1, scales)), scales}
   end
+
+  defp right_axis(%{layer: %Layer{channels: %{y: %Channel{axis: :right}}}} = table) do
+    case Map.pop(table.scales, "y") do
+      {nil, _scales} -> table
+      {y, scales} -> %{table | scales: Map.put(scales, "yRight", y)} |> Map.put(:axis, :right)
+    end
+  end
+
+  defp right_axis(table), do: table
 
   defp sort_panels(values, %{type: :time}), do: Enum.sort(values)
   defp sort_panels(values, _field), do: values
@@ -1125,6 +1135,7 @@ defmodule Fude.Compile do
   defp encode(table, scales) do
     %{rows: rows, mark: mark} = table
     swap = Map.get(table, :horizontal, false)
+    right? = Map.get(table, :axis) == :right
 
     # Every row of a layer has the same keys.
     present = rows |> List.first(%{}) |> Map.keys()
@@ -1134,7 +1145,8 @@ defmodule Fude.Compile do
       |> Enum.filter(&(&1 in present))
       |> Map.new(fn name ->
         target = column_name(name, swap)
-        encode = encoder(scales[scale_name(target)])
+        scale = if right? and scale_name(target) == "y", do: "yRight", else: scale_name(target)
+        encode = encoder(scales[scale])
         {Atom.to_string(target), Enum.map(rows, &encode.(&1[name]))}
       end)
 
@@ -1144,6 +1156,7 @@ defmodule Fude.Compile do
       "mark" => mark,
       "n" => length(rows),
       "columns" => columns,
+      "axis" => if(Map.get(table, :axis) == :right, do: "right", else: nil),
       "horizontal" => swap,
       "stack" => stack_name(Map.get(table, :stack, false)),
       "options" => Map.new(table.options, fn {k, v} -> {Atom.to_string(k), dump(v)} end),

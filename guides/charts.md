@@ -29,7 +29,8 @@ The full form also takes `type` (`:number`, `:time`, `:category`,
 channel, or a list of the categories in order), `format` (`:number`,
 `:integer`, `:percent`, `:compact`, `{:currency, code}`, `:bytes`,
 `:duration`), `scale` (`type: :log`, `domain: [0, 100]`, `zero: true`,
-`nice: false`) and `stack` (`:zero`, `:normalize`, `:center`, `false`).
+`nice: false`), `stack` (`:zero`, `:normalize`, `:center`, `false`) and
+`axis` (`:right`, for a `y` on an axis of its own, see Layers).
 
 A field's type is learned from its values: numbers, times (a `Date`,
 `NaiveDateTime` or `DateTime`) or categories. Its title is its name in
@@ -78,6 +79,17 @@ Fude.layers(visits, [
   Fude.line(x: :day, y: :visits),
   Fude.rule(y: 4000, label: "Goal")
 ], title: "Visits reach the goal")
+```
+
+Two measures of other units go on two axes: a `y` with `axis: :right`
+has a scale of its own, on the right of the plot. Without a color, each
+axis's layers have their color, and its title too:
+
+```elixir
+Fude.layers(months, [
+  Fude.bar(x: :month, y: :orders),
+  Fude.line(x: :month, y: [field: :revenue, format: {:currency, "EUR"}, axis: :right])
+], title: "Revenue grows faster than orders")
 ```
 
 ## The words of a chart

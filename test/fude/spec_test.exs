@@ -30,6 +30,28 @@ defmodule Fude.SpecTest do
                Spec.dump(chart)
     end
 
+    test "writes and reads the right axis of a channel" do
+      chart =
+        Fude.layers(nil, [
+          Fude.bar(x: :day, y: :orders),
+          Fude.line(x: :day, y: [field: :revenue, axis: :right])
+        ])
+
+      spec = Spec.dump(chart)
+      assert %{"layers" => [_, %{"y" => %{"field" => "revenue", "axis" => "right"}}]} = spec
+      assert Spec.load(spec) == {:ok, chart}
+
+      assert {:error, [%{path: ["y", "axis"], message: message}]} =
+               Spec.load(%{
+                 "fude" => 1,
+                 "kind" => "line",
+                 "x" => "day",
+                 "y" => %{"field" => "n", "axis" => "rihgt"}
+               })
+
+      assert message =~ ~s(did you mean "right"?)
+    end
+
     test "writes a currency as code" do
       chart = Fude.bar(x: :region, y: [field: :revenue, format: {:currency, "EUR"}])
       assert %{"y" => %{"format" => "currency:EUR"}} = Spec.dump(chart)
