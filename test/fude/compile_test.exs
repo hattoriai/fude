@@ -90,6 +90,48 @@ defmodule Fude.CompileTest do
     end
   end
 
+  describe "stacks in the order of the series, whatever the order of the rows" do
+    # The rows of each month in another order of the channels, as a query
+    # ordered by month only gives them.
+    @shuffled [
+      %{month: ~D[2026-01-01], channel: "Online", revenue: 10},
+      %{month: ~D[2026-01-01], channel: "Retail", revenue: 20},
+      %{month: ~D[2026-02-01], channel: "Retail", revenue: 25},
+      %{month: ~D[2026-02-01], channel: "Online", revenue: 15},
+      %{month: ~D[2026-03-01], channel: "Online", revenue: 12},
+      %{month: ~D[2026-03-01], channel: "Retail", revenue: 22}
+    ]
+
+    # Each series' base and top, month by month.
+    defp bands(%{"layers" => [layer], "scales" => %{"color" => %{"domain" => domain}}}) do
+      %{"color" => colors, "y0" => y0, "y1" => y1} = layer["columns"]
+
+      [colors, y0, y1]
+      |> Enum.zip()
+      |> Enum.group_by(fn {c, _, _} -> Enum.at(domain, c) end, fn {_, b, t} -> {b, t} end)
+    end
+
+    test "an area: the first series at the bottom of every month" do
+      bands = bands(compile!(Fude.area(@shuffled, x: :month, y: :revenue, color: :channel)))
+      assert bands["Online"] == [{0, 10}, {0, 15}, {0, 12}]
+      assert bands["Retail"] == [{10, 30}, {15, 40}, {12, 34}]
+    end
+
+    test "bars: the same" do
+      bands = bands(compile!(Fude.bar(@shuffled, x: :month, y: :revenue, color: :channel)))
+      assert bands["Online"] == [{0, 10}, {0, 15}, {0, 12}]
+      assert bands["Retail"] == [{10, 30}, {15, 40}, {12, 34}]
+    end
+
+    test "a sorted color stacks in its sort" do
+      chart =
+        Fude.area(@shuffled, x: :month, y: :revenue, color: [field: :channel, sort: :descending])
+
+      bands = bands(compile!(chart))
+      assert bands["Retail"] == [{0, 20}, {0, 25}, {0, 22}]
+    end
+  end
+
   test "a bar sums the rows of its category and color" do
     wire = compile!(Fude.bar(@sales, x: :region, y: :revenue, color: :channel))
     {_heads, rows} = Compile.table(wire)
