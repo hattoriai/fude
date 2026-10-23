@@ -63,7 +63,8 @@ test.describe("the gallery", () => {
 
   test("a sparkline writes its last value at the end of its line", async ({ page }) => {
     await openPage(page);
-    await expect(page.locator("#visits-spark-area svg text")).toHaveText(/^[\d.]+k$/);
+    // Compact, as y's format says: "4.3K" or "4.3k", by the browser's ICU.
+    await expect(page.locator("#visits-spark-area svg text")).toHaveText(/^[\d.,]+\s?[kK]$/);
   });
 
   test("the legend of a line chart hides a series", async ({ page }) => {
