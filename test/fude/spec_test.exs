@@ -67,6 +67,22 @@ defmodule Fude.SpecTest do
                Spec.load(%{"fude" => 1, "kind" => "trend", "value" => "n", "align" => "left"})
     end
 
+    test "writes and reads a channel's digits" do
+      chart = Fude.number(nil, value: [field: :revenue, format: :number, digits: 0])
+      spec = Spec.dump(chart)
+      assert %{"value" => %{"field" => "revenue", "format" => "number", "digits" => 0}} = spec
+      assert Spec.load(spec) == {:ok, chart}
+
+      assert {:error, [%{path: ["value", "digits"], message: message}]} =
+               Spec.load(%{
+                 "fude" => 1,
+                 "kind" => "number",
+                 "value" => %{"field" => "n", "digits" => 1.5}
+               })
+
+      assert message =~ "a whole number from 0 to 20"
+    end
+
     test "writes a currency as code" do
       chart = Fude.bar(x: :region, y: [field: :revenue, format: {:currency, "EUR"}])
       assert %{"y" => %{"format" => "currency:EUR"}} = Spec.dump(chart)

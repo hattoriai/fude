@@ -1151,13 +1151,19 @@ defmodule Fude.Compile do
     end)
   end
 
+  # A channel's format as the browser reads it: "number", "currency:EUR",
+  # with its digits after a colon when it has them ("number:0",
+  # "currency:EUR:2", ":0" with no format).
   defp format(nil), do: nil
-  defp format(%Channel{format: {:currency, code}}), do: "currency:" <> code
+  defp format(%Channel{digits: nil} = channel), do: base_format(channel)
+  defp format(%Channel{digits: digits} = channel), do: "#{base_format(channel)}:#{digits}"
 
-  defp format(%Channel{format: format}) when is_atom(format) and not is_nil(format),
+  defp base_format(%Channel{format: {:currency, code}}), do: "currency:" <> code
+
+  defp base_format(%Channel{format: format}) when is_atom(format) and not is_nil(format),
     do: Atom.to_string(format)
 
-  defp format(_channel), do: nil
+  defp base_format(_channel), do: nil
 
   # -- Encoding ----------------------------------------------------------------
 

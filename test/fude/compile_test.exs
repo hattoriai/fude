@@ -45,6 +45,34 @@ defmodule Fude.CompileTest do
     end
   end
 
+  describe "digits" do
+    test "go on the wire after the format" do
+      wire = compile!(Fude.number([%{n: 1.5}], value: [field: :n, format: :number, digits: 0]))
+      assert wire["single"]["format"] == "number:0"
+
+      wire =
+        compile!(
+          Fude.bar([%{r: "N", v: 1}],
+            x: :r,
+            y: [field: :v, format: {:currency, "EUR"}, digits: 2]
+          )
+        )
+
+      assert wire["scales"]["y"]["format"] == "currency:EUR:2"
+
+      assert compile!(Fude.number([%{n: 1}], value: [field: :n, digits: 1]))["single"]["format"] ==
+               ":1"
+
+      assert compile!(Fude.number([%{n: 1}], value: :n))["single"]["format"] == nil
+    end
+
+    test "are a whole number from 0 to 20" do
+      assert_raise ArgumentError, ~r/:digits of :value must be a whole number from 0 to 20/, fn ->
+        Fude.number([%{n: 1}], value: [field: :n, digits: 21])
+      end
+    end
+  end
+
   describe "the right axis" do
     @days for d <- 0..4,
               do: %{day: Date.add(~D[2026-01-01], d), orders: d + 1, revenue: (d + 1) * 1000}

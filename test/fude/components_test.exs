@@ -75,6 +75,22 @@ defmodule Fude.ComponentsTest do
     refute html =~ "height: 200px"
   end
 
+  test "writes a trend's change with the digits of its value" do
+    assigns = %{
+      chart:
+        Fude.trend([%{n: 110, last: 100}],
+          value: [field: :n, format: :number, digits: 0],
+          compare: :last
+        )
+    }
+
+    html = rendered_to_string(~H|<.chart id="t" chart={@chart} />|)
+    doc = LazyHTML.from_fragment(html)
+    delta = LazyHTML.query(doc, ".fude-delta data")
+    assert LazyHTML.attribute(delta, "data-format") == ["percent-change:0"]
+    assert LazyHTML.text(delta) =~ "+10%"
+  end
+
   test "writes a trend's change as a pill before its label" do
     assigns = %{
       chart: Fude.trend([%{n: 110, last: 100}], value: :n, compare: :last, label: "vs May")
