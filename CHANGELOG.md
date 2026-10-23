@@ -7,6 +7,12 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-23
+
+Richer tooltips, a right axis, color schemes, funnels and sparklines of
+their own, and digits on a channel; stacks in the order of their series,
+and tooltip fields shown.
+
 ### Fixed
 
 - A bubble map colored by a category drew every circle in one color, with
@@ -100,7 +106,7 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - the crosshair's tooltip lists the bars at the pointer with the lines;
   - in a spec, `"axis": "right"` on the channel.
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-10-23
 
 ### Added
 
@@ -148,3 +154,7 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`Fude.Issho.Place`, `<.chart issho>`).
 - An `"id"` for a layer and an annotation of a spec.
 - `mix fude.install`.
+
+[Unreleased]: https://github.com/hattoriai/fude/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/hattoriai/fude/releases/tag/v0.2.0
+[0.1.0]: https://github.com/hattoriai/fude/releases/tag/v0.1.0
