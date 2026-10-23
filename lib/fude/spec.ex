@@ -305,57 +305,20 @@ defmodule Fude.Spec do
 
   defp load_layer(kind, map, path, errors) do
     spec = Layer.kind_spec(kind)
-    channels = Map.new(spec.channels, &{Atom.to_string(&1), &1})
-    options = Map.new(spec.options, fn {key, check} -> {Atom.to_string(key), {key, check}} end)
 
-    {layer, errors} =
-      Enum.reduce(map, {%Layer{kind: kind}, errors}, fn {key, value}, {layer, errors} ->
-        cond do
-          key == "tooltip" and Map.has_key?(channels, key) ->
-            load_tooltip(value, path ++ [key], layer, errors)
+    keys = %{
+      kind: kind,
+      path: path,
+      channels: Map.new(spec.channels, &{Atom.to_string(&1), &1}),
+      options: Map.new(spec.options, fn {key, check} -> {Atom.to_string(key), {key, check}} end)
+    }
 
-          Map.has_key?(channels, key) ->
-            case load_channel(value, path ++ [key]) do
-              {:ok, channel} ->
-                {%{layer | channels: Map.put(layer.channels, channels[key], channel)}, errors}
-
-              {:error, more} ->
-                {layer, more ++ errors}
-            end
-
-          Map.has_key?(options, key) ->
-            {atom, check} = options[key]
-
-            case load_option(check, value) do
-              {:ok, value} ->
-                {%{layer | options: Map.put(layer.options, atom, value)}, errors}
-
-              :error ->
-                {layer,
-                 [
-                   %{
-                     path: path ++ [key],
-                     message: "must be #{Layer.describe(check)}, got: #{inspect(value)}"
-                   }
-                   | errors
-                 ]}
-            end
-
-          true ->
-            names = Map.keys(channels) ++ Map.keys(options)
-
-            message =
-              "is not a key of a #{kind} chart; it takes #{Enum.join(names, ", ")}" <>
-                Fude.Names.suggest(key, names)
-
-            {layer, [%{path: path ++ [key], message: message} | errors]}
-        end
-      end)
-
-    missing = Enum.reject(spec.needs, &Map.has_key?(layer.channels, &1))
+    {layer, errors} = Enum.reduce(map, {%Layer{kind: kind}, errors}, &load_key(&1, &2, keys))
 
     errors =
-      Enum.reduce(missing, errors, fn name, errors ->
+      spec.needs
+      |> Enum.reject(&Map.has_key?(layer.channels, &1))
+      |> Enum.reduce(errors, fn name, errors ->
         [
           %{path: path ++ [Atom.to_string(name)], message: "is missing: a #{kind} chart needs it"}
           | errors
@@ -363,6 +326,45 @@ defmodule Fude.Spec do
       end)
 
     {layer, errors}
+  end
+
+  # A key of a layer: a channel, an option, or an error.
+  defp load_key({"tooltip", value}, {layer, errors}, %{channels: %{"tooltip" => _}} = keys),
+    do: load_tooltip(value, keys.path ++ ["tooltip"], layer, errors)
+
+  defp load_key({key, value}, {layer, errors}, %{channels: channels} = keys)
+       when is_map_key(channels, key) do
+    case load_channel(value, keys.path ++ [key]) do
+      {:ok, channel} ->
+        {%{layer | channels: Map.put(layer.channels, channels[key], channel)}, errors}
+
+      {:error, more} ->
+        {layer, more ++ errors}
+    end
+  end
+
+  defp load_key({key, value}, {layer, errors}, %{options: options} = keys)
+       when is_map_key(options, key) do
+    {atom, check} = options[key]
+
+    case load_option(check, value) do
+      {:ok, value} ->
+        {%{layer | options: Map.put(layer.options, atom, value)}, errors}
+
+      :error ->
+        message = "must be #{Layer.describe(check)}, got: #{inspect(value)}"
+        {layer, [%{path: keys.path ++ [key], message: message} | errors]}
+    end
+  end
+
+  defp load_key({key, _value}, {layer, errors}, keys) do
+    names = Map.keys(keys.channels) ++ Map.keys(keys.options)
+
+    message =
+      "is not a key of a #{keys.kind} chart; it takes #{Enum.join(names, ", ")}" <>
+        Fude.Names.suggest(key, names)
+
+    {layer, [%{path: keys.path ++ [key], message: message} | errors]}
   end
 
   defp load_option({:in, values} = check, value) when is_binary(value) do

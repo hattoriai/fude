@@ -33,7 +33,7 @@ defmodule Fude.Test do
     end
   end
 
-  @doc "The chart's kind: `\"bar\"`, `\"line\"`..."
+  @doc ~s|The chart's kind: `"bar"`, `"line"`...|
   @spec kind(view(), String.t()) :: String.t()
   def kind(view, id), do: chart(view, id)["kind"]
 

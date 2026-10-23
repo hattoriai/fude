@@ -19,7 +19,7 @@ defmodule Fude.Compile do
   @spec compile(Chart.t(), map()) :: result()
   def compile(%Chart{} = chart, datasets \\ %{}) do
     datasets = Map.merge(chart.datasets, Map.new(datasets, fn {k, v} -> {to_string(k), v} end))
-    data = datasets |> Map.get(chart.data) |> Data.new()
+    data = datasets |> Map.get(chart.data) |> Data.new(fields(chart))
 
     with :ok <- check_fields(chart, data) do
       {:ok, build(chart, data)}
@@ -31,6 +31,16 @@ defmodule Fude.Compile do
         "Fude: " <> message -> {:error, [message]}
         _ -> reraise error, __STACKTRACE__
       end
+  end
+
+  # The fields that the chart reads.
+  defp fields(%Chart{layers: layers}) do
+    for %Layer{channels: channels} <- layers,
+        {_name, channel} <- channels,
+        %Channel{field: field} <- List.wrap(channel),
+        is_binary(field),
+        uniq: true,
+        do: field
   end
 
   @doc false
@@ -152,86 +162,156 @@ defmodule Fude.Compile do
   # values of a group when its channel has no aggregate, so that a bar is
   # one bar.
   defp rows(%Layer{kind: kind, channels: channels}, data) do
-    channels = Map.delete(channels, :tooltip) |> Map.to_list()
+    channels = channels |> Map.delete(:tooltip) |> Map.to_list()
 
     bins =
       Map.new(for {name, %Channel{bin: bin} = c} <- channels, bin, do: {name, bin_spec(c, data)})
 
-    values =
-      Enum.map(0..(data.count - 1)//1, fn index ->
-        Map.new(channels, fn {name, channel} ->
-          {name, row_value(channel, data, index, bins[name])}
-        end)
-      end)
-
-    # A layer of constants only (a rule at y: 1000) is one row.
-    values =
-      if Enum.all?(channels, fn {_name, channel} ->
-           is_nil(channel.field) and channel.aggregate != :count
-         end),
-         do: [Map.new(channels, fn {name, channel} -> {name, channel.value} end)],
-         else: values
-
-    implicit = if kind in [:bar, :area, :heatmap, :pie, :donut], do: :sum
-
-    aggregated =
-      for {name, %Channel{} = channel} <- channels,
-          channel.aggregate ||
-            (implicit && name in value_channels(kind) && channel.field && !channel.bin),
-          into: %{},
-          do: {name, channel.aggregate || implicit}
+    aggregated = aggregated(kind, channels)
 
     rows =
-      if aggregated == %{} do
-        values
-      else
-        keys = for {name, _channel} <- channels, not Map.has_key?(aggregated, name), do: name
+      cond do
+        constants?(channels) ->
+          [Map.new(channels, fn {name, channel} -> {name, channel.value} end)]
 
-        values
-        |> Enum.group_by(&Map.take(&1, keys))
-        |> Enum.map(fn {key, group} ->
-          Map.merge(
-            key,
-            Map.new(aggregated, fn {name, fun} ->
-              {name, aggregate(fun, Enum.map(group, & &1[name]))}
-            end)
-          )
-        end)
-        |> order_groups(values, keys)
+        aggregated == %{} ->
+          names = Enum.map(channels, &elem(&1, 0))
+
+          channels
+          |> Enum.map(fn {name, channel} -> column(channel, data, bins[name]) end)
+          |> Enum.zip_with(&(names |> Enum.zip(&1) |> Map.new()))
+
+        true ->
+          group(channels, data, bins, aggregated)
       end
 
     %{rows: rows, bins: bins}
   end
 
+  # A layer of constants only (a rule at y: 1000) is one row.
+  defp constants?(channels),
+    do: Enum.all?(channels, fn {_name, c} -> is_nil(c.field) and c.aggregate != :count end)
+
+  # The channels that are aggregated, and how: by their own aggregate, or by
+  # a sum for the value of a bar, an area, a cell or a slice.
+  defp aggregated(kind, channels) do
+    implicit = if kind in [:bar, :area, :heatmap, :pie, :donut], do: :sum
+
+    for {name, %Channel{} = channel} <- channels,
+        fun = channel.aggregate || implicit_aggregate(implicit, kind, name, channel),
+        into: %{},
+        do: {name, fun}
+  end
+
+  defp implicit_aggregate(nil, _kind, _name, _channel), do: nil
+
+  defp implicit_aggregate(implicit, kind, name, %Channel{field: field, bin: bin}) do
+    if name in value_channels(kind) and field != nil and !bin, do: implicit
+  end
+
+  # The rows grouped by the channels that are not aggregated, each group one
+  # row with the aggregates of the others, in the order of its first row
+  # (the order of the query). One pass over the columns, with a running
+  # aggregate for each group: no map is made for a row.
+  defp group(channels, data, bins, aggregated) do
+    {keys, aggs} =
+      Enum.split_with(channels, fn {name, _} -> not Map.has_key?(aggregated, name) end)
+
+    key_names = Enum.map(keys, &elem(&1, 0))
+    funs = Enum.map(aggs, fn {name, _} -> {name, Map.fetch!(aggregated, name)} end)
+
+    key_tuples = tuples(keys, data, bins)
+    value_tuples = tuples(aggs, data, bins)
+    start = funs |> Enum.map(fn {_name, fun} -> start(fun) end) |> List.to_tuple()
+
+    {groups, _index} =
+      key_tuples
+      |> Enum.zip(value_tuples)
+      |> Enum.reduce({%{}, 0}, fn {key, values}, {groups, index} ->
+        groups =
+          case groups do
+            %{^key => {first, acc}} -> %{groups | key => {first, step(funs, acc, values)}}
+            _ -> Map.put(groups, key, {index, step(funs, start, values)})
+          end
+
+        {groups, index + 1}
+      end)
+
+    groups
+    |> Enum.sort_by(fn {_key, {first, _acc}} -> first end)
+    |> Enum.map(fn {key, {_first, acc}} ->
+      key_names
+      |> Enum.zip(Tuple.to_list(key))
+      |> Map.new()
+      |> Map.merge(finish(funs, acc))
+    end)
+  end
+
+  # The values of channels as one tuple per row.
+  defp tuples([], data, _bins), do: List.duplicate({}, data.count)
+
+  defp tuples(channels, data, bins) do
+    channels
+    |> Enum.map(fn {name, channel} -> column(channel, data, bins[name]) end)
+    |> Enum.zip()
+  end
+
+  defp step(funs, acc, values) do
+    funs
+    |> Enum.with_index()
+    |> Enum.reduce(acc, fn {{_name, fun}, i}, acc ->
+      put_elem(acc, i, add(fun, elem(acc, i), elem(values, i)))
+    end)
+  end
+
+  defp finish(funs, acc) do
+    funs
+    |> Enum.with_index()
+    |> Map.new(fn {{name, fun}, i} -> {name, done(fun, elem(acc, i))} end)
+  end
+
+  # The running aggregates: a start, a step for each value, and the end.
+  defp start(:count), do: 0
+  defp start(:mean), do: {0, 0}
+  defp start(fun) when fun in [:median, :distinct], do: []
+  defp start(_fun), do: nil
+
+  defp add(_fun, acc, nil), do: acc
+  defp add(:count, acc, _value), do: acc + 1
+  defp add(fun, acc, value) when fun in [:median, :distinct], do: [value | acc]
+  defp add(_fun, acc, value) when not is_number(value), do: acc
+  defp add(:sum, acc, value), do: (acc || 0) + value
+  defp add(:min, acc, value), do: if(acc == nil or value < acc, do: value, else: acc)
+  defp add(:max, acc, value), do: if(acc == nil or value > acc, do: value, else: acc)
+  defp add(:mean, {sum, n}, value), do: {sum + value, n + 1}
+
+  defp done(:mean, {_sum, 0}), do: nil
+  defp done(:mean, {sum, n}), do: sum / n
+  defp done(fun, values) when fun in [:median, :distinct], do: aggregate(fun, values)
+  defp done(_fun, acc), do: acc
+
   defp value_channels(kind) when kind in [:pie, :donut], do: [:value]
   defp value_channels(:heatmap), do: [:color]
   defp value_channels(_kind), do: [:y]
 
-  # Groups keep the order of their first row: the order of the query.
-  defp order_groups(groups, values, keys) do
-    order =
-      values
-      |> Enum.map(&Map.take(&1, keys))
-      |> Enum.with_index()
-      |> Enum.reduce(%{}, fn {key, index}, acc -> Map.put_new(acc, key, index) end)
+  defp column(%Channel{aggregate: :count, field: nil}, data, _bins),
+    do: List.duplicate(1, data.count)
 
-    Enum.sort_by(groups, &Map.get(order, Map.take(&1, keys)))
+  defp column(%Channel{value: value, field: nil}, data, _bins),
+    do: List.duplicate(value, data.count)
+
+  defp column(%Channel{field: field, time: nil}, data, nil), do: Map.fetch!(data.columns, field)
+
+  defp column(%Channel{field: field, time: unit}, data, nil) do
+    data.columns
+    |> Map.fetch!(field)
+    |> Enum.map(&if(is_integer(&1), do: Rules.floor(&1, unit), else: &1))
   end
 
-  defp row_value(%Channel{aggregate: :count, field: nil}, _data, _index, _bin), do: 1
-  defp row_value(%Channel{value: value, field: nil}, _data, _index, _bin), do: value
-
-  defp row_value(%Channel{field: field, time: unit}, data, index, nil) do
-    value = data.columns |> Map.fetch!(field) |> Enum.at(index)
-
-    if unit && is_integer(value), do: Rules.floor(value, unit), else: value
-  end
-
-  defp row_value(%Channel{field: field}, data, index, bins) do
-    case data.columns |> Map.fetch!(field) |> Enum.at(index) do
-      value when is_number(value) -> Rules.bin(bins, value)
-      _ -> nil
-    end
+  defp column(%Channel{field: field}, data, bins) do
+    data.columns
+    |> Map.fetch!(field)
+    |> Enum.map(&if(is_number(&1), do: Rules.bin(bins, &1)))
   end
 
   defp bin_spec(%Channel{field: field, bin: bin}, data) do
@@ -504,45 +584,41 @@ defmodule Fude.Compile do
   defp stack(rows, _by, false), do: {rows, extent(rows, :y)}
 
   defp stack(rows, by, mode) do
-    {stacked, _} =
-      Enum.map_reduce(rows, %{}, fn row, acc ->
-        value = row[:y] || 0
-        {pos, neg} = Map.get(acc, row[by], {0, 0})
-
-        if value >= 0 do
-          {Map.merge(row, %{y0: pos, y1: pos + value}), Map.put(acc, row[by], {pos + value, neg})}
-        else
-          {Map.merge(row, %{y0: neg, y1: neg + value}), Map.put(acc, row[by], {pos, neg + value})}
-        end
-      end)
-
-    stacked =
-      case mode do
-        :normalize ->
-          totals =
-            Enum.group_by(stacked, & &1[by], &abs(&1[:y] || 0))
-            |> Map.new(fn {k, v} -> {k, Enum.sum(v)} end)
-
-          Enum.map(stacked, fn row ->
-            total = totals[row[by]]
-            if total > 0, do: %{row | y0: row.y0 / total, y1: row.y1 / total}, else: row
-          end)
-
-        :center ->
-          totals =
-            Enum.group_by(stacked, & &1[by], &(&1[:y] || 0))
-            |> Map.new(fn {k, v} -> {k, Enum.sum(v)} end)
-
-          Enum.map(stacked, fn row ->
-            %{row | y0: row.y0 - totals[row[by]] / 2, y1: row.y1 - totals[row[by]] / 2}
-          end)
-
-        _ ->
-          stacked
-      end
-
+    {stacked, _} = Enum.map_reduce(rows, %{}, &stack_row(&1, &2, by))
+    stacked = offset(stacked, by, mode)
     values = Enum.flat_map(stacked, &[&1.y0, &1.y1])
     {stacked, if(values == [], do: nil, else: Enum.min_max(values))}
+  end
+
+  defp stack_row(row, acc, by) do
+    value = row[:y] || 0
+    {pos, neg} = Map.get(acc, row[by], {0, 0})
+
+    if value >= 0,
+      do:
+        {Map.merge(row, %{y0: pos, y1: pos + value}), Map.put(acc, row[by], {pos + value, neg})},
+      else:
+        {Map.merge(row, %{y0: neg, y1: neg + value}), Map.put(acc, row[by], {pos, neg + value})}
+  end
+
+  # A stack to 100%, or around its middle.
+  defp offset(stacked, by, :normalize) do
+    totals = totals(stacked, by, &abs(&1[:y] || 0))
+    Enum.map(stacked, &share(&1, totals[&1[by]]))
+  end
+
+  defp offset(stacked, by, :center) do
+    totals = totals(stacked, by, &(&1[:y] || 0))
+    Enum.map(stacked, &%{&1 | y0: &1.y0 - totals[&1[by]] / 2, y1: &1.y1 - totals[&1[by]] / 2})
+  end
+
+  defp offset(stacked, _by, _mode), do: stacked
+
+  defp share(row, total) when total > 0, do: %{row | y0: row.y0 / total, y1: row.y1 / total}
+  defp share(row, _total), do: row
+
+  defp totals(rows, by, value) do
+    rows |> Enum.group_by(& &1[by], value) |> Map.new(fn {k, v} -> {k, Enum.sum(v)} end)
   end
 
   # -- Scales ------------------------------------------------------------------
@@ -630,25 +706,9 @@ defmodule Fude.Compile do
     time = channel.field && Data.field(data, channel.field) |> then(&(&1 && &1.type == :time))
 
     values =
-      cond do
-        is_list(channel.sort) ->
-          channel.sort ++ (values -- channel.sort)
-
-        time ->
-          Enum.sort(values)
-
-        channel.sort == :ascending ->
-          Enum.sort(values)
-
-        channel.sort == :descending ->
-          Enum.sort(values, :desc)
-
-        channel.sort in [:x, :y, :"-x", :"-y"] ->
-          sort_by_channel(values, rows, name, channel.sort, channels)
-
-        true ->
-          values
-      end
+      if time == true and not is_list(channel.sort),
+        do: Enum.sort(values),
+        else: order(values, channel.sort, rows, name, channels)
 
     %{
       "type" => "band",
@@ -658,6 +718,19 @@ defmodule Fude.Compile do
       "format" => format(channel)
     }
   end
+
+  # Categories in an order: as given, sorted, by another channel, or in the
+  # order of their first row.
+  defp order(values, sort, _rows, _name, _channels) when is_list(sort),
+    do: sort ++ (values -- sort)
+
+  defp order(values, :ascending, _rows, _name, _channels), do: Enum.sort(values)
+  defp order(values, :descending, _rows, _name, _channels), do: Enum.sort(values, :desc)
+
+  defp order(values, sort, rows, name, channels) when sort in [:x, :y, :"-x", :"-y"],
+    do: sort_by_channel(values, rows, name, sort, channels)
+
+  defp order(values, _sort, _rows, _name, _channels), do: values
 
   defp sort_by_channel(values, rows, name, sort, _channels) do
     {by, order} =
@@ -691,13 +764,7 @@ defmodule Fude.Compile do
     else
       values = rows |> Enum.map(& &1[:color]) |> Enum.reject(&is_nil/1) |> Enum.uniq()
 
-      values =
-        cond do
-          is_list(channel.sort) -> channel.sort ++ (values -- channel.sort)
-          channel.sort == :ascending -> Enum.sort(values)
-          channel.sort == :descending -> Enum.sort(values, :desc)
-          true -> values
-        end
+      values = order(values, channel.sort, rows, :color, nil)
 
       Map.put(scales, "color", %{
         "type" => "ordinal",
@@ -759,13 +826,16 @@ defmodule Fude.Compile do
     %{rows: rows, mark: mark} = table
     swap = Map.get(table, :horizontal, false)
 
+    # Every row of a layer has the same keys.
+    present = rows |> List.first(%{}) |> Map.keys()
+
     columns =
       [:x, :x2, :y, :y0, :y1, :color, :size, :value, :a0, :a1, :text]
-      |> Enum.filter(fn name -> Enum.any?(rows, &Map.has_key?(&1, name)) end)
+      |> Enum.filter(&(&1 in present))
       |> Map.new(fn name ->
         target = column_name(name, swap)
-        scale = scales[scale_name(target)]
-        {Atom.to_string(target), Enum.map(rows, &encode_value(&1[name], scale))}
+        encode = encoder(scales[scale_name(target)])
+        {Atom.to_string(target), Enum.map(rows, &encode.(&1[name]))}
       end)
 
     tooltip = tooltip(table, rows)
@@ -796,13 +866,14 @@ defmodule Fude.Compile do
   defp scale_name(name) when name in [:y, :y0, :y1, :y2], do: "y"
   defp scale_name(name), do: Atom.to_string(name)
 
-  defp encode_value(nil, _scale), do: nil
+  # A category goes as its index in its scale's domain, found in a map of
+  # the domain; any other value as it is.
+  defp encoder(%{"type" => type, "domain" => domain}) when type in ["band", "point", "ordinal"] do
+    index = domain |> Enum.with_index() |> Map.new()
+    &(&1 && Map.get(index, &1))
+  end
 
-  defp encode_value(value, %{"type" => type, "domain" => domain})
-       when type in ["band", "point", "ordinal"],
-       do: Enum.find_index(domain, &(&1 == value))
-
-  defp encode_value(value, _scale), do: value
+  defp encoder(_scale), do: & &1
 
   # The fields of the tooltip beyond the channels: their titles, formats
   # and values, by row.

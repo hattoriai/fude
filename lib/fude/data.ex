@@ -23,97 +23,111 @@ defmodule Fude.Data do
   @type field :: %{name: String.t(), type: type(), unit: :day | :month | :year | nil}
 
   @type t :: %__MODULE__{
+          names: [String.t()],
           fields: [field()],
           columns: %{String.t() => [term()]},
           count: non_neg_integer()
         }
 
-  defstruct fields: [], columns: %{}, count: 0
+  defstruct names: [], fields: [], columns: %{}, count: 0
 
-  @doc "The data in columns. Raises an `ArgumentError` when it is none of the forms above."
-  @spec new(term()) :: t()
-  def new(%__MODULE__{} = data), do: data
-  def new(nil), do: %__MODULE__{}
+  @doc """
+  The data in columns. With `only` (names), it reads only those fields: a
+  chart reads the few it draws of a query's many. Raises an
+  `ArgumentError` when the data is none of the forms above.
+  """
+  @spec new(term(), [String.t()] | nil) :: t()
+  def new(data, only \\ nil)
+  def new(%__MODULE__{} = data, _only), do: data
+  def new(nil, _only), do: %__MODULE__{}
 
-  def new(%{columns: columns, rows: rows}) when is_list(columns) and is_list(rows),
-    do: from_rows(Enum.map(columns, &to_string/1), rows)
+  def new(%{columns: columns, rows: rows}, only) when is_list(columns) and is_list(rows),
+    do: from_rows(Enum.map(columns, &to_string/1), rows, only)
 
-  def new(%{"columns" => columns, "rows" => rows}) when is_list(columns) and is_list(rows),
-    do: from_rows(Enum.map(columns, &to_string/1), rows)
+  def new(%{"columns" => columns, "rows" => rows}, only) when is_list(columns) and is_list(rows),
+    do: from_rows(Enum.map(columns, &to_string/1), rows, only)
 
-  def new(rows) when is_list(rows) do
-    names =
+  def new(rows, only) when is_list(rows) do
+    # The fields: every key of every row, by its name, with the key that
+    # the rows have (an atom or a string), in the order of their names.
+    # Merging the rows gives every key of every row, fast.
+    keys =
       rows
-      |> Enum.reduce({[], MapSet.new()}, fn row, acc ->
-        Enum.reduce(keys(row), acc, &add_name/2)
+      |> Enum.reduce(%{}, fn
+        row, acc when is_map(row) and not is_struct(row) ->
+          Map.merge(acc, row)
+
+        row, _acc ->
+          raise ArgumentError,
+                "Fude: each row of a chart's data is a map, got: #{inspect(row, limit: 5)}"
       end)
-      |> elem(0)
-      |> Enum.reverse()
+      |> Map.keys()
+      |> Map.new(&{to_string(&1), &1})
+
+    names = keys |> Map.keys() |> Enum.sort()
 
     columns =
-      Map.new(names, fn name ->
-        {name, Enum.map(rows, &fetch(&1, name))}
-      end)
+      Map.new(read(names, only), fn name -> {name, key_column(rows, Map.fetch!(keys, name))} end)
 
     build(names, columns, length(rows))
   end
 
-  def new(other) do
+  def new(other, _only) do
     raise ArgumentError,
           "Fude: the data of a chart is a list of maps or a map of :columns and :rows, got: #{inspect(other, limit: 5)}"
   end
 
-  defp keys(row) when is_map(row), do: row |> Map.keys() |> Enum.sort_by(&to_string/1)
+  # A field's values, by its key; a row with the other form of the key (a
+  # string where most have an atom) is read by that.
+  defp key_column(rows, key) do
+    other = if is_atom(key), do: Atom.to_string(key), else: String.to_existing_atom(key)
 
-  defp keys(row),
-    do:
-      raise(
-        ArgumentError,
-        "Fude: each row of a chart's data is a map, got: #{inspect(row, limit: 5)}"
-      )
-
-  defp add_name(key, {names, seen}) do
-    name = to_string(key)
-
-    if MapSet.member?(seen, name),
-      do: {names, seen},
-      else: {[name | names], MapSet.put(seen, name)}
+    Enum.map(rows, fn
+      %{^key => value} -> value
+      row -> Map.get(row, other)
+    end)
+  rescue
+    ArgumentError -> Enum.map(rows, &Map.get(&1, key))
   end
 
-  # A row's value of a field, by its string key or its atom key.
-  defp fetch(row, name) do
-    case Map.fetch(row, name) do
-      {:ok, value} ->
-        value
+  # The rows of a query result, turned into columns in one pass.
+  defp from_rows(names, rows, only) do
+    wanted = MapSet.new(read(names, only))
 
-      :error ->
-        Enum.find_value(row, fn {key, value} ->
-          if is_atom(key) and Atom.to_string(key) == name, do: {value}
-        end)
-        |> case do
-          {value} -> value
-          nil -> nil
-        end
-    end
-  end
+    columns =
+      case rows do
+        [] -> List.duplicate([], length(names))
+        rows -> rows |> Enum.map(&List.to_tuple/1) |> transpose(length(names))
+      end
 
-  defp from_rows(names, rows) do
     columns =
       names
-      |> Enum.with_index()
-      |> Map.new(fn {name, index} -> {name, Enum.map(rows, &Enum.at(List.wrap(&1), index))} end)
+      |> Enum.zip(columns)
+      |> Enum.filter(fn {name, _values} -> MapSet.member?(wanted, name) end)
+      |> Map.new()
 
     build(names, columns, length(rows))
   end
 
+  defp transpose(tuples, width) do
+    for index <- 0..(width - 1)//1 do
+      Enum.map(tuples, &if(tuple_size(&1) > index, do: elem(&1, index)))
+    end
+  end
+
+  defp read(names, nil), do: names
+  defp read(names, only), do: Enum.filter(names, &(&1 in only))
+
   defp build(names, columns, count) do
     {fields, columns} =
-      Enum.map_reduce(names, columns, fn name, columns ->
+      names
+      |> Enum.filter(&Map.has_key?(columns, &1))
+      |> Enum.map_reduce(columns, fn name, columns ->
         {field, values} = normalize(name, Map.fetch!(columns, name))
         {field, Map.put(columns, name, values)}
       end)
 
-    %__MODULE__{fields: fields, columns: columns, count: count}
+    %__MODULE__{names: names, fields: fields, columns: columns, count: count}
   end
 
   defp normalize(name, values) do
@@ -190,7 +204,7 @@ defmodule Fude.Data do
 
   @doc "The names of the fields, in order."
   @spec names(t()) :: [String.t()]
-  def names(%__MODULE__{fields: fields}), do: Enum.map(fields, & &1.name)
+  def names(%__MODULE__{names: names}), do: names
 
   @doc "The values of a field."
   @spec column(t(), String.t()) :: [term()]
