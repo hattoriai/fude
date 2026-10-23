@@ -91,7 +91,10 @@ if Code.ensure_loaded?(Issho.Tool) do
       "time" (year, quarter, month, week, day, hour, minute), "bin",
       "format", "digits" (decimals, 0 to 20), "scheme" (a color's: blue, green,
       orange, purple, gray, viridis, red_blue, red_green, categorical,
-      okabe_ito, or a list of colors), "mid", "title", "sort", "stack"}.
+      okabe_ito, or a list of colors), "mid", "title", "sort", "stack"}. A
+      tooltip's list may end with what it adds: {"change", "share", "rank",
+      "history"}, each true or false. A chart may have "animate" (false, or
+      {"duration": ms}) and "frame" (a label for a sequence of renders).
       """,
       annotations: [destructive: true]
 

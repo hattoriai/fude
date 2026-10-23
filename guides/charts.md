@@ -114,6 +114,25 @@ region sums them), a field takes its own aggregate when it has one
 (`{:max, :orders}`), else the sum of its numbers, else its first value.
 On a crosshair, each series has its fields, named by it.
 
+A tooltip can also answer the reader's next question, from data the
+browser already has. Put what it adds in the same list:
+
+```elixir
+Fude.line(revenue, x: :month, y: :revenue, color: :channel, tooltip: [change: true])
+Fude.bar(sales, x: :region, y: :revenue, tooltip: [:manager, rank: true, history: true])
+```
+
+| Key | Adds, under the mark's value |
+| --- | --- |
+| `change: true` | its change from the series' point before: "▲ 12.4% vs February 2026", green up and red down (`--fude-up`, `--fude-down`) |
+| `share: true` | its share of the whole: "34% of March" for a stacked segment, "21% of total" for a bar; the default on stacked marks (`share: false` takes it off); a slice has its share already |
+| `rank: true` | its rank in its series: "#2 of 14" |
+| `history: true` | a small line of its series, with the hovered mark on it: the shape of a series of bars, or of a heatmap's row |
+
+On a crosshair, each series has its change and its share; a history is
+for a hovered mark. In a spec, they go at the end of the `"tooltip"`
+list, as a map: `"tooltip": ["manager", {"rank": true}]`.
+
 ## Colors
 
 A `color` channel takes its colors from a `scheme`, by name, each in
@@ -189,6 +208,15 @@ Fude.layers(months, [
 Every function takes `:title`, `:subtitle`, `:caption`, `:source`,
 `:description` (what a screen reader says; Fude writes one when it is not
 given) and `:height`. See [Telling the story](story.md).
+
+## Motion
+
+A chart's marks move to their new places when its data changes (see
+[Live](live.md)). `animate` sets it for a chart: `true` (the default, for
+as long as `--fude-duration`), `false` (no motion, on the first draw or
+after), or `[duration: 800]`, in milliseconds. `<.chart animate={false}>`
+sets it for one page, over the chart's. A reader who asks for reduced
+motion has none, whatever the chart says.
 
 ## When a chart cannot draw
 

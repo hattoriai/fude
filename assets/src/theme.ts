@@ -22,6 +22,8 @@ export interface Theme {
   gap: number;
   line: number;
   duration: number;
+  /** The reader asks for reduced motion: nothing moves, whatever the chart says. */
+  reduced: boolean;
 }
 
 // A sequential ramp of one hue, light to dark, in steps that are each told
@@ -90,6 +92,7 @@ export function readTheme(el: Element): Theme {
     gap: num("--fude-gap", 2),
     line: num("--fude-line", 2),
     duration: reduced ? 0 : num("--fude-duration", 450),
+    reduced,
   };
 }
 

@@ -79,6 +79,8 @@ defmodule Fude.Spec do
       |> put_words(chart)
       |> put_unless("data", chart.data, "data")
       |> put_unless("height", chart.height, nil)
+      |> put_unless("animate", dump_animate(chart.animate), true)
+      |> put_unless("frame", chart.frame, nil)
       |> put_unless("annotations", Enum.map(chart.annotations, &Fude.Annotation.dump/1), [])
       |> put_unless("facet", dump_facet(chart.facet), nil)
 
@@ -105,6 +107,9 @@ defmodule Fude.Spec do
     end)
   end
 
+  defp dump_animate(%{duration: ms}), do: %{"duration" => ms}
+  defp dump_animate(animate), do: animate
+
   defp dump_facet(nil), do: nil
   defp dump_facet(%{field: field, columns: nil}), do: %{"field" => field}
 
@@ -115,11 +120,19 @@ defmodule Fude.Spec do
   defp put_unless(map, key, value, _default), do: Map.put(map, key, value)
 
   defp dump_layer(%Layer{id: id, kind: kind, channels: channels, options: options}) do
+    {tips, options} = Map.pop(options, :tips)
+
     channels =
       Map.new(channels, fn
         {:tooltip, list} -> {"tooltip", Enum.map(list, &dump_channel/1)}
         {name, channel} -> {Atom.to_string(name), dump_channel(channel)}
       end)
+
+    # What the tooltip adds goes at the end of its list, as a map.
+    channels =
+      if tips,
+        do: Map.update(channels, "tooltip", [dump_tips(tips)], &(&1 ++ [dump_tips(tips)])),
+        else: channels
 
     options = Map.new(options, fn {key, value} -> {Atom.to_string(key), dump_value(value)} end)
 
@@ -156,6 +169,8 @@ defmodule Fude.Spec do
         {Atom.to_string(key), dump_value(value)}
     end)
   end
+
+  defp dump_tips(tips), do: Map.new(tips, fn {key, value} -> {Atom.to_string(key), value} end)
 
   defp dump_value(value) when is_boolean(value) or is_nil(value), do: value
   defp dump_value(value) when is_atom(value), do: Atom.to_string(value)
@@ -219,7 +234,7 @@ defmodule Fude.Spec do
      [%{path: ["fude"], message: "is missing: a Fude spec carries its version, \"fude\" => 1"}]}
   end
 
-  @chart_keys ~w(fude title subtitle caption source description data height layers datasets annotations facet)
+  @chart_keys ~w(fude title subtitle caption source description data height animate frame layers datasets annotations facet)
 
   defp load_chart(spec) do
     acc = {%Chart{}, []}
@@ -243,6 +258,15 @@ defmodule Fude.Spec do
 
         {"height", height}, acc ->
           height(height, acc)
+
+        {"animate", animate}, acc ->
+          animate(animate, acc)
+
+        {"frame", frame}, {chart, errors} when is_binary(frame) or is_nil(frame) ->
+          {%{chart | frame: frame}, errors}
+
+        {"frame", frame}, acc ->
+          error(acc, ["frame"], "must be text, got: #{inspect(frame)}")
 
         {"annotations", list}, acc ->
           annotations(list, acc)
@@ -289,6 +313,21 @@ defmodule Fude.Spec do
 
   defp data_name(name, acc),
     do: error(acc, ["data"], "must be the name of the data, got: #{inspect(name)}")
+
+  defp animate(animate, {chart, errors}) when is_boolean(animate),
+    do: {%{chart | animate: animate}, errors}
+
+  defp animate(%{"duration" => ms} = animate, {chart, errors})
+       when map_size(animate) == 1 and is_integer(ms) and ms >= 0 and ms <= 10_000,
+       do: {%{chart | animate: %{duration: ms}}, errors}
+
+  defp animate(animate, acc),
+    do:
+      error(
+        acc,
+        ["animate"],
+        "must be true, false or {\"duration\": ms} (0 to 10000), got: #{inspect(animate)}"
+      )
 
   defp height(height, {chart, errors}) when is_integer(height) and height > 0,
     do: {%{chart | height: height}, errors}
@@ -443,23 +482,73 @@ defmodule Fude.Spec do
     do: if(Layer.check_option(check, value), do: {:ok, value}, else: :error)
 
   defp load_tooltip(list, path, layer, errors) when is_list(list) do
-    {channels, errors} =
+    {channels, tips, errors} =
       list
       |> Enum.with_index()
-      |> Enum.reduce({[], errors}, fn {value, index}, {channels, errors} ->
-        case load_channel(value, path ++ [index]) do
-          {:ok, channel} -> {[channel | channels], errors}
-          {:error, more} -> {channels, more ++ errors}
-        end
-      end)
+      |> Enum.reduce({[], %{}, errors}, &load_tooltip_entry(&1, &2, path))
 
-    {%{layer | channels: Map.put(layer.channels, :tooltip, Enum.reverse(channels))}, errors}
+    layer =
+      if channels == [],
+        do: layer,
+        else: %{layer | channels: Map.put(layer.channels, :tooltip, Enum.reverse(channels))}
+
+    layer =
+      if tips == %{}, do: layer, else: %{layer | options: Map.put(layer.options, :tips, tips)}
+
+    {layer, errors}
   end
 
   defp load_tooltip(other, path, layer, errors),
     do:
       {layer,
        [%{path: path, message: "must be a list of channels, got: #{inspect(other)}"} | errors]}
+
+  # A field of a tooltip, or a map of what it adds (`{"change": true}`).
+  defp load_tooltip_entry({value, index}, {channels, tips, errors}, path) do
+    if tips?(value) do
+      case load_tips(value) do
+        {:ok, more} ->
+          {channels, Map.merge(tips, more), errors}
+
+        {:error, message} ->
+          {channels, tips, [%{path: path ++ [index], message: message} | errors]}
+      end
+    else
+      case load_channel(value, path ++ [index]) do
+        {:ok, channel} -> {[channel | channels], tips, errors}
+        {:error, more} -> {channels, tips, more ++ errors}
+      end
+    end
+  end
+
+  # A map of what the tooltip adds (`{"change": true}`): one with no field
+  # or value of a channel.
+  @tip_names Enum.map(Layer.tips(), &Atom.to_string/1)
+
+  defp tips?(map) when is_map(map),
+    do:
+      map != %{} and not Map.has_key?(map, "field") and not Map.has_key?(map, "value") and
+        Enum.any?(Map.keys(map), &(&1 in @tip_names))
+
+  defp tips?(_value), do: false
+
+  defp load_tips(map) do
+    Enum.reduce_while(map, {:ok, %{}}, fn {key, value}, {:ok, acc} ->
+      case Enum.find(Layer.tips(), &(Atom.to_string(&1) == key)) do
+        nil ->
+          {:halt,
+           {:error,
+            "is not what a tooltip adds; it takes #{Enum.join(@tip_names, ", ")}" <>
+              Fude.Names.suggest(key, @tip_names)}}
+
+        tip when is_boolean(value) ->
+          {:cont, {:ok, Map.put(acc, tip, value)}}
+
+        _tip ->
+          {:halt, {:error, "#{key} must be true or false, got: #{inspect(value)}"}}
+      end
+    end)
+  end
 
   @doc false
   # A channel of a spec: a field's name, or a map.

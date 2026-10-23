@@ -34,6 +34,8 @@ export interface Layer {
   options: Record<string, unknown>;
   /** The fields of the tooltip beyond the channels: a value for each row; a time in milliseconds, with its unit ("" for a time of a day). */
   tooltip: { title: string | null; format: string | null; time?: string | null; values?: (number | string | boolean | null)[] }[];
+  /** What the tooltip adds to a mark's values; each unset one takes its default. */
+  tips?: { change?: boolean; share?: boolean; rank?: boolean; history?: boolean } | null;
 }
 
 export interface Single {
@@ -64,6 +66,10 @@ export interface Config {
   annotations?: Annotation[];
   /** False for a panel of small multiples: the legend is the whole chart's. */
   legend?: boolean;
+  /** False for no motion, or a duration of the chart's own; the theme's when not given. */
+  animate?: false | { duration: number } | null;
+  /** The label of a frame of a sequence of renders (a race of bars), large in a corner. */
+  frame?: string | null;
 }
 
 export interface Annotation {

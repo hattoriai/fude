@@ -71,6 +71,23 @@ if Code.ensure_loaded?(Ecto.Query) do
     def names(_source), do: nil
 
     @doc false
+    # Whether a field of the query's schema is a number, which a value
+    # channel sums; a field of a table by its name is taken as one.
+    @spec number?(t(), String.t()) :: boolean()
+    def number?(%__MODULE__{query: %{from: %{source: {_table, schema}}}}, field)
+        when is_atom(schema) and not is_nil(schema) and is_binary(field) do
+      with true <- function_exported?(schema, :__schema__, 2),
+           atom when not is_nil(atom) <-
+             Enum.find(schema.__schema__(:fields), &(Atom.to_string(&1) == field)) do
+        schema.__schema__(:type, atom) in [:integer, :float, :decimal, :id]
+      else
+        _ -> true
+      end
+    end
+
+    def number?(_source, _field), do: true
+
+    @doc false
     # Whether the database can do a layer's work: every aggregate is one
     # that SQL has.
     @spec pushable?(map()) :: boolean()

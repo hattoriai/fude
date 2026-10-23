@@ -9,6 +9,12 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A bubble map colored by a category drew every circle in one color, with
+  no legend (#18): a value channel of text (a map's or a heatmap's color)
+  was summed as if it were a number. It now groups the rows, as a
+  scatter's color does; a color of numbers is still summed. From a
+  `Fude.query/2`, the schema's type of the field says which.
+
 - The fields of a `tooltip` channel never reached the tooltip (#17): only
   their titles went to the browser, and it did not show them. Their
   values now go with each mark (aggregated where a mark groups rows: by
@@ -29,6 +35,22 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (0.125 was 0.125, is 0.13), so that money reads naturally.
 
 ### Added
+
+- Richer tooltips (#15), from data the browser already has: in the
+  `tooltip` list, `change: true` (the change from the series' point
+  before, "▲ 12.4% vs February 2026"), `share: true` (of its stack, "34%
+  of March", or of the total; the default on stacked marks), `rank: true`
+  ("#2 of 14"), and `history: true` (a small line of the series, with the
+  hovered mark). Each on a hovered mark, and for each series on a
+  crosshair; a history on a hovered mark. The tooltip's layout: names on
+  the left that wrap, values on the right in tabular figures, and what it
+  adds under its value. In a spec, a map at the end of `"tooltip"`.
+- Motion (#16): when the order of bars changes, each slides to its new
+  place with its name and its value; bars that leave shrink back to the
+  baseline. `animate: false` or `animate: [duration: ms]` on a chart (and
+  `animate` on `<.chart>`, over it); reduced motion still wins. `frame` on
+  a chart writes a sequence's label large in the plot's corner, for a race
+  of bars. In a spec, `"animate"` and `"frame"`.
 
 - A color scheme for a chart (#7): `scheme` on a `color` channel, by
   name, each in light and dark and readable with the common colour vision

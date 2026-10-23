@@ -82,6 +82,29 @@ test.describe("the gallery", () => {
     await expect.poll(() => page.locator("#revenue-regions").getAttribute("data-fude")).not.toBe(before);
   });
 
+  test("a bar's tooltip adds its share of its stack, its rank and its history", async ({ page }) => {
+    await openPage(page);
+    await pointAt(page, "revenue-regions", 0.36, 0.85);
+    const text = await tooltip(page, "revenue-regions");
+    expect(text).toMatch(/[\d.]+% of (North|South|East|West|Central)/);
+    expect(text).toMatch(/#\d of 5/);
+    await expect(page.locator("#revenue-regions .fude-tooltip-history")).toHaveCount(1);
+  });
+
+  test("a crosshair's tooltip adds each series' change from the point before", async ({ page }) => {
+    await openPage(page);
+    await pointAt(page, "revenue-area", 0.6, 0.5);
+    expect(await tooltip(page, "revenue-area")).toMatch(/[▲▼] [\d.]+% vs /);
+  });
+
+  test("the frame of a sequence of renders is written large, and changes with it", async ({ page }) => {
+    await openPage(page);
+    const frame = page.locator("#regions-horizontal .fude-grid text");
+    await expect(frame).toHaveText("Q1");
+    await page.click("text=Change the data");
+    await expect(frame).toHaveText("Q2");
+  });
+
   test("a chart with a field that is not in the data says why", async ({ page }) => {
     await openPage(page);
     await expect(page.locator("#broken .fude-error")).toHaveText(/did you mean "region"\?/);
