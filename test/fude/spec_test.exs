@@ -52,6 +52,21 @@ defmodule Fude.SpecTest do
       assert message =~ ~s(did you mean "right"?)
     end
 
+    test "writes and reads the align of a single value; a spec without it centers" do
+      chart = Fude.number(nil, value: :mrr, align: :start)
+      spec = Spec.dump(chart)
+      assert %{"kind" => "number", "align" => "start"} = spec
+      assert Spec.load(spec) == {:ok, chart}
+
+      assert {:ok, %Fude.Chart{layers: [%{options: options}]}} =
+               Spec.load(%{"fude" => 1, "kind" => "gauge", "value" => "p"})
+
+      refute Map.has_key?(options, :align)
+
+      assert {:error, [%{path: ["align"]}]} =
+               Spec.load(%{"fude" => 1, "kind" => "trend", "value" => "n", "align" => "left"})
+    end
+
     test "writes a currency as code" do
       chart = Fude.bar(x: :region, y: [field: :revenue, format: {:currency, "EUR"}])
       assert %{"y" => %{"format" => "currency:EUR"}} = Spec.dump(chart)

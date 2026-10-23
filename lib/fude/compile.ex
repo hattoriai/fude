@@ -237,9 +237,14 @@ defmodule Fude.Compile do
       "goal" => if(kind == :progress, do: options[:goal] || 100),
       "min" => if(kind == :gauge, do: options[:min] || 0),
       "max" => if(kind == :gauge, do: options[:max] || 100),
-      "target" => options[:target]
+      "target" => options[:target],
+      "align" => align(options)
     }
   end
+
+  # A single value is centered in its box unless it says otherwise.
+  defp align(%{align: align}), do: Atom.to_string(align)
+  defp align(_options), do: "center"
 
   defp first_value(%Channel{value: value}, _data) when not is_nil(value), do: value
 
@@ -1285,7 +1290,8 @@ defmodule Fude.Compile do
   @days ~w(day week month quarter year)
 
   defp cell_value(value, %{"type" => "time", "unit" => unit})
-       when is_integer(value) and unit in @days, do: day(value)
+       when is_integer(value) and unit in @days,
+       do: day(value)
 
   defp cell_value(value, %{"time" => unit}) when is_integer(value) and unit in @days,
     do: day(value)

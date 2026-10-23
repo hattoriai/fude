@@ -87,7 +87,13 @@ defmodule Fude.Components do
       <p :if={@errors != []} class="fude-error" role="alert">
         {Enum.join(@errors, ". ")}
       </p>
-      <.single :if={@wire["single"]} id={@id} single={@wire["single"]} kind={@kind} />
+      <.single
+        :if={@wire["single"]}
+        id={@id}
+        single={@wire["single"]}
+        kind={@kind}
+        height={@height || @wire["height"]}
+      />
       <div
         :if={@errors == [] and @wire["layers"] && !@wire["facet"]}
         id={"#{@id}-plot"}
@@ -205,54 +211,68 @@ defmodule Fude.Components do
   attr :id, :string, required: true
   attr :single, :map, required: true
   attr :kind, :string, required: true
+  attr :height, :integer, default: nil
 
-  defp single(%{kind: "gauge"} = assigns) do
+  # A single value: centered in its box and sized to it (container queries
+  # on the box, in the CSS), or at the start at a fixed size. A centered
+  # value takes the chart's height as its box's, when it has one.
+  defp single(assigns) do
+    center? = assigns.single["align"] != "start"
+
+    assigns =
+      assign(assigns,
+        class: if(center?, do: "fude-single-center", else: "fude-single-start"),
+        style: if(center? and assigns.height, do: "height: #{assigns.height}px"),
+        text: plain(assigns.single["value"]) || "—"
+      )
+
+    single_value(assigns)
+  end
+
+  defp single_value(%{kind: "gauge"} = assigns) do
     assigns = assign(assigns, :gauge, gauge(assigns.single))
 
     ~H"""
     <div
-      class="fude-single fude-gauge"
+      class={["fude-single", "fude-gauge", @class]}
+      style={@style}
       role="meter"
       aria-valuemin={@single["min"]}
       aria-valuemax={@single["max"]}
       aria-valuenow={@single["value"]}
       aria-label={@single["label"]}
     >
-      <svg viewBox="0 0 200 112" aria-hidden="true">
-        <path class="fude-gauge-track" d={@gauge.track} />
-        <path :if={@gauge.value} class="fude-gauge-value" d={@gauge.value} />
-        <line
-          :if={@gauge.target}
-          class="fude-gauge-target"
-          x1={elem(@gauge.target, 0)}
-          y1={elem(@gauge.target, 1)}
-          x2={elem(@gauge.target, 2)}
-          y2={elem(@gauge.target, 3)}
-        />
-      </svg>
-      <data class="fude-value" value={plain(@single["value"])} data-format={@single["format"]}>
-        {plain(@single["value"]) || "—"}
-      </data>
+      <div class="fude-dial">
+        <svg viewBox="0 0 200 112" aria-hidden="true">
+          <path class="fude-gauge-track" d={@gauge.track} />
+          <path :if={@gauge.value} class="fude-gauge-value" d={@gauge.value} />
+          <line
+            :if={@gauge.target}
+            class="fude-gauge-target"
+            x1={elem(@gauge.target, 0)}
+            y1={elem(@gauge.target, 1)}
+            x2={elem(@gauge.target, 2)}
+            y2={elem(@gauge.target, 3)}
+          />
+        </svg>
+        <.value single={@single} text={@text} />
+      </div>
       <span :if={@single["label"]} class="fude-label">{@single["label"]}</span>
     </div>
     """
   end
 
-  defp single(assigns) do
+  defp single_value(%{kind: "progress"} = assigns) do
     ~H"""
-    <div class="fude-single">
-      <data class="fude-value" value={plain(@single["value"])} data-format={@single["format"]}>
-        {plain(@single["value"]) || "—"}
-      </data>
-      <span :if={@single["label"]} class="fude-label">{@single["label"]}</span>
-      <span
-        :if={@kind == "trend" and change(@single) != nil}
-        class={["fude-delta", if(change(@single) >= 0, do: "fude-up", else: "fude-down")]}
-      >
-        <data value={change(@single)} data-format="percent-change">{percent(change(@single))}</data>
-      </span>
+    <div class={["fude-single", @class]} style={@style}>
+      <.value single={@single} text={@text} />
+      <div class="fude-progress-head">
+        <span class="fude-label">{@single["label"]}</span>
+        <data :if={ratio(@single)} class="fude-share" value={ratio(@single)} data-format="percent">
+          {round(ratio(@single) * 100)}%
+        </data>
+      </div>
       <div
-        :if={@kind == "progress"}
         class="fude-progress"
         role="progressbar"
         aria-valuemin="0"
@@ -263,6 +283,46 @@ defmodule Fude.Components do
         <span style={"width: #{share(@single)}%"}></span>
       </div>
     </div>
+    """
+  end
+
+  defp single_value(assigns) do
+    ~H"""
+    <div class={["fude-single", @class]} style={@style}>
+      <.value single={@single} text={@text} />
+      <span
+        :if={@kind == "trend" and (change(@single) != nil or @single["label"])}
+        class="fude-meta"
+      >
+        <span
+          :if={change(@single) != nil}
+          class={["fude-delta", if(change(@single) >= 0, do: "fude-up", else: "fude-down")]}
+        >
+          <data value={change(@single)} data-format="percent-change">{percent(change(@single))}</data>
+        </span>
+        <span :if={@single["label"]} class="fude-label">{@single["label"]}</span>
+      </span>
+      <span :if={@kind != "trend" and @single["label"]} class="fude-label">{@single["label"]}</span>
+    </div>
+    """
+  end
+
+  attr :single, :map, required: true
+  attr :text, :string, required: true
+
+  # The number. Its count of characters sizes it to the width of its box;
+  # the browser counts them again once it has written the number in the
+  # locale.
+  defp value(assigns) do
+    ~H"""
+    <data
+      class="fude-value"
+      value={plain(@single["value"])}
+      data-format={@single["format"]}
+      style={"--fude-chars: #{String.length(@text)}"}
+    >
+      {@text}
+    </data>
     """
   end
 
@@ -372,11 +432,20 @@ defmodule Fude.Components do
 
   defp percent(change), do: "#{if change >= 0, do: "+", else: ""}#{Float.round(change * 100, 1)}%"
 
-  defp share(%{"value" => value, "goal" => goal})
+  # The value's share of its goal, which can pass it; the bar stops at the
+  # goal.
+  defp ratio(%{"value" => value, "goal" => goal})
        when is_number(value) and is_number(goal) and goal > 0,
-       do: (value / goal * 100) |> min(100) |> max(0) |> Float.round(2)
+       do: value / goal
 
-  defp share(_single), do: 0
+  defp ratio(_single), do: nil
+
+  defp share(single) do
+    case ratio(single) do
+      nil -> 0
+      ratio -> (ratio * 100) |> min(100) |> max(0) |> Float.round(2)
+    end
+  end
 
   defp plain(nil), do: nil
   defp plain(value) when is_float(value), do: :erlang.float_to_binary(value, [:short])

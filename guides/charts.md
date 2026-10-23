@@ -55,10 +55,10 @@ words (`placed_on` is "Placed on"), unless the channel has one.
 | `bubble_map` | `region`, `size`, `color` | `map` |
 | `rule` | `x` or `y` | `label`, `dashed` |
 | `text` | `x`, `y`, `text` | |
-| `number` | `value` | `label` |
-| `trend` | `value`, `compare` | `label` |
-| `gauge` | `value` | `label`, `min`, `max`, `target` |
-| `progress` | `value` | `label`, `goal` |
+| `number` | `value` | `label`, `align` |
+| `trend` | `value`, `compare` | `label`, `align` |
+| `gauge` | `value` | `label`, `min`, `max`, `target`, `align` |
+| `progress` | `value` | `label`, `goal`, `align` |
 
 Bars, areas, heatmaps, pies, waterfalls, funnels and maps sum the values
 of the rows of the same category (and color), so that a bar is one bar.
@@ -68,6 +68,23 @@ side by side, and `stack: :normalize` to 100%.
 The single numbers (`number`, `trend`, `gauge`, `progress`) are written
 by the server, with no JavaScript; the browser writes the number in the
 chart's locale.
+
+A single number fills its box, as a tile of a dashboard: it is centered,
+and the number, the gauge's arc and the progress bar grow with the box.
+The box is the chart's `height` when it has one, or the rest of a figure
+that is given a height (a card), or `--fude-single-min-height` (8rem, 11rem
+for a gauge). `align: :start` sets it at the start at a fixed size, for a
+number inline in a page or a table:
+
+```elixir
+Fude.trend(kpis, value: :mrr, compare: :last, label: "vs last month")
+Fude.number(kpis, value: :orders, label: "Orders", align: :start)
+```
+
+A trend's change is a pill, green up and red down (`--fude-up`,
+`--fude-down`); a progress has its label and its share of the goal above
+the bar, as thick as `--fude-progress-height` sets it, or as the box
+allows.
 
 ## Layers
 

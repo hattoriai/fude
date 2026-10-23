@@ -405,29 +405,97 @@
   font-weight: 500;
 }
 
-/* One number, large. */
-.fude-single {
+/* One number, large: a single value (number, trend, gauge, progress).
+   Centered, the default, it fills its box as a tile of a dashboard does:
+   the box is a size container, and the number, the dial and the bar take
+   their size from it. The box is the chart's height when it has one, the
+   rest of a figure that has a height, or --fude-single-min-height. At the
+   start, it sits at a fixed size, as a number inline in a page or a table. */
+.fude:has(> .fude-single-center) {
   display: flex;
   flex-direction: column;
+  height: 100%;
+}
+
+.fude-single-start {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 0.25rem;
 }
 
+.fude-single-center {
+  container-type: size;
+  display: grid;
+  flex: 1 1 auto;
+  align-content: center;
+  justify-items: center;
+  gap: clamp(0.25rem, 3cqh, 0.625rem);
+  min-height: var(--fude-single-min-height, 8rem);
+  text-align: center;
+}
+
 .fude-value {
+  display: block;
   font-size: 3rem;
   font-weight: 600;
-  line-height: 1.1;
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1.05;
   letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+/* As large as the box's height allows, and narrow enough for the number's
+   characters (--fude-chars, at about 0.6em each) to fit its width. */
+.fude-single-center > .fude-value {
+  font-size: clamp(1.75rem, min(calc(92cqi / (var(--fude-chars, 6) * 0.6)), 38cqh), 6rem);
+}
+
+.fude-kind-trend .fude-single-center > .fude-value,
+.fude-kind-progress .fude-single-center > .fude-value {
+  font-size: clamp(1.75rem, min(calc(92cqi / (var(--fude-chars, 6) * 0.6)), 30cqh), 6rem);
 }
 
 .fude-label {
   color: var(--fude-secondary);
   font-size: 0.875em;
+  line-height: 1.3;
+}
+
+.fude-single-center .fude-label {
+  max-width: 40ch;
+  font-size: clamp(0.8125rem, calc(0.5rem + 2cqi), 1.0625rem);
+  text-wrap: balance;
+}
+
+/* A trend's change, as a pill tinted by its direction, then its label. */
+.fude-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem 0.5rem;
+}
+
+.fude-single-start .fude-meta {
+  justify-content: flex-start;
 }
 
 .fude-delta {
-  font-size: 0.875em;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125em 0.5em;
+  border-radius: 999px;
+  background: color-mix(in oklab, currentColor 12%, transparent);
+  font-size: 0.8125em;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.fude-single-center .fude-delta {
+  font-size: clamp(0.75rem, calc(0.45rem + 2cqi), 1rem);
 }
 
 .fude-up {
@@ -438,21 +506,49 @@
   color: var(--fude-down);
 }
 
-.fude-gauge {
-  position: relative;
+/* A gauge: the arc takes the box's width, up to what its height allows
+   under the label (the arc is 200 by 112), with the number in its bowl. */
+.fude-gauge.fude-single-start {
   align-items: center;
   max-width: 16rem;
   text-align: center;
 }
 
-.fude-gauge svg {
+.fude-gauge.fude-single-center {
+  min-height: var(--fude-single-min-height, 11rem);
+}
+
+.fude-dial {
+  position: relative;
+  width: 100%;
+}
+
+.fude-single-center .fude-dial {
+  --fude-dial: min(100cqi, calc((100cqh - 2.5rem) * 1.79));
+  width: var(--fude-dial);
+}
+
+.fude-dial svg {
+  display: block;
   width: 100%;
   overflow: visible;
 }
 
-.fude-gauge .fude-value {
-  margin-top: -2.75rem;
+.fude-dial .fude-value {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
   font-size: 2.25rem;
+  text-align: center;
+}
+
+.fude-single-center .fude-dial .fude-value {
+  font-size: clamp(
+    1.25rem,
+    min(calc(var(--fude-dial) * 0.17), calc(var(--fude-dial) * 0.6 / (var(--fude-chars, 4) * 0.6))),
+    5rem
+  );
 }
 
 .fude-gauge-track,
@@ -476,18 +572,50 @@
   stroke-linecap: round;
 }
 
+/* A progress: the label and the share of the goal above a bar with round
+   ends, as thick as --fude-progress-height, or as the box allows. */
+.fude-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  width: 100%;
+  margin-top: 0.25rem;
+  text-align: start;
+}
+
+.fude-share {
+  font-size: 0.875em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fude-single-center .fude-progress-head,
+.fude-single-center .fude-progress {
+  width: min(100%, 40rem);
+}
+
+.fude-single-center .fude-share {
+  font-size: clamp(0.8125rem, calc(0.5rem + 2cqi), 1.0625rem);
+}
+
 .fude-progress {
-  height: 8px;
-  margin-top: 0.5rem;
-  border-radius: 4px;
+  width: 100%;
+  height: var(--fude-progress-height, 0.5rem);
+  border-radius: 999px;
   background: color-mix(in oklab, var(--fude-series-1) 18%, var(--fude-surface));
   overflow: hidden;
+}
+
+.fude-single-center .fude-progress {
+  height: var(--fude-progress-height, clamp(0.5rem, 6cqh, 1rem));
 }
 
 .fude-progress > span {
   display: block;
   height: 100%;
-  border-radius: 4px;
+  border-radius: inherit;
   background: var(--fude-series-1);
   transition: width 450ms ease-out;
 }
@@ -515,5 +643,9 @@
 
   .fude-tooltip {
     border-color: CanvasText;
+  }
+
+  .fude-delta {
+    border: 1px solid currentColor;
   }
 }
