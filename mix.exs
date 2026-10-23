@@ -50,9 +50,14 @@ defmodule Fude.MixProject do
     [
       {:bandit, "~> 1.5", only: :dev},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      # Decimal values in the tests of the data; Fude itself only recognizes them.
-      {:decimal, "~> 3.0", only: :test},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
+      # Charts of an Ecto query, aggregated in the database (Fude.Query):
+      # optional. SQLite for its tests.
+      {:ecto, "~> 3.13", optional: true},
+      {:ecto_sql, "~> 3.13", only: :test},
+      {:ecto_sqlite3, "~> 0.22", only: :test},
+      # PostgreSQL for the tests too, with FUDE_DB=postgres.
+      {:postgrex, "~> 0.20", only: :test},
       {:esbuild, "~> 0.10", only: :dev, runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:lazy_html, "~> 0.1", only: :test},

@@ -19,7 +19,7 @@ defmodule Fude.Compile do
   @spec compile(Chart.t(), map()) :: result()
   def compile(%Chart{} = chart, datasets \\ %{}) do
     datasets = Map.merge(chart.datasets, Map.new(datasets, fn {k, v} -> {to_string(k), v} end))
-    data = datasets |> Map.get(chart.data) |> Data.new(fields(chart))
+    data = datasets |> Map.get(chart.data) |> source(chart)
 
     with :ok <- check_fields(chart, data) do
       {:ok, build(chart, data)}
@@ -32,6 +32,14 @@ defmodule Fude.Compile do
         _ -> reraise error, __STACKTRACE__
       end
   end
+
+  # The data of a chart: its rows in columns, or a query that the database
+  # aggregates (Fude.Query). Small multiples of a query read its rows.
+  @query Fude.Query
+
+  defp source(%{__struct__: @query} = query, %Chart{facet: nil}), do: query
+  defp source(%{__struct__: @query} = query, chart), do: @query.data(query, fields(chart))
+  defp source(data, chart), do: Data.new(data, fields(chart))
 
   # The fields that the chart reads.
   defp fields(%Chart{layers: layers, facet: facet}) do
@@ -48,6 +56,13 @@ defmodule Fude.Compile do
 
   @doc false
   # Every field that a channel reads is in the data.
+  def check_fields(%Chart{} = chart, %{__struct__: @query} = query) do
+    case @query.names(query) do
+      nil -> :ok
+      names -> check_fields(chart, %Data{names: names})
+    end
+  end
+
   def check_fields(%Chart{layers: layers, facet: facet}, data) do
     names = Data.names(data)
 
@@ -273,6 +288,22 @@ defmodule Fude.Compile do
   defp panel_title(value, _field), do: to_string(value)
 
   # The marks of each kind, and how its channels go to the mark's.
+  defp table(%Layer{kind: kind} = layer, %{__struct__: @query} = query) do
+    layer = normalize(layer)
+    channels = layer.channels |> Map.delete(:tooltip) |> Map.to_list()
+    aggregated = aggregated(kind, channels)
+
+    if @query.pushable?(aggregated) do
+      {rows, bins, data} = @query.rows(query, channels, aggregated, &bins_of/3)
+      marks(kind, layer, %{rows: rows, bins: bins}, data)
+    else
+      fields =
+        for {_name, %Channel{field: field}} <- channels, is_binary(field), uniq: true, do: field
+
+      table(layer, @query.data(query, fields))
+    end
+  end
+
   defp table(%Layer{kind: kind} = layer, data) do
     layer = normalize(layer)
     rows = rows(layer, data)
@@ -454,28 +485,25 @@ defmodule Fude.Compile do
   end
 
   defp bin_spec(%Channel{field: field, bin: bin}, data) do
-    numbers = data |> Data.column(field) |> Enum.filter(&is_number/1)
-
-    case numbers do
+    case data |> Data.column(field) |> Enum.filter(&is_number/1) do
       [] ->
         {0.0, 1.0, 1}
 
       numbers ->
         {min, max} = Enum.min_max(numbers)
-
-        case bin do
-          %{step: step} ->
-            start = Float.floor(min / step) * step
-            {start, step / 1, max(1, ceil((max - start) / step))}
-
-          %{count: count} ->
-            Rules.bins(min, max, count)
-
-          true ->
-            Rules.bins(min, max, 20)
-        end
+        bins_of(min, max, bin)
     end
   end
+
+  # The bins from the least to the greatest value: of a step, or about a
+  # count of them.
+  defp bins_of(min, max, %{step: step}) do
+    start = Float.floor(min / step) * step
+    {start, step / 1, max(1, ceil((max - start) / step))}
+  end
+
+  defp bins_of(min, max, %{count: count}), do: Rules.bins(min, max, count)
+  defp bins_of(min, max, _bin), do: Rules.bins(min, max, 20)
 
   @doc false
   def aggregate(:count, values), do: Enum.count(values, &(not is_nil(&1)))
@@ -596,6 +624,9 @@ defmodule Fude.Compile do
     horizontal = layer.options[:horizontal] == true
     {x, y} = {layer.channels.x, layer.channels.y}
     color = layer.channels[:color]
+
+    # Bars over time are in time order, as their axis is.
+    rows = if x_type(x, data) == :time, do: Enum.sort_by(rows, &sort_key(&1[:x])), else: rows
 
     stack = stack_mode(y, color, kind)
     {rows, y_extent} = stack(rows, :x, stack)

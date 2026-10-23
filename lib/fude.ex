@@ -145,6 +145,17 @@ defmodule Fude do
     %{chart | facet: %{field: to_string(field), columns: columns}}
   end
 
+  if Code.ensure_loaded?(Ecto.Query) do
+    @doc """
+    The data of an Ecto query or schema, grouped and aggregated in the
+    database when the chart draws (see `Fude.Query`):
+
+        Order |> Fude.query(Repo) |> Fude.bar(x: :status, y: {:count, :id})
+    """
+    @spec query(Ecto.Queryable.t(), module(), keyword()) :: Fude.Query.t()
+    def query(queryable, repo, opts \\ []), do: Fude.Query.new(queryable, repo, opts)
+  end
+
   @doc "Sets the chart's title, and with `:subtitle`, its subtitle."
   @spec title(Chart.t(), String.t(), keyword()) :: Chart.t()
   def title(%Chart{} = chart, title, opts \\ []) do
