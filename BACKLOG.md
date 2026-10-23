@@ -2,13 +2,6 @@
 
 Known gaps in Fude, each to become an issue.
 
-## Issho 0.4 from Hex
-
-`Fude.Issho` is built on Issho's shared state (`Issho.State`), on
-Issho's `state` branch until Issho 0.4 is on Hex. Before Fude's release,
-the dependency in `mix.exs` becomes `{:issho, "~> 0.4", optional: true}`,
-so that an app's Issho is compiled before Fude.
-
 ## Masu: the query of what a grid shows
 
 A chart of a Masu grid takes `Masu.Live.selected/1`, which gives the
