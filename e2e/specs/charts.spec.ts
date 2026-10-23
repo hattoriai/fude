@@ -24,8 +24,8 @@ test.describe("the gallery", () => {
     const labels = await page.locator("#orders-revenue .fude-axes text").allTextContents();
     expect(labels).toContain("Orders");
     expect(labels).toContain("Revenue");
-    // The right axis's ticks, in euros.
-    expect(labels.some((label) => /^€\d+k$/.test(label))).toBe(true);
+    // The right axis's ticks, in euros (as the browser's locale writes them).
+    expect(labels.filter((label) => label.includes("€")).length).toBeGreaterThan(2);
     await pointAt(page, "orders-revenue", 0.6, 0.6);
     const text = await tooltip(page, "orders-revenue");
     expect(text).toMatch(/[\d,]+\s*Orders/);
