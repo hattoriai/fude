@@ -241,11 +241,13 @@ defmodule Fude.Components do
 
   defp gauge(%{"value" => value, "min" => min, "max" => max} = single) do
     share = fn v -> if is_number(v) and max > min, do: min(1, max(0, (v - min) / (max - min))) end
+    value = share.(value)
+    target = share.(single["target"])
 
     %{
       track: arc(0, 1),
-      value: if((t = share.(value)) && t > 0, do: arc(0, t)),
-      target: if(t = share.(single["target"]), do: tick(t))
+      value: if(value && value > 0, do: arc(0, value)),
+      target: if(target, do: tick(target))
     }
   end
 
