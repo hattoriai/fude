@@ -7,6 +7,14 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Stacked bars and areas stacked their series in the order of the rows,
+  so rows ordered by x only (a query `ORDER BY month`) gave each stack its
+  own order: the bands of an area crossed and swapped from one x to the
+  next. Each stack is now in the order of the series, as the legend has
+  them (first seen, or the color channel's `sort`).
+
 ### Added
 
 - A right axis: `y: [field: :revenue, axis: :right]` puts a layer on a y

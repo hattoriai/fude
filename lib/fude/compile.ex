@@ -639,7 +639,7 @@ defmodule Fude.Compile do
     rows = if x_type(x, data) == :time, do: Enum.sort_by(rows, &sort_key(&1[:x])), else: rows
 
     stack = stack_mode(y, color, kind)
-    {rows, y_extent} = stack(rows, :x, stack)
+    {rows, y_extent} = stack(rows, :x, stack, series(rows, color))
 
     {rows, x_scale} =
       case bins[:x] do
@@ -678,7 +678,7 @@ defmodule Fude.Compile do
     stack = if kind == :area, do: stack_mode(y, color, :area), else: false
 
     rows = Enum.sort_by(rows, &sort_key(&1[:x]))
-    {rows, y_extent} = stack(rows, :x, stack)
+    {rows, y_extent} = stack(rows, :x, stack, series(rows, color))
 
     x_scale =
       case x_type(x, data) do
@@ -886,13 +886,39 @@ defmodule Fude.Compile do
 
   # Stacks the rows of each x (in the order of their colors): each gets its
   # base (y0) and its top (y1). Positive values stack up, negative down.
-  defp stack(rows, _by, false), do: {rows, extent(rows, :y)}
+  defp stack(rows, _by, false, _series), do: {rows, extent(rows, :y)}
 
-  defp stack(rows, by, mode) do
-    {stacked, _} = Enum.map_reduce(rows, %{}, &stack_row(&1, &2, by))
+  # Each stack in the order of the series, as the legend has them, whatever
+  # the order of the rows: the first series at the bottom of every stack.
+  # The rows keep their order otherwise.
+  defp stack(rows, by, mode, series) do
+    place = series |> Enum.with_index() |> Map.new()
+
+    {stacked, _} =
+      rows
+      |> Enum.with_index()
+      |> Enum.sort_by(fn {row, i} -> {Map.get(place, row[:color], 0), i} end)
+      |> Enum.map_reduce(%{}, fn {row, i}, acc ->
+        {stacked, acc} = stack_row(row, acc, by)
+        {{stacked, i}, acc}
+      end)
+
+    stacked = stacked |> Enum.sort_by(&elem(&1, 1)) |> Enum.map(&elem(&1, 0))
     stacked = offset(stacked, by, mode)
     values = Enum.flat_map(stacked, &[&1.y0, &1.y1])
     {stacked, if(values == [], do: nil, else: Enum.min_max(values))}
+  end
+
+  # The series of a layer in the order of its color scale: first seen, or
+  # its channel's sort.
+  defp series(_rows, nil), do: []
+
+  defp series(rows, %Channel{} = color) do
+    rows
+    |> Enum.map(& &1[:color])
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> order(color.sort, rows, :color, nil)
   end
 
   defp stack_row(row, acc, by) do
