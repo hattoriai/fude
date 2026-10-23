@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import worldJson from "../maps/world.json";
+import statesJson from "../maps/us-states.json";
 import { lookup, type FudeMap } from "../src/maps";
 
-const world = JSON.parse(readFileSync(new URL("../maps/world.json", import.meta.url), "utf8")) as FudeMap;
-const states = JSON.parse(readFileSync(new URL("../maps/us-states.json", import.meta.url), "utf8")) as FudeMap;
+const world = worldJson as FudeMap;
+const states = statesJson as FudeMap;
 
 const id = (map: FudeMap, value: unknown) => {
   const i = lookup(map).find(value);
