@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="800" viewBox="0 0 1600 800" role="img" aria-labelledby="title description">
+<title id="title">Fude — Charts for Phoenix</title>
+<desc id="description">Three rising bars, the tallest a blade orange brush tip, in Sumi ink. Cormorant Garamond wordmark and Outfit supporting text.</desc>
+<rect width="1600" height="800" fill="#f5f0e8"/>
+<g transform="translate(433.3 254) scale(2.2)"><path fill="#0a0a0b" d="M16 70Q16 60 26 60H40.33V96H26Q16 96 16 86Z"/>
+<path fill="#0a0a0b" d="M43.83 38H68.17V96H43.83Z"/>
+<path fill="#e84a1c" d="M71.67 96V42C71.67 29 80 19 96 14V86Q96 96 86 96Z"/></g>
+<path d="M128 109H160" fill="none" stroke="#e84a1c" stroke-width="2"/>
+<text x="721" y="423" font-family="Cormorant Garamond" font-weight="300" font-size="160" letter-spacing="19.2" fill="#0a0a0b">FUDE</text>
+<text x="728" y="484" font-family="Outfit" font-weight="300" font-size="28" fill="#0a0a0b">Charts for Phoenix.</text>
+<text x="181" y="115" font-family="Outfit" font-weight="500" font-size="16" letter-spacing="3.2" fill="#0a0a0b">HATTORI AI</text>
+</svg>

@@ -1,0 +1,94 @@
+# Charts
+
+Each kind is a function of `Fude` that takes the data and a keyword list
+of channels, options and the chart's words, and gives a `Fude.Chart`:
+
+```elixir
+Fude.bar(sales, x: :region, y: :revenue, color: :channel, title: "Revenue")
+```
+
+Without data, a function gives a layer, for `Fude.layers/3`, or a chart
+whose data comes later (`<.chart chart={...} data={...}>`).
+
+## Channels
+
+A channel says what a field of the data shows, and how (see
+`Fude.Channel`):
+
+| | |
+| --- | --- |
+| `:revenue` | the field as it is |
+| `{:sum, :revenue}` | aggregated: `:count`, `:sum`, `:mean`, `:median`, `:min`, `:max`, `:distinct` |
+| `{:month, :placed_on}` | a unit of a time: `:year`, `:quarter`, `:month`, `:week` (from Monday), `:day`, `:hour`, `:minute` |
+| `{:bin, :total}` | numbers in round bins |
+| `1000` | a constant, as the height of a rule |
+| `[field: :revenue, aggregate: :sum, format: {:currency, "EUR"}, title: "Revenue"]` | the full form |
+
+The full form also takes `type` (`:number`, `:time`, `:category`,
+`:ordinal`), `sort` (`:ascending`, `:descending`, `:"-y"` by the other
+channel, or a list of the categories in order), `format` (`:number`,
+`:integer`, `:percent`, `:compact`, `{:currency, code}`, `:bytes`,
+`:duration`), `scale` (`type: :log`, `domain: [0, 100]`, `zero: true`,
+`nice: false`) and `stack` (`:zero`, `:normalize`, `:center`, `false`).
+
+A field's type is learned from its values: numbers, times (a `Date`,
+`NaiveDateTime` or `DateTime`) or categories. Its title is its name in
+words (`placed_on` is "Placed on"), unless the channel has one.
+
+## The kinds
+
+| Kind | Channels | Options |
+| --- | --- | --- |
+| `bar` | `x`, `y`, `color`, `tooltip` | `horizontal`, `labels` |
+| `line` | `x`, `y`, `color`, `tooltip` | `curve` (`:linear`, `:monotone`, `:step`), `points` |
+| `area` | `x`, `y`, `color`, `tooltip` | `curve` |
+| `scatter` | `x`, `y`, `color`, `size`, `tooltip` | |
+| `bubble` | `x`, `y`, `size`, `color` | |
+| `pie`, `donut` | `value`, `color` | `inner` (the donut's hole) |
+| `histogram` | `x`, `color` | `bins` |
+| `heatmap` | `x`, `y`, `color` | |
+| `waterfall` | `x`, `y` | `start` (a first total), `total` (the name of the end) |
+| `funnel` | `x` (the stages), `y` | |
+| `sparkline` | `x`, `y` | `curve` |
+| `choropleth` | `region`, `color` | `map` |
+| `bubble_map` | `region`, `size`, `color` | `map` |
+| `rule` | `x` or `y` | `label`, `dashed` |
+| `text` | `x`, `y`, `text` | |
+| `number` | `value` | `label` |
+| `trend` | `value`, `compare` | `label` |
+| `gauge` | `value` | `label`, `min`, `max`, `target` |
+| `progress` | `value` | `label`, `goal` |
+
+Bars, areas, heatmaps, pies, waterfalls, funnels and maps sum the values
+of the rows of the same category (and color), so that a bar is one bar.
+Bars and areas with a color stack; `stack: false` on `y` sets the bars
+side by side, and `stack: :normalize` to 100%.
+
+The single numbers (`number`, `trend`, `gauge`, `progress`) are written
+by the server, with no JavaScript; the browser writes the number in the
+chart's locale.
+
+## Layers
+
+Charts drawn over each other share their scales:
+
+```elixir
+Fude.layers(visits, [
+  Fude.area(x: :day, y: :visits),
+  Fude.line(x: :day, y: :visits),
+  Fude.rule(y: 4000, label: "Goal")
+], title: "Visits reach the goal")
+```
+
+## The words of a chart
+
+Every function takes `:title`, `:subtitle`, `:caption`, `:source`,
+`:description` (what a screen reader says; Fude writes one when it is not
+given) and `:height`. See [Telling the story](story.md).
+
+## When a chart cannot draw
+
+A field that is not in the data, or a spec that is not valid, does not
+raise: the chart says why in place of its plot, with a suggestion:
+
+> x: the field "regoin" is not in the data; did you mean "region"?
