@@ -1,0 +1,16 @@
+{
+  "name": "fude",
+  "version": "0.1.0",
+  "license": "MIT",
+  "module": "./priv/static/fude.esm.js",
+  "main": "./priv/static/fude.cjs.js",
+  "exports": {
+    ".": {
+      "import": "./priv/static/fude.esm.js",
+      "require": "./priv/static/fude.cjs.js"
+    }
+  },
+  "files": [
+    "priv/static"
+  ]
+}
