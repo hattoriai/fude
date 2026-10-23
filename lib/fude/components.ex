@@ -64,6 +64,11 @@ defmodule Fude.Components do
     doc:
       "the Issho document of a shared chart (`Fude.Issho`): the people of its room see each other's pointers on its marks"
 
+  attr :animate, :any,
+    default: nil,
+    doc:
+      "whether the marks move: `true`, `false` or `[duration: ms]`; the chart's own (`true`) unless given"
+
   attr :class, :any, default: nil, doc: "classes for the chart's element"
   attr :rest, :global
 
@@ -137,7 +142,7 @@ defmodule Fude.Components do
   # a chart of its own on the shared scales.
   defp panels(assigns) do
     facet = assigns.wire["facet"]
-    base = Map.drop(assigns.wire, ["facet", "title", "subtitle", "caption", "source"])
+    base = Map.drop(assigns.wire, ["facet", "title", "subtitle", "caption", "source", "frame"])
 
     panels =
       facet["panels"]
@@ -341,6 +346,7 @@ defmodule Fude.Components do
       wire
       |> Map.put("locale", assigns.locale)
       |> Map.put("id", assigns.id)
+      |> animate(assigns.animate)
       |> JSON.encode!()
 
     assigns
@@ -355,6 +361,17 @@ defmodule Fude.Components do
       heads: heads,
       rows: rows
     )
+  end
+
+  # The component's animate, over the chart's.
+  defp animate(wire, nil), do: wire
+
+  defp animate(wire, animate) do
+    case Fude.Chart.animate!(animate) do
+      true -> Map.delete(wire, "animate")
+      false -> Map.put(wire, "animate", false)
+      %{duration: ms} -> Map.put(wire, "animate", %{"duration" => ms})
+    end
   end
 
   defp default_height("sparkline"), do: 48

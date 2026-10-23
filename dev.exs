@@ -333,7 +333,7 @@ defmodule FudeDev.GalleryLive do
         id="revenue-regions"
         locale={@locale}
         chart={Fude.bar(regions(@shuffled), x: [field: :region, sort: :"-y"], y: [field: :revenue, format: {:currency, "EUR"}], color: :channel,
-          title: "Revenue by region", subtitle: "Stacked by channel")}
+          tooltip: [rank: true, history: true], title: "Revenue by region", subtitle: "Stacked by channel")}
       />
       <.chart
         id="orders-histogram"
@@ -357,6 +357,7 @@ defmodule FudeDev.GalleryLive do
         id="regions-horizontal"
         locale={@locale}
         chart={Fude.bar(regions(@shuffled), x: [field: :region, sort: :"-y"], y: {:sum, :revenue}, horizontal: true, labels: true,
+          frame: if(@shuffled, do: "Q2", else: "Q1"),
           title: "Total revenue by region", height: 260)}
       />
       <.chart
@@ -384,7 +385,8 @@ defmodule FudeDev.GalleryLive do
       <.chart
         id="revenue-area"
         locale={@locale}
-        chart={Fude.area(monthly(@shuffled), x: :month, y: [field: :revenue, format: :compact, title: "Revenue"], color: :channel, title: "Revenue, stacked")}
+        chart={Fude.area(monthly(@shuffled), x: :month, y: [field: :revenue, format: :compact, title: "Revenue"], color: :channel, tooltip: [change: true],
+          title: "Revenue, stacked")}
       />
       <.chart
         id="regions-multiples"

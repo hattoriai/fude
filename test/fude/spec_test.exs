@@ -133,6 +133,50 @@ defmodule Fude.SpecTest do
       assert options == %{}
     end
 
+    test "writes what a tooltip adds at the end of its list, and reads it back (#15)" do
+      chart = Fude.bar(nil, x: :month, y: :revenue, tooltip: [:plan, change: true, history: true])
+      assert %{"tooltip" => ["plan", %{"change" => true, "history" => true}]} = Spec.dump(chart)
+      assert Spec.load(Spec.dump(chart)) == {:ok, chart}
+
+      chart = Fude.area(nil, x: :month, y: :revenue, color: :channel, tooltip: [share: false])
+      assert %{"tooltip" => [%{"share" => false}]} = Spec.dump(chart)
+      assert Spec.load(Spec.dump(chart)) == {:ok, chart}
+
+      assert {:error, [%{path: ["tooltip", 1], message: message}]} =
+               Spec.load(%{
+                 "fude" => 1,
+                 "kind" => "bar",
+                 "x" => "m",
+                 "y" => "r",
+                 "tooltip" => ["plan", %{"change" => true, "rnak" => true}]
+               })
+
+      assert message =~ ~s(did you mean "rank"?)
+    end
+
+    test "writes and reads a chart's animate and frame (#16); saved charts animate" do
+      for chart <- [
+            Fude.bar(nil, x: :r, y: :v, animate: false),
+            Fude.bar(nil, x: :r, y: :v, animate: [duration: 800], frame: "May 2026")
+          ] do
+        assert Spec.load(Spec.dump(chart)) == {:ok, chart}
+      end
+
+      assert %{"animate" => %{"duration" => 800}, "frame" => "May 2026"} =
+               Spec.dump(Fude.bar(nil, x: :r, y: :v, animate: [duration: 800], frame: "May 2026"))
+
+      refute Map.has_key?(Spec.dump(Fude.bar(nil, x: :r, y: :v)), "animate")
+
+      assert {:error, [%{path: ["animate"]}]} =
+               Spec.load(%{
+                 "fude" => 1,
+                 "kind" => "bar",
+                 "x" => "r",
+                 "y" => "v",
+                 "animate" => "slow"
+               })
+    end
+
     test "writes a currency as code" do
       chart = Fude.bar(x: :region, y: [field: :revenue, format: {:currency, "EUR"}])
       assert %{"y" => %{"format" => "currency:EUR"}} = Spec.dump(chart)

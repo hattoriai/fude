@@ -87,6 +87,74 @@ defmodule Fude.CompileTest do
     end
   end
 
+  describe "a color of text on a map or a heatmap (#18)" do
+    @plans %{
+      columns: ["country", "users", "plan"],
+      rows: [["PRT", 120, "pro"], ["ESP", 80, "free"], ["FRA", 200, "pro"]]
+    }
+
+    test "colors a bubble map's circles by its categories, as a scatter's points" do
+      wire = compile!(Fude.bubble_map(@plans, region: :country, size: :users, color: :plan))
+      assert %{"type" => "ordinal", "domain" => ["pro", "free"]} = wire["scales"]["color"]
+      assert hd(wire["layers"])["columns"]["color"] == [0, 1, 0]
+      assert hd(wire["layers"])["columns"]["size"] == [120, 80, 200]
+    end
+
+    test "colors a choropleth's regions by its categories" do
+      wire = compile!(Fude.choropleth(@plans, region: :country, color: :plan))
+      assert %{"type" => "ordinal", "domain" => ["pro", "free"]} = wire["scales"]["color"]
+    end
+
+    test "a color of numbers is still summed" do
+      rows = [%{a: "x", b: "y", n: 1}, %{a: "x", b: "y", n: 2}]
+      wire = compile!(Fude.heatmap(rows, x: :a, y: :b, color: :n))
+      assert hd(wire["layers"])["columns"]["color"] == [3]
+    end
+  end
+
+  describe "what a tooltip adds (#15)" do
+    test "goes to the browser with the layer, beside the tooltip's fields" do
+      rows = [%{m: 1, v: 2, plan: "pro"}, %{m: 2, v: 3, plan: "free"}]
+      wire = compile!(Fude.line(rows, x: :m, y: :v, tooltip: [:plan, change: true, rank: true]))
+      layer = hd(wire["layers"])
+      assert layer["tips"] == %{"change" => true, "rank" => true}
+      assert [%{"title" => "Plan", "values" => ["pro", "free"]}] = layer["tooltip"]
+      assert hd(compile!(Fude.line(rows, x: :m, y: :v))["layers"])["tips"] == nil
+    end
+
+    test "a tooltip of one field in full is still that field" do
+      layer = Fude.Layer.new(:bar, x: :a, y: :b, tooltip: [field: :m, format: :percent])
+      assert [%Fude.Channel{field: "m", format: :percent}] = layer.channels.tooltip
+      refute Map.has_key?(layer.options, :tips)
+    end
+
+    test "what it adds is true or false" do
+      assert_raise ArgumentError, fn ->
+        Fude.Layer.new(:bar, x: :a, y: :b, tooltip: [:plan, change: :yes])
+      end
+    end
+  end
+
+  describe "animation (#16)" do
+    test "a chart that does not move, or moves for a time of its own; a frame's label" do
+      rows = [%{r: "a", v: 1}]
+      assert compile!(Fude.bar(rows, x: :r, y: :v, animate: false))["animate"] == false
+
+      assert compile!(Fude.bar(rows, x: :r, y: :v, animate: [duration: 900]))["animate"] == %{
+               "duration" => 900
+             }
+
+      assert compile!(Fude.bar(rows, x: :r, y: :v))["animate"] == nil
+      assert compile!(Fude.bar(rows, x: :r, y: :v, frame: "2026"))["frame"] == "2026"
+
+      assert_raise ArgumentError,
+                   ~r/:animate of a chart must be true, false or \[duration: ms\]/,
+                   fn ->
+                     Fude.bar(rows, x: :r, y: :v, animate: :fast)
+                   end
+    end
+  end
+
   describe "color schemes" do
     test "go on the color scale, a diverging one with its middle" do
       rows = [%{a: "x", b: "y", m: -3}, %{a: "y", b: "y", m: 8}]

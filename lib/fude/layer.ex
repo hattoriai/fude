@@ -42,6 +42,8 @@ defmodule Fude.Layer do
   # tile of a dashboard, or at the start, as a number inline in a page.
   @align {:in, [:center, :start]}
 
+  @tips [:change, :share, :rank, :history]
+
   # Each kind: the channels it takes, those it needs, and its options with
   # the check of each value.
   @kinds %{
@@ -155,7 +157,7 @@ defmodule Fude.Layer do
       Enum.reduce(opts, %__MODULE__{kind: kind}, fn {key, value}, layer ->
         cond do
           key in spec.channels and key == :tooltip ->
-            %{layer | channels: Map.put(layer.channels, :tooltip, tooltip(value))}
+            put_tooltip(layer, value)
 
           key in spec.channels ->
             %{layer | channels: Map.put(layer.channels, key, Channel.new(key, value))}
@@ -193,10 +195,42 @@ defmodule Fude.Layer do
 
   defp stages(layer), do: layer
 
-  defp tooltip(fields) when is_list(fields) and not is_tuple(hd(fields)),
-    do: Enum.map(fields, &Channel.new(:tooltip, &1))
+  defp put_tooltip(layer, value) do
+    {fields, tips} = tooltip(value)
 
-  defp tooltip(field), do: [Channel.new(:tooltip, field)]
+    channels =
+      if fields == [], do: layer.channels, else: Map.put(layer.channels, :tooltip, fields)
+
+    options = if tips == %{}, do: layer.options, else: Map.put(layer.options, :tips, tips)
+    %{layer | channels: channels, options: options}
+  end
+
+  @doc false
+  # What a tooltip can add to a mark's values: its change from the point
+  # before, its share of the whole, its rank, and a small history.
+  def tips, do: @tips
+
+  # A tooltip's fields, and what it adds (`change: true`), from a list of
+  # both (`[:plan, change: true]`), a list of fields, a field, or a field's
+  # full form.
+  defp tooltip(list) when is_list(list) and list != [] do
+    {tips, rest} = Enum.split_with(list, &tip?/1)
+    tips = Map.new(tips)
+
+    fields =
+      cond do
+        rest == [] -> []
+        is_tuple(hd(rest)) and Keyword.keyword?(rest) -> [Channel.new(:tooltip, rest)]
+        true -> Enum.map(rest, &Channel.new(:tooltip, &1))
+      end
+
+    {fields, tips}
+  end
+
+  defp tooltip(field), do: {[Channel.new(:tooltip, field)], %{}}
+
+  defp tip?({key, value}) when key in @tips, do: is_boolean(value)
+  defp tip?(_entry), do: false
 
   @doc false
   # Checks an option's value: the functions of Fude raise, a loaded spec

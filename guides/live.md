@@ -5,8 +5,25 @@
 A chart is drawn from its assigns. When the chart or its data changes,
 the server sends the new chart, and the browser draws it again in place:
 each bar, point, slice and line moves from where it was to where it is,
-new marks grow from the baseline, and the ones that left fade. A theme
-or a size that changes draws again without moving.
+new marks grow from the baseline, and the ones that left shrink back
+into it as they fade. When the order of the bars changes (a sort by
+value, and values that overtake each other), each bar slides to its new
+place, its name and its value with it. A theme or a size that changes
+draws again without moving.
+
+A sequence of renders is a race of bars: sort the bars by their value,
+and give each render a `frame`, which the chart writes large in the
+corner of its plot, under the marks:
+
+```elixir
+def handle_info({:tick, month}, socket) do
+  chart =
+    Fude.bar(Sales.by_region(month), x: [field: :region, sort: :"-y"], y: :revenue,
+      horizontal: true, labels: true, frame: Calendar.strftime(month, "%B %Y"))
+
+  {:noreply, assign(socket, chart: chart)}
+end
+```
 
 ```elixir
 def handle_info({:order, _order}, socket) do

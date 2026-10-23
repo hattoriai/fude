@@ -55,6 +55,8 @@ export class Chart {
   private layout: Layout | null = null;
   private shapes: Shape[] = [];
   private drawn = new Map<string, Shape>();
+  // Where each keyed word was drawn, so that it travels to its next place.
+  private places = new Map<string, [number, number]>();
   private leaving: Shape[] = [];
   private frame = 0;
   private hover: Hover | null = null;
@@ -289,7 +291,40 @@ export class Chart {
     const from = animate ? new Map(this.drawn) : new Map(shapes.map((shape) => [shape.key, shape] as const));
     this.shapes = shapes;
     this.renderAxes(this.layout);
-    this.play(from, animate ? this.theme.duration : 0);
+    const duration = animate ? this.duration() : 0;
+    this.travel(duration);
+    this.play(from, duration);
+  }
+
+  // How long marks move: never with reduced motion, else the chart's own
+  // (#16: animate false, or a duration), else the theme's.
+  private duration(): number {
+    const animate = this.config.animate;
+    if (this.theme.reduced || animate === false) return 0;
+    if (animate && typeof animate === "object") return animate.duration;
+    return this.theme.duration;
+  }
+
+  // The words that belong to a mark or a category (a bar's value, a band's
+  // name) travel from where they were to their new places, with the marks;
+  // new ones fade in.
+  private travel(duration: number): void {
+    const now = new Map<string, [number, number]>();
+    for (const el of this.svg.querySelectorAll<SVGGraphicsElement>("[data-key]")) {
+      const key = el.getAttribute("data-key")!;
+      const x = Number(el.getAttribute("x"));
+      const y = Number(el.getAttribute("y"));
+      now.set(key, [x, y]);
+      if (duration <= 0 || typeof el.animate !== "function") continue;
+      const was = this.places.get(key);
+      const timing = { duration, easing: "cubic-bezier(0.215, 0.61, 0.355, 1)" };
+      if (!was) {
+        if (this.places.size) el.animate([{ opacity: 0 }, { opacity: 1 }], timing);
+      } else if (was[0] !== x || was[1] !== y) {
+        el.animate([{ transform: `translate(${was[0] - x}px, ${was[1] - y}px)` }, { transform: "translate(0, 0)" }], timing);
+      }
+    }
+    this.places = now;
   }
 
   // The map of a map chart: ready, or loading (the chart draws when it
@@ -337,7 +372,8 @@ export class Chart {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     const paint = this.paintOptions();
-    for (const shape of this.leaving) draw(ctx, shape, paint, 1 - raw);
+    // What leaves shrinks to where it grew from as it fades.
+    for (const shape of this.leaving) draw(ctx, shape.type === "rect" ? tween(shape, { ...shape, ...shape.from }, t) : shape, paint, 1 - raw);
     const drawn = new Map<string, Shape>();
     for (const shape of this.shapes) {
       const now = tween(from.get(shape.key), shape, t);
@@ -1019,6 +1055,13 @@ export class Chart {
 
     if (!axes) return;
 
+    // The frame of a sequence of renders (a race of bars): its label, large,
+    // under the marks in the plot's corner.
+    if (this.config.frame) {
+      const size = Math.max(18, Math.min(56, (layout.bottom - layout.top) / 4));
+      text(this.grid, this.config.frame, layout.right - 4, layout.bottom - 10, { anchor: "end", baseline: "alphabetic", fill: theme.muted, tabular: true, size, weight: 600 });
+    }
+
     // The value axis: hairline grids at its ticks, labels beside them.
     if (y && scales.y) {
       const format = this.tickFormat(scales.y, y);
@@ -1027,7 +1070,8 @@ export class Chart {
         if (y.kind !== "band" && y.kind !== "point") {
           line(grid, layout.left, py, layout.right, py, tick === 0 ? theme.baseline : theme.grid);
         }
-        text(svg, format(tick, i, y.ticks), layout.left - 8, py, { anchor: "end", baseline: "middle", fill: theme.muted, tabular: true });
+        const band = y.kind === "band" || y.kind === "point";
+        text(svg, format(tick, i, y.ticks), layout.left - 8, py, { anchor: "end", baseline: "middle", fill: theme.muted, tabular: true, key: band ? `y:${scales.y!.domain?.[tick]}` : undefined });
       });
       if (scales.y.title && y.kind !== "band") {
         // With a right axis, each title has its layers' color: which line is on which axis.
@@ -1059,7 +1103,8 @@ export class Chart {
         const px = x.kind === "band" ? x.at(tick) + x.bandwidth / 2 : Math.round(x.at(tick)) + 0.5;
         if (vertical && y && (y.kind === "band" || this.isHorizontalBars())) line(grid, px, layout.top, px, layout.bottom, tick === 0 ? theme.baseline : theme.grid);
         lines.forEach((label, i) => {
-          text(svg, label, px, layout.bottom + 16 + i * 14, { anchor: "middle", baseline: "alphabetic", fill: theme.muted, tabular: true });
+          const key = x.kind === "band" || x.kind === "point" ? `x:${scales.x!.domain?.[tick]}:${i}` : undefined;
+          text(svg, label, px, layout.bottom + 16 + i * 14, { anchor: "middle", baseline: "alphabetic", fill: theme.muted, tabular: true, key });
         });
       }
       // The baseline under bars and columns.
@@ -1118,9 +1163,9 @@ export class Chart {
         if (label === undefined) continue;
         const cy = shape.y + shape.h / 2;
         if (inside && this.measure(label) + 16 <= shape.w && shape.h >= 14) {
-          text(svg, label, shape.x + shape.w / 2, cy, { anchor: "middle", baseline: "middle", fill: onColor(shape.color), tabular: true });
+          text(svg, label, shape.x + shape.w / 2, cy, { anchor: "middle", baseline: "middle", fill: onColor(shape.color), tabular: true, key: `v:${shape.key}` });
         } else {
-          text(svg, label, shape.x + shape.w + 8, cy, { anchor: "start", baseline: "middle", fill: theme.secondary, halo: theme.surface, tabular: true });
+          text(svg, label, shape.x + shape.w + 8, cy, { anchor: "start", baseline: "middle", fill: theme.secondary, halo: theme.surface, tabular: true, key: `v:${shape.key}` });
         }
       }
     });
@@ -1133,8 +1178,9 @@ export class Chart {
         if (shape.type !== "rect" || shape.datum.layer !== index) continue;
         const v = (layer.horizontal ? layer.columns.x : layer.columns.y)?.[shape.datum.row];
         if (v == null) continue;
-        if (layer.horizontal) text(svg, value(v), shape.x + shape.w + 6, shape.y + shape.h / 2, { anchor: "start", baseline: "middle", fill: theme.secondary, halo: theme.surface });
-        else text(svg, value(v), shape.x + shape.w / 2, shape.y - 6, { anchor: "middle", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface });
+        const key = `v:${shape.key}`;
+        if (layer.horizontal) text(svg, value(v), shape.x + shape.w + 6, shape.y + shape.h / 2, { anchor: "start", baseline: "middle", fill: theme.secondary, halo: theme.surface, tabular: true, key });
+        else text(svg, value(v), shape.x + shape.w / 2, shape.y - 6, { anchor: "middle", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface, tabular: true, key });
       }
     });
 
@@ -1615,11 +1661,19 @@ export class Chart {
 
   // The rows of the tooltip: a title, then each value with its series,
   // then the fields of the layer's tooltip.
-  private tipRows(): { title: string; rows: { value: string; name: string; color: string | null }[] } | null {
+  private tipRows(): { title: string; rows: TipRow[] } | null {
     const tip = this.markRows();
     const hover = this.hover;
     if (!tip || !hover) return tip;
     const layers = this.config.layers ?? [];
+    // Under each value, what the tooltip adds to it; a history on a hovered mark only.
+    const rows: TipRow[] = [];
+    for (const row of tip.rows) {
+      rows.push(row);
+      const layer = row.at ? layers[row.at.layer] : undefined;
+      if (layer && row.at) rows.push(...this.extras(layer, row.at.row, hover.kind !== "x", row.color));
+    }
+    tip.rows = rows;
     if (hover.kind === "x") {
       // At a crosshair, the fields of each series, named by it.
       const color = this.config.scales?.color;
@@ -1639,6 +1693,77 @@ export class Chart {
     return tip;
   }
 
+  // A mark's place along its categories (an index, a time, a number), its
+  // value, and its series (a heatmap's row), by its mark.
+  private marksOf(layer: Layer): { cat: (number | null)[]; val: (number | null)[]; group: (number | null)[] | null; catScale: Scale | undefined } | null {
+    const c = layer.columns;
+    const scales = this.scalesOf(layer);
+    if (layer.mark === "bar" && !c.x2) {
+      return layer.horizontal
+        ? { cat: c.y ?? [], val: c.x ?? [], group: c.color ?? null, catScale: scales.y }
+        : { cat: c.x ?? [], val: c.y ?? [], group: c.color ?? null, catScale: scales.x };
+    }
+    if (layer.mark === "line" || layer.mark === "area") return { cat: c.x ?? [], val: c.y ?? [], group: c.color ?? null, catScale: scales.x };
+    if (layer.mark === "rect" && scales.color?.type === "sequential") return { cat: c.x ?? [], val: c.color ?? [], group: c.y ?? null, catScale: scales.x };
+    return null;
+  }
+
+  // What the tooltip adds under a mark's value (#15): its change from the
+  // point before, its share of the whole (by default on stacked marks), its
+  // rank among its series, and, on a hovered mark, its series' history.
+  private extras(layer: Layer, row: number, hovered: boolean, color: string | null): TipRow[] {
+    const marks = this.marksOf(layer);
+    if (!marks || layer.options.funnel === true || layer.stack === "waterfall") return [];
+    const tips = layer.tips ?? {};
+    const stacked = layer.stack === "zero" || layer.stack === "normalize";
+    const { cat, val, group, catScale } = marks;
+    const v = val[row];
+    const at = cat[row];
+    if (v == null || at == null) return [];
+    const g = group ? group[row] : null;
+    // The marks of the same series, in the order of their categories.
+    const same: number[] = [];
+    for (let i = 0; i < layer.n; i++) if ((group ? group[i] : null) === g && cat[i] != null && val[i] != null) same.push(i);
+    same.sort((a, b) => cat[a]! - cat[b]!);
+    const percent = formatter("percent", this.locale);
+    const out: TipRow[] = [];
+
+    if (tips.change === true) {
+      const index = same.indexOf(row);
+      const before = index > 0 ? same[index - 1]! : null;
+      const v0 = before === null ? null : val[before]!;
+      if (before !== null && v0 !== null && v0 !== 0) {
+        const change = (v - v0) / Math.abs(v0);
+        out.push({ value: `${change >= 0 ? "▲" : "▼"} ${percent(Math.abs(change))} vs ${this.valueText(cat[before], catScale)}`, name: "", color: null, sub: true, tone: change >= 0 ? "up" : "down" });
+      }
+    }
+
+    if (tips.share ?? stacked) {
+      let total = 0;
+      if (stacked) {
+        // A segment: of its stack, the shown series at its category.
+        for (let i = 0; i < layer.n; i++) {
+          const s = group ? group[i] : null;
+          if (cat[i] === at && val[i] != null && val[i]! > 0 && !(s != null && this.hidden.has(s))) total += val[i]!;
+        }
+        if (total > 0) out.push({ value: `${percent(v / total)} of ${this.valueText(at, catScale)}`, name: "", color: null, sub: true });
+      } else {
+        for (const i of same) if (val[i]! > 0) total += val[i]!;
+        if (total > 0) out.push({ value: `${percent(v / total)} of total`, name: "", color: null, sub: true });
+      }
+    }
+
+    if (tips.rank === true && same.length > 1) {
+      const rank = same.filter((i) => val[i]! > v).length + 1;
+      out.push({ value: `#${rank} of ${same.length}`, name: "", color: null, sub: true });
+    }
+
+    if (tips.history === true && hovered && same.length > 1) {
+      out.push({ value: "", name: "", color: null, history: { values: same.map((i) => val[i]!), at: same.indexOf(row), color: color ?? this.theme.series[0]! } });
+    }
+    return out;
+  }
+
   // The rows of a layer at a place of x, by its key: one for each series.
   private rowsAt(layer: Layer, k: string): number[] {
     const xs = this.scalesOf(layer).x;
@@ -1649,8 +1774,8 @@ export class Chart {
 
   // The values of the fields of a layer's tooltip at a row: a number in its
   // format, a time in full, a text as it is.
-  private tipFields(layer: Layer, row: number): { value: string; name: string; color: string | null }[] {
-    const rows: { value: string; name: string; color: string | null }[] = [];
+  private tipFields(layer: Layer, row: number): TipRow[] {
+    const rows: TipRow[] = [];
     for (const field of layer.tooltip) {
       const value = field.values?.[row];
       if (value === null || value === undefined) continue;
@@ -1666,13 +1791,13 @@ export class Chart {
   }
 
   // The rows of the marks at the pointer.
-  private markRows(): { title: string; rows: { value: string; name: string; color: string | null }[] } | null {
+  private markRows(): { title: string; rows: TipRow[] } | null {
     const hover = this.hover;
     const scales = this.config.scales ?? {};
     const layers = this.config.layers ?? [];
     if (!hover) return null;
     if (hover.kind === "x") {
-      const rows: { value: string; name: string; color: string | null }[] = [];
+      const rows: TipRow[] = [];
       let title = "";
       // The bars at the same x, as a chart of bars and a line has them.
       for (const shape of this.shapes) {
@@ -1684,7 +1809,7 @@ export class Chart {
         if (this.keyOf(ls.x, layer.columns.x?.[row]) !== hover.k) continue;
         title = this.valueText(layer.columns.x?.[row], ls.x);
         const name = shape.datum.series === null ? (ls.y?.title ?? "") : this.valueText(shape.datum.series, scales.color);
-        rows.push({ value: this.valueText(layer.columns.y?.[row], ls.y), name, color: shape.color });
+        rows.push({ value: this.valueText(layer.columns.y?.[row], ls.y), name, color: shape.color, at: { layer: shape.datum.layer, row } });
       }
       for (const shape of this.shapes) {
         if (shape.type !== "line" && shape.type !== "area") continue;
@@ -1694,7 +1819,7 @@ export class Chart {
         const ys = this.scalesOf(layer).y;
         title = this.valueText(layer.columns.x?.[point.row], scales.x);
         const name = shape.series === null ? (ys?.title ?? "") : this.valueText(shape.series, scales.color);
-        rows.push({ value: this.valueText(layer.columns.y?.[point.row], ys), name, color: shape.color });
+        rows.push({ value: this.valueText(layer.columns.y?.[point.row], ys), name, color: shape.color, at: { layer: shape.layer, row: point.row } });
       }
       if (this.highlight !== null) rows.sort((a, b) => (a.color === this.color(this.highlight) ? -1 : b.color === this.color(this.highlight) ? 1 : 0));
       return { title, rows };
@@ -1713,8 +1838,8 @@ export class Chart {
         const valueScale = horizontal ? scales.x : ls.y;
         const value = (horizontal ? c.x : c.y)?.[row];
         const name = series === null ? (valueScale?.title ?? "") : this.valueText(series, scales.color);
-        const rows: { value: string; name: string; color: string | null }[] = [
-          { value: this.valueText(value, { ...valueScale!, format: valueScale?.format === "percent" ? undefined : valueScale?.format } as Scale), name, color },
+        const rows: TipRow[] = [
+          { value: this.valueText(value, { ...valueScale!, format: valueScale?.format === "percent" ? undefined : valueScale?.format } as Scale), name, color, at: { layer: li, row } },
         ];
         // A waterfall's step: its change, and the total after it.
         if (layer.stack === "waterfall" && c.y1) rows.push({ value: this.valueText(c.y1[row], valueScale), name: "Total", color: null });
@@ -1730,7 +1855,7 @@ export class Chart {
       }
       case "region":
       case "bubble": {
-        const rows: { value: string; name: string; color: string | null }[] = [];
+        const rows: TipRow[] = [];
         if (c.size) rows.push({ value: this.valueText(c.size[row], scales.size), name: scales.size?.title ?? "", color: null });
         if (c.color) rows.push({ value: this.valueText(c.color[row], scales.color), name: scales.color?.title ?? "", color });
         return { title: this.names.get(hover.key) ?? this.valueText(c.region?.[row], scales.region), rows };
@@ -1738,7 +1863,7 @@ export class Chart {
       case "rect":
         return {
           title: `${this.valueText(c.x?.[row], scales.x)} · ${this.valueText(c.y?.[row], ls.y)}`,
-          rows: c.color ? [{ value: this.valueText(c.color[row], scales.color), name: scales.color?.title ?? "", color }] : [],
+          rows: c.color ? [{ value: this.valueText(c.color[row], scales.color), name: scales.color?.title ?? "", color, at: { layer: li, row } }] : [],
         };
       default: {
         const rows = [
@@ -1766,6 +1891,14 @@ export class Chart {
     box.replaceChildren();
     if (tip.title) box.append(div("fude-tooltip-title", tip.title));
     for (const row of tip.rows) {
+      if (row.history) {
+        box.append(tipHistory(row.history));
+        continue;
+      }
+      if (row.sub) {
+        box.append(div(`fude-tooltip-sub${row.tone ? ` fude-${row.tone}` : ""}`, row.value));
+        continue;
+      }
       const line = div("fude-tooltip-row");
       if (row.color) {
         const key = div("fude-tooltip-key");
@@ -1865,6 +1998,21 @@ export class Chart {
 
 // -- Appending rows ------------------------------------------------------------
 
+/**
+ * A line of the tooltip: a value with its name and color; a line under it
+ * (its change, its share, its rank) in the secondary color; or a small
+ * history of its series. `at` is the mark it is about.
+ */
+interface TipRow {
+  value: string;
+  name: string;
+  color: string | null;
+  at?: { layer: number; row: number };
+  sub?: boolean;
+  tone?: "up" | "down";
+  history?: { values: number[]; at: number; color: string };
+}
+
 const SCALE_OF: Record<string, string> = { x: "x", x2: "x", x0: "x", x1: "x", y: "y", y0: "y", y1: "y", y2: "y", color: "color", size: "size", region: "region" };
 const CATEGORICAL = new Set(["band", "point", "ordinal"]);
 
@@ -1928,6 +2076,36 @@ export function merge(config: Config, add: Config, max: number | null): Config {
   return { ...config, scales, layers };
 }
 
+// A series' history in the tooltip: a small line, with the hovered point.
+function tipHistory({ values, at, color }: { values: number[]; at: number; color: string }): SVGSVGElement {
+  const w = 132;
+  const h = 30;
+  const pad = 3;
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const x = (i: number) => pad + ((w - 2 * pad) * i) / Math.max(1, values.length - 1);
+  const y = (v: number) => (hi === lo ? h / 2 : h - pad - ((h - 2 * pad) * (v - lo)) / (hi - lo));
+  const svg = document.createElementNS(SVG, "svg");
+  svg.setAttribute("class", "fude-tooltip-history");
+  svg.setAttribute("width", String(w));
+  svg.setAttribute("height", String(h));
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG, "path");
+  path.setAttribute("d", values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(""));
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", color);
+  path.setAttribute("stroke-width", "1.5");
+  path.setAttribute("stroke-linejoin", "round");
+  const dot = document.createElementNS(SVG, "circle");
+  dot.setAttribute("cx", x(at).toFixed(1));
+  dot.setAttribute("cy", y(values[at]!).toFixed(1));
+  dot.setAttribute("r", "2.75");
+  dot.setAttribute("fill", color);
+  svg.append(path, dot);
+  return svg;
+}
+
 function div(className: string, text?: string): HTMLDivElement {
   const el = document.createElement("div");
   el.className = className;
@@ -1967,7 +2145,7 @@ function text(
   content: string,
   x: number,
   y: number,
-  options: { anchor: "start" | "middle" | "end"; baseline: "middle" | "alphabetic"; fill: string; tabular?: boolean; halo?: string },
+  options: { anchor: "start" | "middle" | "end"; baseline: "middle" | "alphabetic"; fill: string; tabular?: boolean; halo?: string; key?: string; size?: number; weight?: number },
 ): void {
   const el = document.createElementNS(SVG, "text");
   el.setAttribute("x", String(x));
@@ -1975,7 +2153,9 @@ function text(
   el.setAttribute("text-anchor", options.anchor);
   el.setAttribute("dominant-baseline", options.baseline === "middle" ? "central" : "alphabetic");
   el.setAttribute("fill", options.fill);
-  el.setAttribute("font-size", String(FONT_SIZE));
+  el.setAttribute("font-size", String(options.size ?? FONT_SIZE));
+  if (options.weight) el.setAttribute("font-weight", String(options.weight));
+  if (options.key) el.setAttribute("data-key", options.key);
   if (options.tabular) el.setAttribute("font-variant-numeric", "tabular-nums");
   if (options.halo) {
     // A ring of the surface around the letters, so that a label over a
@@ -2000,6 +2180,8 @@ function text(
       plate.setAttribute("rx", "2");
       plate.setAttribute("fill", options.halo);
       plate.setAttribute("fill-opacity", "0.88");
+      // The plate travels with its words.
+      if (options.key) plate.setAttribute("data-key", `${options.key}#plate`);
       parent.insertBefore(plate, el);
     }
   }

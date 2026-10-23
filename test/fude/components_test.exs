@@ -128,6 +128,33 @@ defmodule Fude.ComponentsTest do
     assert html =~ "background: #abcdef"
   end
 
+  test "the component's animate is over the chart's (#16)" do
+    rows = [%{r: "a", v: 1}]
+    assigns = %{chart: Fude.bar(rows, x: :r, y: :v, animate: [duration: 900])}
+
+    config = fn html ->
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("figure")
+      |> LazyHTML.attribute("data-fude")
+      |> hd()
+      |> JSON.decode!()
+    end
+
+    assert config.(rendered_to_string(~H|<.chart id="a" chart={@chart} />|))["animate"] == %{
+             "duration" => 900
+           }
+
+    assert config.(rendered_to_string(~H|<.chart id="a" chart={@chart} animate={false} />|))[
+             "animate"
+           ] == false
+
+    refute Map.has_key?(
+             config.(rendered_to_string(~H|<.chart id="a" chart={@chart} animate />|)),
+             "animate"
+           )
+  end
+
   test "needs a chart or a spec" do
     assigns = %{}
 

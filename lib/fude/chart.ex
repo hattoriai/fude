@@ -20,6 +20,8 @@ defmodule Fude.Chart do
           description: String.t() | nil,
           data: String.t(),
           height: pos_integer() | nil,
+          animate: boolean() | %{duration: non_neg_integer()},
+          frame: String.t() | nil,
           annotations: [Fude.Annotation.t()],
           facet: %{field: String.t(), columns: pos_integer() | nil} | nil,
           datasets: %{String.t() => term()}
@@ -33,6 +35,8 @@ defmodule Fude.Chart do
             description: nil,
             data: "data",
             height: nil,
+            animate: true,
+            frame: nil,
             annotations: [],
             facet: nil,
             datasets: %{}
@@ -46,7 +50,7 @@ defmodule Fude.Chart do
   # Puts the keys of a chart (not of a layer) from the keyword list that
   # the functions of Fude take; the rest are the layer's.
   @spec split(keyword()) :: {keyword(), keyword()}
-  def split(opts), do: Keyword.split(opts, [:height, :data | @words])
+  def split(opts), do: Keyword.split(opts, [:height, :data, :animate, :frame | @words])
 
   @doc false
   @spec put(t(), keyword()) :: t()
@@ -61,10 +65,34 @@ defmodule Fude.Chart do
       {:data, name}, chart when is_binary(name) or is_atom(name) ->
         %{chart | data: to_string(name)}
 
+      {:animate, animate}, chart ->
+        %{chart | animate: animate!(animate)}
+
+      {:frame, frame}, chart when is_binary(frame) or is_nil(frame) ->
+        %{chart | frame: frame}
+
       {key, value}, _chart ->
         raise ArgumentError, "Fude: #{inspect(key)} of a chart is not valid: #{inspect(value)}"
     end)
   end
+
+  @doc false
+  # Whether a chart's marks move, and for how long: `true` (the theme's
+  # duration), `false` (never), or `[duration: ms]`.
+  def animate!(animate) when is_boolean(animate), do: animate
+
+  def animate!(duration: ms) when is_integer(ms) and ms >= 0 and ms <= 10_000,
+    do: %{duration: ms}
+
+  def animate!(%{duration: ms}) when is_integer(ms) and ms >= 0 and ms <= 10_000,
+    do: %{duration: ms}
+
+  def animate!(other),
+    do:
+      raise(
+        ArgumentError,
+        "Fude: :animate of a chart must be true, false or [duration: ms] (0 to 10000), got: #{inspect(other)}"
+      )
 
   @doc "The chart's kind: the kind of its first layer."
   @spec kind(t()) :: Layer.kind() | nil

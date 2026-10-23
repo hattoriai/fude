@@ -145,7 +145,10 @@ defmodule Fude.Compile do
       "subtitle" => chart.subtitle,
       "caption" => chart.caption,
       "source" => chart.source,
-      "height" => chart.height
+      "height" => chart.height,
+      # Whether the marks move (#16): false, or a duration of the chart's own.
+      "animate" => wire_animate(chart.animate),
+      "frame" => chart.frame
     }
 
     if single? do
@@ -161,6 +164,10 @@ defmodule Fude.Compile do
       |> Map.put("annotations", Enum.map(chart.annotations, &annotation(&1, scales)))
     end
   end
+
+  defp wire_animate(true), do: nil
+  defp wire_animate(false), do: false
+  defp wire_animate(%{duration: ms}), do: %{"duration" => ms}
 
   defp arcs?(chart),
     do: Enum.all?(chart.layers, &(&1.kind in [:pie, :donut, :choropleth, :bubble_map]))
@@ -306,7 +313,7 @@ defmodule Fude.Compile do
   defp table(%Layer{kind: kind} = layer, %{__struct__: @query} = query) do
     layer = normalize(layer)
     channels = layer.channels |> Map.delete(:tooltip) |> Map.to_list()
-    aggregated = aggregated(kind, channels)
+    aggregated = aggregated(kind, channels, &@query.number?(query, &1.field))
 
     # The fields of a tooltip are read with the data, not pushed down: a
     # group takes the first of a field that is not a number.
@@ -371,7 +378,7 @@ defmodule Fude.Compile do
     bins =
       Map.new(for {name, %Channel{bin: bin} = c} <- channels, bin, do: {name, bin_spec(c, data)})
 
-    aggregated = aggregated(kind, channels)
+    aggregated = aggregated(kind, channels, &(x_type(&1, data) == :number))
     tips = tips(layer)
     aggregated = Map.merge(aggregated, tip_aggregates(tips, aggregated, data))
     channels = channels ++ tips
@@ -400,13 +407,14 @@ defmodule Fude.Compile do
     do: Enum.all?(channels, fn {_name, c} -> is_nil(c.field) and c.aggregate != :count end)
 
   # The channels that are aggregated, and how: by their own aggregate, or by
-  # a sum for the value of a bar, an area, a cell or a slice.
-  defp aggregated(kind, channels) do
+  # a sum for the value of a bar, an area, a cell or a slice, when its field
+  # is a number. A field of text (a map's color by plan) groups the rows.
+  defp aggregated(kind, channels, number?) do
     implicit =
       if kind in [:bar, :area, :heatmap, :pie, :donut, :choropleth, :bubble_map], do: :sum
 
     for {name, %Channel{} = channel} <- channels,
-        fun = channel.aggregate || implicit_aggregate(implicit, kind, name, channel),
+        fun = channel.aggregate || implicit_aggregate(implicit, kind, name, channel, number?),
         into: %{},
         do: {name, fun}
   end
@@ -429,10 +437,16 @@ defmodule Fude.Compile do
     end)
   end
 
-  defp implicit_aggregate(nil, _kind, _name, _channel), do: nil
+  defp implicit_aggregate(nil, _kind, _name, _channel, _number?), do: nil
 
-  defp implicit_aggregate(implicit, kind, name, %Channel{field: field, bin: bin}) do
-    if name in value_channels(kind) and field != nil and !bin, do: implicit
+  defp implicit_aggregate(
+         implicit,
+         kind,
+         name,
+         %Channel{field: field, bin: bin} = channel,
+         number?
+       ) do
+    if name in value_channels(kind) and field != nil and !bin and number?.(channel), do: implicit
   end
 
   # The rows grouped by the channels that are not aggregated, each group one
@@ -1286,9 +1300,16 @@ defmodule Fude.Compile do
       "horizontal" => swap,
       "stack" => stack_name(Map.get(table, :stack, false)),
       "options" => Map.new(table.options, fn {k, v} -> {Atom.to_string(k), dump(v)} end),
-      "tooltip" => tooltip
+      "tooltip" => tooltip,
+      # What the tooltip adds to a mark's values (#15): change, share, rank, history.
+      "tips" => tips_of(table)
     }
   end
+
+  defp tips_of(%{layer: %Layer{options: %{tips: tips}}}),
+    do: Map.new(tips, fn {key, value} -> {Atom.to_string(key), value} end)
+
+  defp tips_of(_table), do: nil
 
   defp stack_name(false), do: nil
   defp stack_name(mode), do: Atom.to_string(mode)

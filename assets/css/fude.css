@@ -379,31 +379,66 @@
   margin-bottom: 0.25rem;
   color: var(--fude-secondary);
   font-size: 0.75rem;
+  overflow-wrap: anywhere;
 }
 
+/* A value's line: its key, its name on the left (wrapping when long), and
+   its value on the right, in tabular figures so that values line up. */
 .fude-tooltip-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  white-space: nowrap;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 0.5rem;
+}
+
+.fude-tooltip-row + .fude-tooltip-row {
+  margin-top: 0.125rem;
 }
 
 .fude-tooltip-key {
-  flex: none;
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
   width: 10px;
   height: 2px;
   border-radius: 1px;
 }
 
 .fude-tooltip-value {
+  grid-column: 3;
+  grid-row: 1;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .fude-tooltip-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  grid-column: 2;
+  grid-row: 1;
   color: var(--fude-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* What a tooltip adds under a value: its change, its share, its rank. */
+.fude-tooltip-sub {
+  color: var(--fude-secondary);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.fude-tooltip-sub.fude-up {
+  color: var(--fude-up);
+}
+
+.fude-tooltip-sub.fude-down {
+  color: var(--fude-down);
+}
+
+.fude-tooltip-history {
+  display: block;
+  margin: 0.375rem 0 0 auto;
 }
 
 .fude-live {
