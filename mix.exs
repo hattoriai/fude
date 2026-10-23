@@ -56,8 +56,9 @@ defmodule Fude.MixProject do
       {:ecto, "~> 3.13", optional: true},
       {:ecto_sql, "~> 3.13", only: :test},
       {:ecto_sqlite3, "~> 0.22", only: :test},
-      # PostgreSQL for the tests too, with FUDE_DB=postgres.
+      # PostgreSQL and MySQL for the tests too, with FUDE_DB.
       {:postgrex, "~> 0.20", only: :test},
+      {:myxql, "~> 0.8", only: :test},
       {:esbuild, "~> 0.10", only: :dev, runtime: false},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:lazy_html, "~> 0.1", only: :test},

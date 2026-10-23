@@ -1,7 +1,7 @@
 defmodule Fude.QueryTest do
   # One database for the module: SQLite, or PostgreSQL with
   # FUDE_DB=postgres (a server on localhost, user postgres, password
-  # postgres).
+  # postgres), or MySQL with FUDE_DB=mysql (user root, password root).
   use ExUnit.Case, async: false
 
   import Ecto.Query
@@ -9,11 +9,12 @@ defmodule Fude.QueryTest do
   alias Fude.Compile
   alias FudeTest.Order
 
-  @postgres System.get_env("FUDE_DB") == "postgres"
-  @repo if @postgres, do: FudeTest.PostgresRepo, else: FudeTest.SQLiteRepo
+  @db System.get_env("FUDE_DB", "sqlite")
+  @repo %{"postgres" => FudeTest.PostgresRepo, "mysql" => FudeTest.MySQLRepo}[@db] ||
+          FudeTest.SQLiteRepo
 
   setup_all do
-    {pid, cleanup} = start_repo(@postgres)
+    {pid, cleanup} = start_repo(@db)
 
     orders =
       for i <- 1..400 do
@@ -40,7 +41,31 @@ defmodule Fude.QueryTest do
     %{orders: orders}
   end
 
-  defp start_repo(false) do
+  defp start_repo("mysql") do
+    database = "fude_test_#{System.unique_integer([:positive])}"
+    opts = [hostname: "localhost", username: "root", password: "root"]
+    {:ok, admin} = MyXQL.start_link(opts)
+    MyXQL.query!(admin, "CREATE DATABASE #{database}")
+    GenServer.stop(admin)
+    {:ok, pid} = @repo.start_link(opts ++ [database: database, pool_size: 1])
+
+    @repo.query!("""
+    CREATE TABLE orders (
+      id INTEGER PRIMARY KEY, status TEXT, channel TEXT, total DOUBLE, items INTEGER,
+      placed_on DATE, placed_at DATETIME
+    )
+    """)
+
+    drop = fn ->
+      {:ok, admin} = MyXQL.start_link(opts)
+      MyXQL.query!(admin, "DROP DATABASE IF EXISTS #{database}")
+      GenServer.stop(admin)
+    end
+
+    {pid, drop}
+  end
+
+  defp start_repo("sqlite") do
     path = Path.join(System.tmp_dir!(), "fude-sqlite-#{System.unique_integer([:positive])}.db")
     {:ok, pid} = @repo.start_link(database: path, pool_size: 1)
 
@@ -54,7 +79,7 @@ defmodule Fude.QueryTest do
     {pid, fn -> File.rm(path) end}
   end
 
-  defp start_repo(true) do
+  defp start_repo("postgres") do
     database = "fude_test_#{System.unique_integer([:positive])}"
     opts = [hostname: "localhost", username: "postgres", password: "postgres"]
     {:ok, admin} = Postgrex.start_link(opts ++ [database: "postgres"])

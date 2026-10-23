@@ -8,6 +8,11 @@ defmodule FudeTest.PostgresRepo do
   use Ecto.Repo, otp_app: :fude, adapter: Ecto.Adapters.Postgres
 end
 
+defmodule FudeTest.MySQLRepo do
+  @moduledoc "A MySQL repository for the tests of Fude.Query, with FUDE_DB=mysql."
+  use Ecto.Repo, otp_app: :fude, adapter: Ecto.Adapters.MyXQL
+end
+
 defmodule FudeTest.Order do
   @moduledoc "An order, stored in SQLite."
   use Ecto.Schema

@@ -267,7 +267,11 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp aggregate(:count, _channel, name), do: dynamic([s], count(field(s, ^name)))
     defp aggregate(:distinct, _channel, name), do: dynamic([s], count(field(s, ^name), :distinct))
     defp aggregate(:sum, _channel, name), do: dynamic([s], sum(field(s, ^name)))
-    defp aggregate(:mean, _channel, name), do: dynamic([s], avg(field(s, ^name)))
+    # A mean of floating-point numbers: MySQL's mean of whole numbers is a
+    # decimal of four places.
+    defp aggregate(:mean, _channel, name),
+      do: dynamic([s], avg(fragment("? * 1e0", field(s, ^name))))
+
     defp aggregate(:min, _channel, name), do: dynamic([s], min(field(s, ^name)))
     defp aggregate(:max, _channel, name), do: dynamic([s], max(field(s, ^name)))
 
