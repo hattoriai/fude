@@ -189,6 +189,27 @@ defmodule Fude.ComponentsTest do
     assert html =~ "height: 80px"
   end
 
+  test "height={:fill} fills the box, at least 120 pixels high; another height raises" do
+    assigns = %{chart: Fude.bar([%{r: "A", v: 1}], x: :r, y: :v)}
+    html = rendered_to_string(~H|<.chart id="c" chart={@chart} height={:fill} />|)
+    assert html =~ ~s(class="fude-plot fude-plot-fill")
+    assert html =~ "min-height: 120px"
+
+    html = rendered_to_string(~H|<.chart id="c" chart={@chart} height={:fill} table={:swap} />|)
+    assert html =~ "fude-frame fude-frame-fill"
+
+    assert_raise ArgumentError, ~r/height must be a positive integer or :fill/, fn ->
+      rendered_to_string(~H|<.chart id="c" chart={@chart} height={:auto} />|)
+    end
+  end
+
+  test "a single value with height={:fill} fills its box" do
+    assigns = %{chart: Fude.number([%{v: 3}], value: :v)}
+    html = rendered_to_string(~H|<.chart id="n" chart={@chart} height={:fill} />|)
+    assert html =~ "fude-single-center"
+    refute html =~ "height: "
+  end
+
   test "the shared legend of small multiples takes the color's scheme" do
     rows = for r <- ~w(N S), c <- ~w(a b), do: %{r: r, c: c, m: 1, v: 2}
 

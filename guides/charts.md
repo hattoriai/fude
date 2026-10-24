@@ -209,6 +209,20 @@ Every function takes `:title`, `:subtitle`, `:caption`, `:source`,
 `:description` (what a screen reader says; Fude writes one when it is not
 given) and `:height`. See [Telling the story](story.md).
 
+## A chart's height
+
+A plot is 320 pixels high, or the chart's `height`. `<.chart height={:fill}>`
+takes the height its box gives it, as a dashboard's card does, and draws
+again when the box changes height (a card resized), as it does when it
+changes width. It is at least 120 pixels high. A single value fills its
+box in the same way.
+
+```heex
+<div class="card" style="height: 24rem">
+  <.chart id="revenue" chart={@chart} height={:fill} table={:swap} />
+</div>
+```
+
 ## The data as a table
 
 Each chart has its data as a table, as it draws it (summed, in bins).
