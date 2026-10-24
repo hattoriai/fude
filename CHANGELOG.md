@@ -7,6 +7,14 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-24
+
+### Fixed
+
+- The hook reads `phx-target` each time it sends an event, so a chart
+  that a render of the LiveView gives a target after it mounted sends to
+  it (it sent to the LiveView).
+
 ## [0.6.0] - 2026-10-24
 
 A click on a mark sends its values: `select` on `<.chart>`.
@@ -211,7 +219,8 @@ and tooltip fields shown.
 - An `"id"` for a layer and an annotation of a spec.
 - `mix fude.install`.
 
-[Unreleased]: https://github.com/hattoriai/fude/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/hattoriai/fude/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/hattoriai/fude/releases/tag/v0.6.1
 [0.6.0]: https://github.com/hattoriai/fude/releases/tag/v0.6.0
 [0.5.0]: https://github.com/hattoriai/fude/releases/tag/v0.5.0
 [0.4.0]: https://github.com/hattoriai/fude/releases/tag/v0.4.0

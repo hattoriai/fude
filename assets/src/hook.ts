@@ -19,10 +19,12 @@ interface FudeHook extends HookContext {
 export const Fude = {
   mounted(this: FudeHook) {
     const hook = this;
-    const target = hook.el.getAttribute("phx-target");
     const transport: Transport = {
       push(event, payload, onReply) {
         const reply = onReply ? (response: Record<string, unknown>) => onReply(response) : undefined;
+        // Read at each push: a render of the LiveView can give the chart its
+        // target after it mounted.
+        const target = hook.el.getAttribute("phx-target");
         if (target) hook.pushEventTo(target, event, payload, reply);
         else hook.pushEvent(event, payload, reply);
       },
