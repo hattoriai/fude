@@ -13,7 +13,9 @@ use a mouse can do.
   it ("May 2026. Online: €75,912").
 * **A table.** Under each chart, a toggle opens a table of its data, as
   the chart draws it (summed, in bins). It is on the page before the
-  hook mounts, and with JavaScript off.
+  hook mounts, and with JavaScript off. With `table={:swap}`, a **Data**
+  button (`aria-pressed`, and `aria-controls` the table) shows it in the
+  plot's place, a region that the keyboard scrolls.
 * **Single numbers** are HTML: a `progressbar` and a `meter` with their
   values.
 * **Colors.** The series' colors are told apart by people with the

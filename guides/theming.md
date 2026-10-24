@@ -51,4 +51,6 @@ with the blade first among the series, and follows the Sumi themes, the
 `.fude`, `.fude-kind-<kind>` on each chart; `.fude-head`, `.fude-title`,
 `.fude-subtitle`, `.fude-foot`, `.fude-caption`, `.fude-source`,
 `.fude-legend`, `.fude-tooltip`, `.fude-data`, `.fude-panels`,
-`.fude-panel`.
+`.fude-panel`; with `table={:swap}`, `.fude-frame`, `.fude-data-over`
+and `.fude-data-toggle`, and `[data-fude-data]` on the chart while its
+table shows.

@@ -332,6 +332,7 @@ defmodule FudeDev.GalleryLive do
       <.chart
         id="revenue-regions"
         locale={@locale}
+        table={:swap}
         chart={Fude.bar(regions(@shuffled), x: [field: :region, sort: :"-y"], y: [field: :revenue, format: {:currency, "EUR"}], color: :channel,
           tooltip: [rank: true, history: true], title: "Revenue by region", subtitle: "Stacked by channel")}
       />
