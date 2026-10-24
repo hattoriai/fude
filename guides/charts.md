@@ -57,8 +57,8 @@ words (`placed_on` is "Placed on"), unless the channel has one.
 | `bubble_map` | `region`, `size`, `color`, `tooltip` | `map` |
 | `rule` | `x` or `y` | `label`, `dashed` |
 | `text` | `x`, `y`, `text` | |
-| `number` | `value` | `label`, `align` |
-| `trend` | `value`, `compare` | `label`, `align` |
+| `number` | `value`, `spark` | `label`, `align` |
+| `trend` | `value`, `compare`, `spark` | `label`, `align` |
 | `gauge` | `value` | `label`, `min`, `max`, `target`, `align` |
 | `progress` | `value` | `label`, `goal`, `align` |
 
@@ -98,6 +98,18 @@ A trend's change is a pill, green up and red down (`--fude-up`,
 `--fude-down`); a progress has its label and its share of the goal above
 the bar, as thick as `--fude-progress-height` sets it, or as the box
 allows.
+
+A `spark` channel draws a number's history under it: the value's field by
+the spark's field (a time, in its order), summed for each of its values,
+or by the value's own aggregate. The line ends on its last point, the
+number itself, in the first color of the series (`--fude-series-1`), as
+high as `--fude-spark-height` (2rem). It needs two points; with rows
+newest first, as a trend's are, the first row is the number and the last
+point of its line:
+
+```elixir
+Fude.trend(months, value: :mrr, compare: :previous, spark: :month, label: "vs last month")
+```
 
 ## Tooltips
 

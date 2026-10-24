@@ -345,9 +345,53 @@ defmodule Fude.Components do
         <span :if={@single["label"]} class="fude-label">{@single["label"]}</span>
       </span>
       <span :if={@kind != "trend" and @single["label"]} class="fude-label">{@single["label"]}</span>
+      <.spark :if={@single["spark"]} points={@single["spark"]} />
     </div>
     """
   end
+
+  attr :points, :list, required: true
+
+  # A number's history under it: a line, an area fading under it, and a dot
+  # on its last point (the number itself). Drawn on the server, as the
+  # number is; the number says the value, so it is not read out.
+  defp spark(assigns) do
+    {line, area, last} = spark_paths(assigns.points)
+    assigns = assign(assigns, line: line, area: area, last: last)
+
+    ~H"""
+    <span class="fude-spark" aria-hidden="true">
+      <svg viewBox="0 0 100 32" preserveAspectRatio="none">
+        <path class="fude-spark-area" d={@area} />
+        <path class="fude-spark-line" d={@line} vector-effect="non-scaling-stroke" />
+      </svg>
+      <span class="fude-spark-last" style={"top: #{@last}%"}></span>
+    </span>
+    """
+  end
+
+  # The line and the area of the points on a box of 100 by 32, with 2 above
+  # and below for the line's width, and the last point's height in percent.
+  defp spark_paths(points) do
+    {low, high} = Enum.min_max(points)
+    span = if high == low, do: 1, else: high - low
+    step = 100 / (length(points) - 1)
+
+    coords =
+      points
+      |> Enum.with_index()
+      |> Enum.map(fn {value, i} -> {i * step, 30 - (value - low) / span * 28} end)
+
+    line =
+      coords
+      |> Enum.map_join(" ", fn {x, y} -> "#{round2(x)},#{round2(y)}" end)
+      |> then(&("M" <> &1))
+
+    {_x, last_y} = List.last(coords)
+    {line, line <> " L100,32 L0,32 Z", round2(last_y / 32 * 100)}
+  end
+
+  defp round2(number), do: Float.round(number / 1, 2)
 
   attr :single, :map, required: true
   attr :text, :string, required: true

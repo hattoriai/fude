@@ -156,6 +156,16 @@ defmodule FudeDev.Data do
 
   def kpis, do: [%{mrr: 184_320.5, last: 171_240.0, done: 68}]
 
+  # A year of monthly revenue, newest first, as a trend reads it.
+  def mrr_months do
+    for month <- 11..0//-1 do
+      %{
+        month: Date.shift(~D[2026-01-01], month: month),
+        mrr: 120_000 + month * 5_400 + rem(month * 7_919, 9_000)
+      }
+    end
+  end
+
   def region_months do
     for region <- Enum.take(@regions, 4),
         month <- 0..11,
@@ -309,6 +319,11 @@ defmodule FudeDev.GalleryLive do
     <div class="numbers">
       <.chart id="mrr" locale={@locale} chart={Fude.number(Data.kpis(), value: [field: :mrr, format: {:currency, "EUR"}], label: "Monthly recurring revenue")} />
       <.chart id="mrr-trend" locale={@locale} chart={Fude.trend(Data.kpis(), value: [field: :mrr, format: :compact], compare: :last, label: "vs last month")} />
+      <.chart
+        id="mrr-spark"
+        locale={@locale}
+        chart={Fude.trend(Data.mrr_months(), value: [field: :mrr, format: {:currency, "EUR"}], spark: :month, label: "vs last month, and the year")}
+      />
       <.chart id="done" locale={@locale} chart={Fude.progress(Data.kpis(), value: :done, goal: 100, label: "Onboarding done, of 100")} />
       <.chart id="uptime" locale={@locale} chart={Fude.gauge([%{p: 72.4}], value: [field: :p, format: :number], target: 80, label: "Score, of 100")} />
       <.chart id="visits-spark" locale={@locale} chart={Fude.sparkline(Data.daily(), x: :day, y: :visits, title: "Visits, 90 days")} />

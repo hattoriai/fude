@@ -241,6 +241,7 @@ defmodule Fude.Compile do
       "label" => options[:label] || Channel.title(channels[:value]),
       "format" => format(channels[:value]),
       "compare" => if(kind == :trend, do: compare(channels[:compare], channels[:value], data)),
+      "spark" => spark(channels[:spark], channels[:value], data),
       "goal" => if(kind == :progress, do: options[:goal] || 100),
       "min" => if(kind == :gauge, do: options[:min] || 0),
       "max" => if(kind == :gauge, do: options[:max] || 100),
@@ -261,6 +262,26 @@ defmodule Fude.Compile do
   end
 
   defp first_value(%Channel{field: field}, data), do: data |> Data.column(field) |> List.first()
+
+  # A number's history, as a sparkline under it: the value's field by the
+  # spark's (a time, in its order), each of its values summed (or the
+  # value's aggregate). Only the values that are numbers.
+  defp spark(%Channel{field: x}, %Channel{field: y} = value, data)
+       when is_binary(x) and is_binary(y) do
+    data
+    |> Data.column(x)
+    |> Enum.zip(Data.column(data, y))
+    |> Enum.reject(fn {at, number} -> is_nil(at) or not is_number(number) end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Enum.sort_by(&elem(&1, 0))
+    |> Enum.map(fn {_at, numbers} -> aggregate(value.aggregate || :sum, numbers) end)
+    |> case do
+      [_, _ | _] = points -> points
+      _fewer -> nil
+    end
+  end
+
+  defp spark(_spark, _value, _data), do: nil
 
   # A trend compares with a field of the first row, or with the value of
   # the second row (the period before).

@@ -52,6 +52,16 @@ test.describe("the gallery", () => {
     await expect(button).toHaveAttribute("aria-pressed", "false");
   });
 
+  test("a trend draws its history under it, ending on its value", async ({ page }) => {
+    await openPage(page);
+    const spark = page.locator("#mrr-spark .fude-spark");
+    await expect(spark).toBeVisible();
+    const box = (await spark.boundingBox())!;
+    const last = (await spark.locator(".fude-spark-last").boundingBox())!;
+    expect(Math.abs(last.x + last.width / 2 - (box.x + box.width))).toBeLessThan(2);
+    expect(box.height).toBeGreaterThan(20);
+  });
+
   test("a chart that fills its box draws again at the box's new height", async ({ page }) => {
     await openPage(page);
     const canvas = page.locator("#card-chart .fude-stage canvas");

@@ -100,9 +100,13 @@ defmodule Fude.Layer do
         value: :boolean
       ]
     },
-    number: %{channels: [:value], needs: [:value], options: [label: :string, align: @align]},
+    number: %{
+      channels: [:value, :spark],
+      needs: [:value],
+      options: [label: :string, align: @align]
+    },
     trend: %{
-      channels: [:value, :compare],
+      channels: [:value, :compare, :spark],
       needs: [:value],
       options: [label: :string, align: @align]
     },
