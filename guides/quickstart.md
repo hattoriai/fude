@@ -5,7 +5,7 @@ A first chart in a LiveView, from data you already have.
 ## 1. Add the dependency
 
 ```elixir
-{:fude, "~> 0.5"}
+{:fude, "~> 0.6"}
 ```
 
 ```sh
