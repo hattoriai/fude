@@ -319,6 +319,16 @@ defmodule FudeDev.GalleryLive do
       />
     </div>
     <p><button phx-click="shuffle">Change the data</button></p>
+    <%!-- A dashboard's card: the chart fills the box, and draws again as it is resized. --%>
+    <div id="card-box" style="height: 300px; resize: vertical; overflow: hidden; border: 1px solid #ddd; border-radius: 8px; padding: 12px;">
+      <.chart
+        id="card-chart"
+        locale={@locale}
+        height={:fill}
+        table={:swap}
+        chart={Fude.bar(regions(@shuffled), x: :region, y: [field: :revenue, format: {:currency, "EUR"}], title: "A chart that fills its card")}
+      />
+    </div>
     <div class="grid">
       <.chart
         id="revenue-lines"

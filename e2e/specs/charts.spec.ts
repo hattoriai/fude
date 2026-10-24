@@ -52,6 +52,17 @@ test.describe("the gallery", () => {
     await expect(button).toHaveAttribute("aria-pressed", "false");
   });
 
+  test("a chart that fills its box draws again at the box's new height", async ({ page }) => {
+    await openPage(page);
+    const canvas = page.locator("#card-chart .fude-stage canvas");
+    await expect(canvas).toBeVisible();
+    const before = (await canvas.boundingBox())!.height;
+
+    await page.locator("#card-box").evaluate((box) => (box.style.height = "420px"));
+    await expect.poll(async () => (await canvas.boundingBox())!.height).toBeGreaterThan(before + 100);
+    await expect(page.locator("#card-chart .fude-axes text").first()).toBeVisible();
+  });
+
   test("a line chart's tooltip lists every series at the pointer", async ({ page }) => {
     await openPage(page);
     await pointAt(page, "revenue-lines", 0.6, 0.5);

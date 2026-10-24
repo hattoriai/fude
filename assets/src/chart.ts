@@ -215,11 +215,14 @@ export class Chart {
 
   private observe(): void {
     if (typeof ResizeObserver === "function" && this.plot) {
+      // A new width, or a new height for a chart that fills its box (a
+      // card resized): the plot is laid out again.
       let width = 0;
+      let height = 0;
       const resize = new ResizeObserver(() => {
-        const now = this.stage.clientWidth;
-        if (now !== width) {
-          width = now;
+        const [w, h] = [this.stage.clientWidth, this.stage.clientHeight];
+        if (w !== width || h !== height) {
+          [width, height] = [w, h];
           this.render(false);
         }
       });

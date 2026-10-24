@@ -7,6 +7,12 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `height={:fill}`: a chart takes the height its box gives it, as a
+  dashboard's card, and draws again when the box changes height, as it
+  does when it changes width. At least 120 pixels. See the Charts guide.
+
 ## [0.3.0] - 2026-10-24
 
 A chart's data in the plot's place, and a chart's Data that stays open as

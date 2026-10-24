@@ -43,9 +43,10 @@ defmodule Fude.Components do
     doc:
       "the chart's data, for a spec or a chart made without it; a map of names for a chart of several"
 
-  attr :height, :integer,
+  attr :height, :any,
     default: nil,
-    doc: "the height of the plot in pixels; the chart's own, or 320"
+    doc:
+      "the height of the plot in pixels; or `:fill`, the height its box gives it (a dashboard's card), redrawn as it changes; the chart's own, or 320"
 
   attr :locale, :string,
     default: nil,
@@ -75,6 +76,9 @@ defmodule Fude.Components do
   attr :class, :any, default: nil, doc: "classes for the chart's element"
   attr :rest, :global
 
+  # The least a plot that fills its box takes, as a card too small for it.
+  @fill_min_height 120
+
   def chart(assigns) do
     assigns = prepare(assigns)
 
@@ -101,7 +105,7 @@ defmodule Fude.Components do
         id={@id}
         single={@wire["single"]}
         kind={@kind}
-        height={@height || @wire["height"]}
+        height={@fixed_height || @wire["height"]}
       />
       <.plot
         :if={@plotted and not @swap}
@@ -122,7 +126,7 @@ defmodule Fude.Components do
           <.data_table heads={@heads} rows={@rows} />
         </div>
       </div>
-      <.panels :if={@errors == [] and @wire["facet"]} id={@id} wire={@wire} locale={@locale} height={@height} />
+      <.panels :if={@errors == [] and @wire["facet"]} id={@id} wire={@wire} locale={@locale} height={@fixed_height} />
       <%!-- Open is the person's: a render of the LiveView (its data, or the page
            around it) keeps it as they left it. --%>
       <details
@@ -366,6 +370,7 @@ defmodule Fude.Components do
 
   defp prepare(assigns) do
     {wire, errors} = compile(assigns)
+    fixed_height = fixed_height(assigns.height)
     table_mode = table_mode(assigns.table)
     plotted = plotted?(wire, errors)
     {heads, rows} = table(wire, errors, table_mode)
@@ -383,9 +388,12 @@ defmodule Fude.Components do
       errors: errors,
       config: config,
       kind: wire["kind"] || "chart",
-      plot_height: assigns.height || wire["height"] || default_height(wire["kind"]),
+      fixed_height: fixed_height,
+      plot_height: plot_height(assigns.height, wire),
       # A sparkline with no height fills its box, at least as high as its default.
-      fill: wire["kind"] == "sparkline" and is_nil(assigns.height || wire["height"]),
+      fill:
+        assigns.height == :fill or
+          (wire["kind"] == "sparkline" and is_nil(assigns.height || wire["height"])),
       heads: heads,
       rows: rows,
       table_mode: table_mode,
@@ -455,6 +463,17 @@ defmodule Fude.Components do
       %{duration: ms} -> Map.put(wire, "animate", %{"duration" => ms})
     end
   end
+
+  # A height in pixels, or none for a chart that fills its box.
+  defp fixed_height(height) when is_integer(height) and height > 0, do: height
+  defp fixed_height(height) when height in [nil, :fill], do: nil
+
+  defp fixed_height(other),
+    do: raise(ArgumentError, "height must be a positive integer or :fill, got: #{inspect(other)}")
+
+  # The plot's height, or the least it takes when it fills its box.
+  defp plot_height(:fill, _wire), do: @fill_min_height
+  defp plot_height(height, wire), do: height || wire["height"] || default_height(wire["kind"])
 
   defp default_height("sparkline"), do: 48
   defp default_height(_kind), do: 320
