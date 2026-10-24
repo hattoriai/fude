@@ -7,6 +7,11 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-24
+
+A chart that fills its box, as a dashboard's card, and draws again as the
+box is resized.
+
 ### Added
 
 - `height={:fill}`: a chart takes the height its box gives it, as a
@@ -181,7 +186,8 @@ and tooltip fields shown.
 - An `"id"` for a layer and an annotation of a spec.
 - `mix fude.install`.
 
-[Unreleased]: https://github.com/hattoriai/fude/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/hattoriai/fude/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/hattoriai/fude/releases/tag/v0.4.0
 [0.3.0]: https://github.com/hattoriai/fude/releases/tag/v0.3.0
 [0.2.0]: https://github.com/hattoriai/fude/releases/tag/v0.2.0
 [0.1.0]: https://github.com/hattoriai/fude/releases/tag/v0.1.0
