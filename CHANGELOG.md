@@ -7,6 +7,10 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-24
+
+A number's history under it: a `spark` channel for `number` and `trend`.
+
 ### Added
 
 - A `spark` channel for `number` and `trend`: the number's history as a
@@ -195,7 +199,8 @@ and tooltip fields shown.
 - An `"id"` for a layer and an annotation of a spec.
 - `mix fude.install`.
 
-[Unreleased]: https://github.com/hattoriai/fude/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/hattoriai/fude/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/hattoriai/fude/releases/tag/v0.5.0
 [0.4.0]: https://github.com/hattoriai/fude/releases/tag/v0.4.0
 [0.3.0]: https://github.com/hattoriai/fude/releases/tag/v0.3.0
 [0.2.0]: https://github.com/hattoriai/fude/releases/tag/v0.2.0
