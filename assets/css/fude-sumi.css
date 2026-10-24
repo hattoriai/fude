@@ -38,12 +38,15 @@
   --fude-sumi-series-6: #e87ba4;
   --fude-sumi-series-7: #008300;
   --fude-sumi-series-8: #8a867e;
-  --fude-sumi-sequential: #fbdccf, #f6b296, #ee7a4c, #e84a1c, #c23a10, #962c0b, #6a1e06;
+  --fude-sumi-sequential: accent;
 }
 
-/* The Sumi palette, dark: data-theme="dark", or a dark preference on a page
-   that does not ask for light. */
-[data-theme="dark"] {
+/* The Sumi palette, dark: Sumi's dark themes (Ink, Smoke, Stone, Lacquer),
+   or a dark preference on a page that does not ask for a light one. */
+[data-theme="dark"],
+[data-theme="smoke"],
+[data-theme="stone"],
+[data-theme="lacquer"] {
   --fude-sumi-paper: oklch(12% 0.003 270);
   --fude-sumi-line: oklch(20% 0.005 270);
   --fude-sumi-ink: oklch(95% 0.012 85);
@@ -55,11 +58,11 @@
   --fude-sumi-series-6: #d55181;
   --fude-sumi-series-7: #008300;
   --fude-sumi-series-8: #7d7a74;
-  --fude-sumi-sequential: #34160c, #5e2410, #8f3312, #c2410f, #e8582a, #f08a62, #f6b79c;
+  --fude-sumi-sequential: accent;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme="light"], [data-theme="snow"], [data-theme="silk"]) {
     --fude-sumi-paper: oklch(12% 0.003 270);
     --fude-sumi-line: oklch(20% 0.005 270);
     --fude-sumi-ink: oklch(95% 0.012 85);
@@ -71,8 +74,28 @@
     --fude-sumi-series-6: #d55181;
     --fude-sumi-series-7: #008300;
     --fude-sumi-series-8: #7d7a74;
-    --fude-sumi-sequential: #34160c, #5e2410, #8f3312, #c2410f, #e8582a, #f08a62, #f6b79c;
+    --fude-sumi-sequential: accent;
   }
+}
+
+/* Series 1 is the theme's accent. Where a Sumi theme's accent is the hue of
+   another series (Snow's indigo and the blue, Smoke's jade and the green,
+   Stone's gold and the amber, Silk's pink and the pink), that series is
+   orange instead, so that no two series look alike. */
+[data-theme="snow"] {
+  --fude-sumi-series-2: #eb6834;
+}
+
+[data-theme="smoke"] {
+  --fude-sumi-series-3: #e8582a;
+}
+
+[data-theme="stone"] {
+  --fude-sumi-series-5: #e8582a;
+}
+
+[data-theme="silk"] {
+  --fude-sumi-series-6: #eb6834;
 }
 
 /* The mapping. */

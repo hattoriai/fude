@@ -59,7 +59,12 @@ export function readTheme(el: Element): Theme {
   };
   const series: string[] = [];
   for (let i = 1; i <= 8; i++) series.push(get(`--fude-series-${i}`, FALLBACK_SERIES[i - 1]!));
-  const sequential = list(get("--fude-sequential", SEQUENTIAL));
+  const surface = get("--fude-surface", "#fcfcfb");
+  const text = get("--fude-text", "#0b0b0b");
+  // "accent": the ramp of the theme's accent, from the page to the text.
+  const sequentialValue = get("--fude-sequential", SEQUENTIAL);
+  const sequential =
+    sequentialValue === "accent" ? accentRamp(get("--fude-accent", "#e84a1c"), surface, text) : list(sequentialValue);
   const schemes: Record<string, string[]> = { blue: sequential, categorical: series };
   for (const [name, fallback] of Object.entries(SCHEMES)) {
     if (name === "okabe_ito") {
@@ -72,12 +77,12 @@ export function readTheme(el: Element): Theme {
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   return {
     font: get("--fude-font", "system-ui, -apple-system, 'Segoe UI', sans-serif"),
-    text: get("--fude-text", "#0b0b0b"),
+    text,
     secondary: get("--fude-secondary", "#52514e"),
     muted: get("--fude-muted", "#6f6d68"),
     grid: get("--fude-grid", "#e1e0d9"),
     baseline: get("--fude-baseline", "#c3c2b7"),
-    surface: get("--fude-surface", "#fcfcfb"),
+    surface,
     empty: get("--fude-map-empty", "#e8e7e1"),
     roles: {
       increase: get("--fude-increase", "#1baf7a"),
@@ -140,6 +145,24 @@ export function mix(a: string, b: string, t: number): string {
   const gam = (c: number) => Math.round(255 * Math.pow(c, 1 / 2.2));
   const m = (x: number, y: number) => gam(lin(x) + (lin(y) - lin(x)) * t);
   return `rgb(${m(ar, br)}, ${m(ag, bg)}, ${m(ab, bb)})`;
+}
+
+/**
+ * A sequential ramp of one color, in seven steps: from near the page (the
+ * accent faint on the surface) through the accent itself to near the text
+ * (the accent darkened on a light page, lightened on a dark one). Low values
+ * fade into the page on either.
+ */
+export function accentRamp(accent: string, surface: string, text: string): string[] {
+  return [
+    mix(surface, accent, 0.18),
+    mix(surface, accent, 0.42),
+    mix(surface, accent, 0.7),
+    mix(accent, accent, 0),
+    mix(accent, text, 0.2),
+    mix(accent, text, 0.4),
+    mix(accent, text, 0.6),
+  ];
 }
 
 export function alpha(color: string, a: number): string {

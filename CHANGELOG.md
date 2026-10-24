@@ -9,10 +9,21 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The Sumi theme follows Sumi's seven themes and their accents: the
+  sequential ramp is the theme's accent (`--fude-sequential: accent`, a
+  ramp from the surface through the accent to the text), and a series of
+  the accent's hue is orange instead. `mix dev` shows the gallery in each
+  (`?sumi=smoke`). See the Theming guide.
 - `selected` on `<.chart>`: the marks that stand out, the others faded,
   by their values by channel as `select` sends them (`%{"x" => "North"}`).
   The chart draws again in place when only the selection changes. See the
   Live guide, "Clicks on marks".
+
+### Fixed
+
+- The Sumi theme gave Sumi's dark themes other than Ink the light palette,
+  and Sumi's light themes other than Paper the dark one on a system in
+  dark mode. Its sequential ramp was blade's in every theme.
 
 ## [0.6.1] - 2026-10-24
 
