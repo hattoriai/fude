@@ -26,6 +26,7 @@ defmodule Fude.Components do
   use Phoenix.Component
 
   alias Fude.{Chart, Compile, Spec}
+  alias Phoenix.LiveView.JS
 
   @doc """
   Renders a chart.
@@ -50,9 +51,11 @@ defmodule Fude.Components do
     default: nil,
     doc: "the locale that writes numbers and dates; the browser's unless given"
 
-  attr :table, :boolean,
+  attr :table, :any,
     default: true,
-    doc: "whether the data table is on the page (under a toggle)"
+    values: [true, false, :below, :swap],
+    doc:
+      "the chart's data as a table: under a toggle below the chart (`true`, `:below`); in the chart's place, at its size, behind a Data button (`:swap`, for a box of a fixed size, as a dashboard's card); or none (`false`)"
 
   attr :export, :boolean,
     default: false,
@@ -83,6 +86,7 @@ defmodule Fude.Components do
       data-fude={!@wire["facet"] && @config}
       data-issho-doc={@issho}
       aria-labelledby={@wire["title"] && "#{@id}-title"}
+      phx-mounted={@swap && JS.ignore_attributes(["data-fude-data"])}
       {@rest}
     >
       <figcaption :if={@wire["title"] || @wire["subtitle"]} class="fude-head">
@@ -99,28 +103,50 @@ defmodule Fude.Components do
         kind={@kind}
         height={@height || @wire["height"]}
       />
+      <.plot
+        :if={@plotted and not @swap}
+        id={@id}
+        wire={@wire}
+        fill={@fill}
+        height={@plot_height}
+      />
+      <%!-- The data in the plot's place: the frame keeps the plot's size, and
+           the table, over it, scrolls in it. Shown is the person's, as open is
+           below: a render of the LiveView keeps it. --%>
       <div
-        :if={@errors == [] and @wire["layers"] && !@wire["facet"]}
-        id={"#{@id}-plot"}
-        class={["fude-plot", @fill && "fude-plot-fill"]}
-        style={if @fill, do: "min-height: #{@plot_height}px", else: "height: #{@plot_height}px"}
-        role="img"
-        aria-label={@wire["description"]}
-        phx-update="ignore"
+        :if={@plotted and @swap}
+        class={["fude-frame", @fill && "fude-frame-fill"]}
       >
+        <.plot id={@id} wire={@wire} fill={@fill} height={@plot_height} />
+        <div id={"#{@id}-data"} class="fude-data-over" role="region" aria-label="Data" tabindex="0">
+          <.data_table heads={@heads} rows={@rows} />
+        </div>
       </div>
       <.panels :if={@errors == [] and @wire["facet"]} id={@id} wire={@wire} locale={@locale} height={@height} />
-      <details :if={@table and @rows != []} class="fude-data">
+      <%!-- Open is the person's: a render of the LiveView (its data, or the page
+           around it) keeps it as they left it. --%>
+      <details
+        :if={@table_mode == :below and @rows != []}
+        class="fude-data"
+        phx-mounted={JS.ignore_attributes(["open"])}
+      >
         <summary>Data</summary>
-        <table>
-          <thead>
-            <tr><th :for={head <- @heads} scope="col">{head}</th></tr>
-          </thead>
-          <tbody>
-            <tr :for={row <- @rows}><td :for={cell <- row}>{plain(cell)}</td></tr>
-          </tbody>
-        </table>
+        <.data_table heads={@heads} rows={@rows} />
       </details>
+      <p :if={@swap} class="fude-data-toggle">
+        <button
+          type="button"
+          aria-pressed="false"
+          aria-controls={"#{@id}-data"}
+          phx-mounted={JS.ignore_attributes(["aria-pressed"])}
+          phx-click={
+            JS.toggle_attribute({"data-fude-data", "true"}, to: "##{@id}")
+            |> JS.toggle_attribute({"aria-pressed", "true", "false"})
+          }
+        >
+          Data
+        </button>
+      </p>
       <p :if={@wire["caption"] || @wire["source"]} class="fude-foot">
         <span :if={@wire["caption"]} class="fude-caption">{@wire["caption"]}</span>
         <span :if={@wire["source"]} class="fude-source">{@wire["source"]}</span>
@@ -340,7 +366,9 @@ defmodule Fude.Components do
 
   defp prepare(assigns) do
     {wire, errors} = compile(assigns)
-    {heads, rows} = if errors == [] and assigns.table, do: Compile.table(wire), else: {[], []}
+    table_mode = table_mode(assigns.table)
+    plotted = plotted?(wire, errors)
+    {heads, rows} = table(wire, errors, table_mode)
 
     config =
       wire
@@ -359,8 +387,62 @@ defmodule Fude.Components do
       # A sparkline with no height fills its box, at least as high as its default.
       fill: wire["kind"] == "sparkline" and is_nil(assigns.height || wire["height"]),
       heads: heads,
-      rows: rows
+      rows: rows,
+      table_mode: table_mode,
+      plotted: plotted,
+      # The data in the plot's place: a plot with rows.
+      swap: plotted and table_mode == :swap and rows != []
     )
+  end
+
+  # One plot, which the hook draws (not a single value, nor small multiples).
+  defp plotted?(wire, errors), do: errors == [] and wire["layers"] != nil and !wire["facet"]
+
+  defp table(_wire, _errors, false), do: {[], []}
+  defp table(wire, [], _mode), do: Compile.table(wire)
+  defp table(_wire, _errors, _mode), do: {[], []}
+
+  defp table_mode(table) when table in [true, :below], do: :below
+  defp table_mode(:swap), do: :swap
+  defp table_mode(false), do: false
+
+  defp table_mode(other),
+    do: raise(ArgumentError, "table must be true, false, :below or :swap, got: #{inspect(other)}")
+
+  attr :id, :string, required: true
+  attr :wire, :map, required: true
+  attr :fill, :boolean, required: true
+  attr :height, :integer, required: true
+
+  # The plot: the hook draws in it.
+  defp plot(assigns) do
+    ~H"""
+    <div
+      id={"#{@id}-plot"}
+      class={["fude-plot", @fill && "fude-plot-fill"]}
+      style={if @fill, do: "min-height: #{@height}px", else: "height: #{@height}px"}
+      role="img"
+      aria-label={@wire["description"]}
+      phx-update="ignore"
+    >
+    </div>
+    """
+  end
+
+  attr :heads, :list, required: true
+  attr :rows, :list, required: true
+
+  defp data_table(assigns) do
+    ~H"""
+    <table>
+      <thead>
+        <tr><th :for={head <- @heads} scope="col">{head}</th></tr>
+      </thead>
+      <tbody>
+        <tr :for={row <- @rows}><td :for={cell <- row}>{plain(cell)}</td></tr>
+      </tbody>
+    </table>
+    """
   end
 
   # The component's animate, over the chart's.

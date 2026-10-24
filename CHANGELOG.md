@@ -7,6 +7,21 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `table={:swap}`: a chart's data in its place, at its size, behind a
+  **Data** button; the table scrolls in the plot's box, its header stays.
+  For a box of a fixed size, as a dashboard's card, which the table below
+  stretched. `table` takes `true` (or `:below`, the default), `:swap` or
+  `false`. See the Charts guide.
+
+### Fixed
+
+- A chart's Data, opened, closed again when the LiveView rendered the
+  chart again: its new data, or the page around it (Lotus Web's dashboard
+  selects a card on the click that opens it). It stays as the person left
+  it.
+
 ## [0.2.0] - 2026-10-23
 
 Richer tooltips, a right axis, color schemes, funnels and sparklines of

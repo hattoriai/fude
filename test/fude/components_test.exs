@@ -25,6 +25,81 @@ defmodule Fude.ComponentsTest do
     assert LazyHTML.text(LazyHTML.query(doc, "tbody tr:first-child")) =~ "North"
   end
 
+  test "the data table keeps its open as the LiveView renders it again" do
+    assigns = %{chart: Fude.bar(@sales, x: :region, y: :revenue)}
+    html = rendered_to_string(~H|<.chart id="revenue" chart={@chart} />|)
+
+    [mounted] =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("details.fude-data")
+      |> LazyHTML.attribute("phx-mounted")
+
+    assert mounted =~ "ignore_attrs"
+    assert mounted =~ ~s|"open"|
+  end
+
+  test "table={:swap} puts the data in the plot's place, behind a Data button" do
+    assigns = %{chart: Fude.bar(@sales, x: :region, y: :revenue)}
+
+    doc =
+      LazyHTML.from_fragment(
+        rendered_to_string(~H|<.chart id="revenue" chart={@chart} table={:swap} />|)
+      )
+
+    assert Enum.count(LazyHTML.query(doc, ".fude-frame > #revenue-plot.fude-plot")) == 1
+
+    assert LazyHTML.text(
+             LazyHTML.query(
+               doc,
+               ".fude-frame > #revenue-data.fude-data-over tbody tr:first-child"
+             )
+           ) =~ "North"
+
+    assert Enum.empty?(LazyHTML.query(doc, "details.fude-data"))
+
+    [button] =
+      LazyHTML.query(
+        doc,
+        ~s|.fude-data-toggle button[aria-controls="revenue-data"][aria-pressed="false"]|
+      )
+      |> Enum.to_list()
+
+    assert LazyHTML.text(button) =~ "Data"
+    [mounted] = LazyHTML.attribute(LazyHTML.query(doc, "figure#revenue"), "phx-mounted")
+    assert mounted =~ "data-fude-data"
+  end
+
+  test "table={false} leaves the data out; a single value has no table to swap" do
+    assigns = %{
+      chart: Fude.bar(@sales, x: :region, y: :revenue),
+      number: Fude.number([%{n: 3}], value: :n)
+    }
+
+    none =
+      LazyHTML.from_fragment(
+        rendered_to_string(~H|<.chart id="r" chart={@chart} table={false} />|)
+      )
+
+    assert Enum.empty?(LazyHTML.query(none, "table"))
+    assert Enum.empty?(LazyHTML.query(none, ".fude-data-toggle"))
+
+    single =
+      LazyHTML.from_fragment(
+        rendered_to_string(~H|<.chart id="n" chart={@number} table={:swap} />|)
+      )
+
+    assert Enum.empty?(LazyHTML.query(single, ".fude-frame, .fude-data-toggle"))
+  end
+
+  test "table takes true, false, :below or :swap" do
+    assigns = %{chart: Fude.bar(@sales, x: :region, y: :revenue), table: :side}
+
+    assert_raise ArgumentError, ~r/table must be/, fn ->
+      rendered_to_string(~H|<.chart id="r" chart={@chart} table={@table} />|)
+    end
+  end
+
   test "draws a saved spec with its data again" do
     spec = Fude.Spec.dump(Fude.bar(x: :region, y: :revenue))
     assigns = %{spec: spec, data: @sales}

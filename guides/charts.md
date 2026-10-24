@@ -209,6 +209,26 @@ Every function takes `:title`, `:subtitle`, `:caption`, `:source`,
 `:description` (what a screen reader says; Fude writes one when it is not
 given) and `:height`. See [Telling the story](story.md).
 
+## The data as a table
+
+Each chart has its data as a table, as it draws it (summed, in bins).
+`table` says where:
+
+* `true` (or `:below`), the default: under the chart, behind a **Data**
+  toggle that opens below it.
+* `:swap`: in the chart's place, at its size, behind a **Data** button;
+  the table scrolls in the plot's box, and its header stays. For a box of
+  a fixed size, as a dashboard's card, which the table would otherwise
+  stretch.
+* `false`: none.
+
+```heex
+<.chart id="revenue" chart={@chart} table={:swap} />
+```
+
+Open or shown is the reader's: a render of the LiveView (new data, or the
+page around the chart) leaves it as they left it.
+
 ## Motion
 
 A chart's marks move to their new places when its data changes (see

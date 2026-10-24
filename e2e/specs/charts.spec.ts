@@ -11,6 +11,47 @@ test.describe("the gallery", () => {
     expect(errors).toEqual([]);
   });
 
+  test("a chart's data stays open as the LiveView renders it again", async ({ page }) => {
+    await openPage(page);
+    const data = page.locator("#revenue-lines .fude-data");
+    await data.locator("summary").click();
+    await expect(data).toHaveAttribute("open", "");
+    const before = await data.locator("tbody").textContent();
+
+    await page.getByRole("button", { name: "Change the data" }).click();
+    await expect.poll(() => data.locator("tbody").textContent()).not.toBe(before);
+    await expect(data).toHaveAttribute("open", "");
+  });
+
+  test("a chart's data in its place: the table at the plot's size, kept as the LiveView renders it again", async ({ page }) => {
+    await openPage(page);
+    const chart = page.locator("#revenue-regions");
+    const plot = chart.locator(".fude-plot");
+    const table = chart.locator(".fude-data-over");
+    const button = chart.getByRole("button", { name: "Data" });
+    await expect(chart.locator("details.fude-data")).toHaveCount(0);
+    await expect(table).toBeHidden();
+    const plotBox = (await plot.boundingBox())!;
+
+    await button.click();
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+    await expect(table).toBeVisible();
+    await expect(plot).toBeHidden();
+    const tableBox = (await table.boundingBox())!;
+    expect(Math.abs(tableBox.height - plotBox.height)).toBeLessThan(2);
+    const before = await table.locator("tbody").textContent();
+
+    await page.getByRole("button", { name: "Change the data" }).click();
+    await expect.poll(() => table.locator("tbody").textContent()).not.toBe(before);
+    await expect(table).toBeVisible();
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+
+    await button.click();
+    await expect(table).toBeHidden();
+    await expect(plot).toBeVisible();
+    await expect(button).toHaveAttribute("aria-pressed", "false");
+  });
+
   test("a line chart's tooltip lists every series at the pointer", async ({ page }) => {
     await openPage(page);
     await pointAt(page, "revenue-lines", 0.6, 0.5);
