@@ -25,6 +25,24 @@ defmodule Fude.ComponentsTest do
     assert LazyHTML.text(LazyHTML.query(doc, "tbody tr:first-child")) =~ "North"
   end
 
+  test "select names the event a click on a mark sends" do
+    assigns = %{chart: Fude.bar(@sales, x: :region, y: :revenue)}
+
+    html =
+      rendered_to_string(
+        ~H|<.chart id="revenue" chart={@chart} select="pick" phx-target="#box" />|
+      )
+
+    doc = LazyHTML.from_fragment(html)
+
+    assert Enum.count(
+             LazyHTML.query(doc, ~s|figure#revenue[data-fude-select="pick"][phx-target="#box"]|)
+           ) == 1
+
+    html = rendered_to_string(~H|<.chart id="revenue" chart={@chart} />|)
+    assert LazyHTML.query(LazyHTML.from_fragment(html), "[data-fude-select]") |> Enum.empty?()
+  end
+
   test "the data table keeps its open as the LiveView renders it again" do
     assigns = %{chart: Fude.bar(@sales, x: :region, y: :revenue)}
     html = rendered_to_string(~H|<.chart id="revenue" chart={@chart} />|)

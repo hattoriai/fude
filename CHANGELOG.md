@@ -7,6 +7,14 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `select` on `<.chart>`: the event a click on a mark sends, or Enter on
+  the mark the keyboard is on, with the chart's `id` and the mark's
+  values by channel as the data has them (a category's name, a time's ISO
+  text, a number). On a line chart's crosshair, the `x`. It goes where
+  `phx-target` says. See the Live guide, "Clicks on marks".
+
 ## [0.5.0] - 2026-10-24
 
 A number's history under it: a `spark` channel for `number` and `trend`.

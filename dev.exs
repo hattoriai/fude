@@ -311,7 +311,7 @@ defmodule FudeDev.GalleryLive do
   alias FudeDev.Data
 
   def mount(params, _session, socket) do
-    {:ok, assign(socket, locale: params["locale"] || "en-GB", shuffled: false)}
+    {:ok, assign(socket, locale: params["locale"] || "en-GB", shuffled: false, selected: nil)}
   end
 
   def render(assigns) do
@@ -348,6 +348,7 @@ defmodule FudeDev.GalleryLive do
       <.chart
         id="revenue-lines"
         export
+        select="select"
         locale={@locale}
         chart={Fude.line(monthly(@shuffled), x: :month, y: [field: :revenue, format: {:currency, "EUR"}, title: "Revenue"], color: :channel,
           title: "Online keeps growing", subtitle: "Monthly revenue by channel, 2025–2026", source: "Made-up data", curve: :monotone)
@@ -357,10 +358,12 @@ defmodule FudeDev.GalleryLive do
       <.chart
         id="revenue-regions"
         locale={@locale}
+        select="select"
         table={:swap}
         chart={Fude.bar(regions(@shuffled), x: [field: :region, sort: :"-y"], y: [field: :revenue, format: {:currency, "EUR"}], color: :channel,
           tooltip: [rank: true, history: true], title: "Revenue by region", subtitle: "Stacked by channel")}
       />
+      <p id="selected">{@selected && Jason.encode!(@selected)}</p>
       <.chart
         id="orders-histogram"
         locale={@locale}
@@ -490,6 +493,7 @@ defmodule FudeDev.GalleryLive do
       )
 
   def handle_event("shuffle", _params, socket), do: {:noreply, update(socket, :shuffled, &(!&1))}
+  def handle_event("select", params, socket), do: {:noreply, assign(socket, :selected, params)}
 end
 
 defmodule FudeDev.LiveLive do
