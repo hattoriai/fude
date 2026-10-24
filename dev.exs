@@ -359,6 +359,7 @@ defmodule FudeDev.GalleryLive do
         id="revenue-regions"
         locale={@locale}
         select="select"
+        selected={@selected && @selected["id"] == "revenue-regions" && Map.take(@selected, ["x"])}
         table={:swap}
         chart={Fude.bar(regions(@shuffled), x: [field: :region, sort: :"-y"], y: [field: :revenue, format: {:currency, "EUR"}], color: :channel,
           tooltip: [rank: true, history: true], title: "Revenue by region", subtitle: "Stacked by channel")}

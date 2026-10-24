@@ -7,6 +7,13 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `selected` on `<.chart>`: the marks that stand out, the others faded,
+  by their values by channel as `select` sends them (`%{"x" => "North"}`).
+  The chart draws again in place when only the selection changes. See the
+  Live guide, "Clicks on marks".
+
 ## [0.6.1] - 2026-10-24
 
 ### Fixed

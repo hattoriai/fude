@@ -78,6 +78,11 @@ defmodule Fude.Components do
     doc:
       "an event a click on a mark (or Enter on the mark the keyboard is on) sends, with the chart's `id` and the mark's values by channel (`x`, `y`, `color`...): a category's name, a time's ISO text, a number. On a line chart's crosshair, the `x`. It goes where `phx-target` says"
 
+  attr :selected, :map,
+    default: nil,
+    doc:
+      "the marks that stand out, the others faded: values by channel, as `select` sends them (`%{\"x\" => \"North\"}`). A mark stands out when each value is its own. None, or no mark that has them, fades nothing"
+
   attr :class, :any, default: nil, doc: "classes for the chart's element"
   attr :rest, :global
 
@@ -95,6 +100,7 @@ defmodule Fude.Components do
       data-fude={!@wire["facet"] && @config}
       data-issho-doc={@issho}
       data-fude-select={@select}
+      data-fude-selected={@selected && @selected != %{} && JSON.encode!(@selected)}
       aria-labelledby={@wire["title"] && "#{@id}-title"}
       phx-mounted={@swap && JS.ignore_attributes(["data-fude-data"])}
       {@rest}

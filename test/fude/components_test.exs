@@ -43,6 +43,24 @@ defmodule Fude.ComponentsTest do
     assert LazyHTML.query(LazyHTML.from_fragment(html), "[data-fude-select]") |> Enum.empty?()
   end
 
+  test "selected names the marks that stand out, as JSON; none leaves it out" do
+    assigns = %{chart: Fude.bar(@sales, x: :region, y: :revenue)}
+
+    html =
+      rendered_to_string(~H|<.chart id="revenue" chart={@chart} selected={%{"x" => "North"}} />|)
+
+    [selected] =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("figure")
+      |> LazyHTML.attribute("data-fude-selected")
+
+    assert JSON.decode!(selected) == %{"x" => "North"}
+
+    html = rendered_to_string(~H|<.chart id="revenue" chart={@chart} selected={%{}} />|)
+    assert LazyHTML.query(LazyHTML.from_fragment(html), "[data-fude-selected]") |> Enum.empty?()
+  end
+
   test "the data table keeps its open as the LiveView renders it again" do
     assigns = %{chart: Fude.bar(@sales, x: :region, y: :revenue)}
     html = rendered_to_string(~H|<.chart id="revenue" chart={@chart} />|)

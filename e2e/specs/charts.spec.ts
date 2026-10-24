@@ -111,6 +111,20 @@ test.describe("the gallery", () => {
     expect(typeof selected.y).toBe("number");
   });
 
+  test("the selected bar stands out, the others faded, as the server says", async ({ page }) => {
+    await openPage(page);
+    const chart = page.locator("#revenue-regions");
+    await expect(stage(page, "revenue-regions")).not.toHaveAttribute("data-fude-picked");
+    const before = await stage(page, "revenue-regions").screenshot();
+    await stage(page, "revenue-regions").click({ position: await pointer(page, "revenue-regions", 0.36, 0.85) });
+    await expect(chart).toHaveAttribute("data-fude-selected", /"x":"(North|South|East|West|Central)"/);
+    // One region's bars stand out: one per channel of its stack.
+    await expect(stage(page, "revenue-regions")).toHaveAttribute("data-fude-picked", "3");
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(300);
+    expect(await stage(page, "revenue-regions").screenshot()).not.toEqual(before);
+  });
+
   test("a click on a line chart sends the time at the crosshair; Enter, the keyboard's", async ({ page }) => {
     await openPage(page);
     await stage(page, "revenue-lines").click({ position: await pointer(page, "revenue-lines", 0.6, 0.5) });
