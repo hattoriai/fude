@@ -1,6 +1,6 @@
 {
   "name": "fude",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "license": "MIT",
   "module": "./priv/static/fude.esm.js",
   "main": "./priv/static/fude.cjs.js",
