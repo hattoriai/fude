@@ -70,11 +70,14 @@ export class Chart {
   private names = new Map<string, string>();
   private cleanups: (() => void)[] = [];
   private transport: Transport | null;
+  private selectedRaw: string | undefined;
+  private selectedMemo: { shapes: Shape[]; raw: string | undefined; marks: { picked: Set<string>; faded: Set<string> } | null } | null = null;
 
   constructor(el: HTMLElement, transport: Transport | null) {
     this.el = el;
     this.transport = transport;
     this.raw = el.dataset.fude ?? "{}";
+    this.selectedRaw = el.dataset.fudeSelected;
     this.config = JSON.parse(this.raw) as Config;
     this.id = this.config.id ?? el.id;
     this.locale = this.config.locale ?? undefined;
@@ -97,7 +100,15 @@ export class Chart {
   update(): void {
     const raw = this.el.dataset.fude ?? "{}";
     this.formatSingles();
-    if (raw === this.raw) return;
+    if (raw === this.raw) {
+      // The same data, perhaps another selection: drawn again in place.
+      if (this.el.dataset.fudeSelected !== this.selectedRaw) {
+        this.selectedRaw = this.el.dataset.fudeSelected;
+        this.repaint();
+      }
+      return;
+    }
+    this.selectedRaw = this.el.dataset.fudeSelected;
     this.raw = raw;
     this.config = JSON.parse(raw) as Config;
     this.locale = this.config.locale ?? undefined;
@@ -248,16 +259,65 @@ export class Chart {
     }
     if (at === null) return null;
     const { layer: index, row } = at as { layer: number; row: number };
-    const layer = layers[index]!;
+    const values = this.valuesAt(index, row);
+    // On a crosshair, the x only: the click is on the time, not one line.
+    if (hover.kind === "x") return { x: values.x ?? null };
+    return values;
+  }
+
+  // A row's values by channel, as the data has them.
+  private valuesAt(index: number, row: number): Record<string, string | number | null> {
+    const layer = (this.config.layers ?? [])[index];
+    if (!layer) return {};
     const scales = this.scalesOf(layer);
     const values: Record<string, string | number | null> = {};
     for (const name of ["x", "y", "color", "region", "size", "value"]) {
       const column = layer.columns[name];
       if (column) values[name] = dataValue(scales[name], column[row]);
     }
-    // On a crosshair, the x only: the click is on the time, not one line.
-    if (hover.kind === "x") return { x: values.x ?? null };
     return values;
+  }
+
+  // The chart's `selected`: the values by channel of the marks that stand
+  // out, the others faded; null for none.
+  private selected(): Record<string, unknown> | null {
+    const raw = this.el.dataset.fudeSelected;
+    if (!raw) return null;
+    try {
+      const selected = JSON.parse(raw) as Record<string, unknown>;
+      return Object.keys(selected).length ? selected : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // The keys of the marks that `selected` picks, and of those it fades:
+  // a mark with a datum (a bar, a point, a slice, a region). Null when
+  // nothing is selected or no mark matches, so a stale value fades nothing.
+  private selectedMarks(): { picked: Set<string>; faded: Set<string> } | null {
+    // Painted at each frame of a move: worked out once per shapes and selection.
+    const memo = this.selectedMemo;
+    if (memo && memo.shapes === this.shapes && memo.raw === this.el.dataset.fudeSelected) return memo.marks;
+    const marks = this.matchSelected();
+    this.selectedMemo = { shapes: this.shapes, raw: this.el.dataset.fudeSelected, marks };
+    return marks;
+  }
+
+  private matchSelected(): { picked: Set<string>; faded: Set<string> } | null {
+    const selected = this.selected();
+    if (!selected) return null;
+    const picked = new Set<string>();
+    const faded = new Set<string>();
+    for (const shape of this.marks()) {
+      if (!("datum" in shape) || !shape.datum) continue;
+      const values = this.valuesAt(shape.datum.layer, shape.datum.row);
+      const match = Object.entries(selected).every(([name, wanted]) => {
+        const value = values[name];
+        return value !== undefined && value !== null && (wanted === null || same(wanted, value));
+      });
+      (match ? picked : faded).add(shape.key);
+    }
+    return picked.size ? { picked, faded } : null;
   }
 
   private select(): void {
@@ -451,6 +511,10 @@ export class Chart {
   private paintOptions(): Paint {
     const hover = this.hover;
     const highlight = this.highlight;
+    const chosen = this.selectedMarks();
+    // How many marks stand out, for a page (and its tests) to read.
+    if (chosen) this.stage.dataset.fudePicked = String(chosen.picked.size);
+    else delete this.stage.dataset.fudePicked;
     return {
       surface: this.theme.surface,
       gap: this.theme.gap,
@@ -458,6 +522,7 @@ export class Chart {
       focus: (key, series) => {
         if (highlight !== null) return series === highlight ? 1 : 0.2;
         if (hover && hover.kind === "mark") return key === hover.key ? 1 : 0.55;
+        if (chosen && chosen.faded.has(key)) return 0.3;
         return 1;
       },
     };

@@ -81,6 +81,19 @@ the `x` at its crosshair: a click there is on a time, not on one line.
 The event goes where `phx-target` says, as LiveView's own do. A mark a
 click sends shows a pointer.
 
+`selected` makes the marks it names stand out and fades the others: the
+values by channel, as `select` sends them. A dashboard that filters by a
+bar shows that bar:
+
+```elixir
+<.chart id="revenue" chart={@chart} select="pick" selected={@region && %{"x" => @region}} />
+```
+
+A mark stands out when each value is its own (`%{"x" => "North"}` picks
+North's bars, of every series). With no selection, or none of its marks
+in the data, no mark fades. The chart draws it again in place, with no
+move, when only the selection changes.
+
 ## Export
 
 `<.chart export>` has buttons that save the chart as SVG, or as PNG at
