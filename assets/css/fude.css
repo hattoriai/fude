@@ -390,6 +390,11 @@
   touch-action: pan-y;
 }
 
+/* A mark a click selects (a chart with `select`). */
+.fude-stage.fude-selectable {
+  cursor: pointer;
+}
+
 .fude-stage:focus-visible {
   outline: none;
   box-shadow: var(--fude-focus-ring);

@@ -69,9 +69,11 @@ export class Chart {
   private note!: HTMLElement;
   private names = new Map<string, string>();
   private cleanups: (() => void)[] = [];
+  private transport: Transport | null;
 
-  constructor(el: HTMLElement, _transport: Transport | null) {
+  constructor(el: HTMLElement, transport: Transport | null) {
     this.el = el;
+    this.transport = transport;
     this.raw = el.dataset.fude ?? "{}";
     this.config = JSON.parse(this.raw) as Config;
     this.id = this.config.id ?? el.id;
@@ -211,6 +213,58 @@ export class Chart {
     this.stage.addEventListener("pointerleave", () => this.setHover(null));
     this.stage.addEventListener("keydown", (event) => this.onKey(event));
     this.stage.addEventListener("blur", () => this.setHover(null));
+    this.stage.addEventListener("click", (event) => {
+      this.onPointer(event as PointerEvent);
+      this.select();
+    });
+  }
+
+  // The event a click on a mark sends the server (the chart's `select`),
+  // or null: a chart that sends none.
+  private selectEvent(): string | null {
+    return this.transport ? (this.el.dataset.fudeSelect ?? null) : null;
+  }
+
+  /**
+   * The values of the mark under the pointer or the keyboard, each as the
+   * data has it (a category's name, a time's ISO text, a number), by
+   * channel: what a click on it sends the server, with the chart's id.
+   */
+  selection(): Record<string, string | number | null> | null {
+    const hover = this.hover;
+    if (!hover) return null;
+    const layers = this.config.layers ?? [];
+    let at: { layer: number; row: number } | null = null;
+    if (hover.kind === "mark") {
+      at = { layer: hover.datum.layer, row: hover.datum.row };
+    } else {
+      for (const [index, layer] of layers.entries()) {
+        const row = (layer.columns.x ?? []).findIndex((v) => this.keyOf(this.scalesOf(layer).x, v) === hover.k);
+        if (row >= 0) {
+          at = { layer: index, row };
+          break;
+        }
+      }
+    }
+    if (at === null) return null;
+    const { layer: index, row } = at as { layer: number; row: number };
+    const layer = layers[index]!;
+    const scales = this.scalesOf(layer);
+    const values: Record<string, string | number | null> = {};
+    for (const name of ["x", "y", "color", "region", "size", "value"]) {
+      const column = layer.columns[name];
+      if (column) values[name] = dataValue(scales[name], column[row]);
+    }
+    // On a crosshair, the x only: the click is on the time, not one line.
+    if (hover.kind === "x") return { x: values.x ?? null };
+    return values;
+  }
+
+  private select(): void {
+    const event = this.selectEvent();
+    const values = event && this.selection();
+    if (!event || !values) return;
+    this.transport!.push(event, { id: this.id, ...values });
   }
 
   private observe(): void {
@@ -1577,6 +1631,10 @@ export class Chart {
   }
 
   private onKey(event: KeyboardEvent): void {
+    if ((event.key === "Enter" || event.key === " ") && this.selectEvent() && this.hover) {
+      event.preventDefault();
+      return this.select();
+    }
     const keys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Escape"];
     if (!keys.includes(event.key)) return;
     event.preventDefault();
@@ -1621,6 +1679,7 @@ export class Chart {
   private setHover(hover: Hover | null): void {
     const same = JSON.stringify(hover) === JSON.stringify(this.hover);
     this.hover = hover;
+    this.stage.classList.toggle("fude-selectable", Boolean(hover && this.selectEvent()));
     if (!hover && this.highlight !== null && document.activeElement !== this.stage) this.highlight = null;
     if (!same) this.repaint();
     this.renderCross();

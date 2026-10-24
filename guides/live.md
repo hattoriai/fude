@@ -60,6 +60,27 @@ formats). Appending suits a chart whose marks are its rows: lines, areas
 and points with no aggregate. A chart that sums or counts draws again
 from its assigns instead.
 
+## Clicks on marks
+
+`<.chart select="pick">` sends `"pick"` when a person clicks a mark, or
+presses Enter on the mark the keyboard is on, with the chart's `id` and
+the mark's values by channel, as the data has them: a category's name, a
+time's ISO text, a number. A dashboard filters by the bar it is given:
+
+```elixir
+<.chart id="revenue" chart={@chart} select="pick" />
+
+def handle_event("pick", %{"id" => "revenue", "x" => region}, socket) do
+  {:noreply, assign(socket, region: region)}
+end
+```
+
+A bar sends its `x`, `y` and `color` (its series); a slice of a pie, its
+`color`; a region of a map, its `region`. A line chart sends
+the `x` at its crosshair: a click there is on a time, not on one line.
+The event goes where `phx-target` says, as LiveView's own do. A mark a
+click sends shows a pointer.
+
 ## Export
 
 `<.chart export>` has buttons that save the chart as SVG, or as PNG at

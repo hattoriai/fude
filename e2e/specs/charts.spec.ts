@@ -101,6 +101,28 @@ test.describe("the gallery", () => {
     expect(text).toMatch(/North|South|East|West|Central/);
   });
 
+  test("a click on a bar sends its category and series (select)", async ({ page }) => {
+    await openPage(page);
+    await stage(page, "revenue-regions").click({ position: await pointer(page, "revenue-regions", 0.36, 0.85) });
+    await expect(page.locator("#selected")).toHaveText(/"id":"revenue-regions"/);
+    const selected = JSON.parse((await page.locator("#selected").textContent())!);
+    expect(["North", "South", "East", "West", "Central"]).toContain(selected.x);
+    expect(["Online", "Retail", "Partners"]).toContain(selected.color);
+    expect(typeof selected.y).toBe("number");
+  });
+
+  test("a click on a line chart sends the time at the crosshair; Enter, the keyboard's", async ({ page }) => {
+    await openPage(page);
+    await stage(page, "revenue-lines").click({ position: await pointer(page, "revenue-lines", 0.6, 0.5) });
+    await expect(page.locator("#selected")).toHaveText(/"x":"20\d\d-\d\d-\d\d/);
+    expect(Object.keys(JSON.parse((await page.locator("#selected").textContent())!)).sort()).toEqual(["id", "x"]);
+
+    await stage(page, "revenue-lines").focus();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#selected")).toHaveText(/"x":"2025-01-01/);
+  });
+
   test("the keyboard moves through the data and says each value", async ({ page }) => {
     await openPage(page);
     await stage(page, "status").focus();
@@ -273,3 +295,9 @@ test.describe("places for Issho", () => {
     expect(await locate(page, "world", { datum: { region: "Atlantis" } })).toBeNull();
   });
 });
+
+// A place in a chart's stage, as fractions of its size, for a click.
+async function pointer(page: Page, id: string, fx: number, fy: number) {
+  const box = (await stage(page, id).boundingBox())!;
+  return { x: box.width * fx, y: box.height * fy };
+}

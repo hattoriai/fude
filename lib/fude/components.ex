@@ -73,6 +73,11 @@ defmodule Fude.Components do
     doc:
       "whether the marks move: `true`, `false` or `[duration: ms]`; the chart's own (`true`) unless given"
 
+  attr :select, :string,
+    default: nil,
+    doc:
+      "an event a click on a mark (or Enter on the mark the keyboard is on) sends, with the chart's `id` and the mark's values by channel (`x`, `y`, `color`...): a category's name, a time's ISO text, a number. On a line chart's crosshair, the `x`. It goes where `phx-target` says"
+
   attr :class, :any, default: nil, doc: "classes for the chart's element"
   attr :rest, :global
 
@@ -89,6 +94,7 @@ defmodule Fude.Components do
       phx-hook={!@wire["facet"] && "Fude"}
       data-fude={!@wire["facet"] && @config}
       data-issho-doc={@issho}
+      data-fude-select={@select}
       aria-labelledby={@wire["title"] && "#{@id}-title"}
       phx-mounted={@swap && JS.ignore_attributes(["data-fude-data"])}
       {@rest}
