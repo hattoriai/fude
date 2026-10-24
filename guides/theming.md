@@ -11,7 +11,7 @@ ancestor or on `.fude` wins.
 | `--fude-surface` | the paper under the chart: the gaps between marks and the rings of points |
 | `--fude-grid`, `--fude-baseline` | the hairline grid, and the line at zero |
 | `--fude-series-1` to `--fude-series-8` | the colors of the series, in order |
-| `--fude-sequential` | the ramp of a number's color, light to dark, as a list (the scheme `:blue`) |
+| `--fude-sequential` | the ramp of a number's color, light to dark, as a list (the scheme `:blue`); or `accent`, a ramp of `--fude-accent` from the surface to the text |
 | `--fude-scheme-green`, `-orange`, `-purple`, `-gray`, `-viridis`, `-red-blue`, `-red-green` | the named schemes of a color channel, each a list |
 | `--fude-scheme-okabe-ito-1` to `-8` | the scheme `:okabe_ito`, in order |
 | `--fude-increase`, `--fude-decrease`, `--fude-total` | a waterfall's bars |
@@ -43,8 +43,23 @@ ramp starts dark there, so that low values recede.
 
 Load `fude-sumi.css` after `fude.css`. It maps every property to the
 Sumi tokens of the page (or the `--sumi-*` names, or Sumi's own palette),
-with the blade first among the series, and follows the Sumi themes, the
-`data-theme` attribute, then the system's setting.
+with the theme's accent first among the series, and follows the Sumi
+themes, the `data-theme` attribute, then the system's setting.
+
+Each of Sumi's seven themes (Ink, Smoke, Stone and Lacquer; Paper, Snow
+and Silk) has its own accent, and the charts follow it:
+
+* the first series is the accent, and a series of the accent's hue
+  (Snow's indigo and the blue, Smoke's jade and the green, Stone's gold
+  and the amber, Silk's pink and the pink) is orange instead, so that no
+  two series look alike;
+* the sequential ramp is the accent's (`--fude-sequential: accent`):
+  from faint on the page, through the accent, to near the text, so that
+  low values recede on a light theme and on a dark one;
+* the dark themes have the dark palette.
+
+The development app (`mix dev`) shows the gallery in each:
+`?sumi=smoke`, or the links under its menu.
 
 ## Classes
 

@@ -239,16 +239,60 @@ end
 defmodule FudeDev.Layouts do
   @moduledoc """
   The root layout: the style sheets, the import map and the LiveSocket.
-  `?theme=sumi` also loads fude-sumi.css.
+  `?theme=sumi` also loads fude-sumi.css; `?sumi=smoke` (any of Sumi's seven
+  themes) loads it on that theme of Sumi, to see every chart in each.
   """
   use Phoenix.Component
 
+  # Sumi's themes, as the charts read them: the page, the line, the text,
+  # the muted text and the accent (Sumi's own CSS needs Tailwind, which this
+  # app has not; these are its values).
+  @sumi_themes [
+    {"dark", "Ink", "oklch(12% 0.003 270)", "oklch(20% 0.005 270)", "oklch(95% 0.012 85)", 0.5,
+     "#e84a1c"},
+    {"smoke", "Smoke", "oklch(27% 0.005 270)", "oklch(34% 0.007 270)", "oklch(92% 0.01 85)", 0.62,
+     "oklch(72% 0.13 168)"},
+    {"stone", "Stone", "oklch(20% 0.006 70)", "oklch(27% 0.008 70)", "oklch(95% 0.01 85)", 0.52,
+     "oklch(78% 0.13 82)"},
+    {"lacquer", "Lacquer", "oklch(14% 0.022 25)", "oklch(22% 0.03 25)", "oklch(93% 0.016 75)",
+     0.53, "oklch(63% 0.21 24)"},
+    {"light", "Paper", "oklch(96% 0.01 85)", "oklch(89% 0.014 80)", "oklch(15% 0.003 270)", 0.65,
+     "#e84a1c"},
+    {"snow", "Snow", "oklch(99.5% 0.001 270)", "oklch(92.5% 0.005 270)", "oklch(20% 0.006 270)",
+     0.65, "oklch(50% 0.17 262)"},
+    {"silk", "Silk", "oklch(97.5% 0.012 350)", "oklch(91.5% 0.02 350)", "oklch(22% 0.012 350)",
+     0.65, "oklch(56% 0.21 358)"}
+  ]
+
+  defp sumi_style(id) do
+    case List.keyfind(@sumi_themes, id, 0) do
+      {_, _, page, line, text, muted, accent} ->
+        """
+        :root {
+          --color-base-100: #{page}; --color-base-300: #{line}; --color-base-content: #{text};
+          --sumi-text-muted: oklch(from #{text} l c h / #{muted}); --color-sumi-blade: #{accent};
+        }
+        """
+
+      nil ->
+        ""
+    end
+  end
+
   def root(assigns) do
-    assigns = assign(assigns, :sumi, assigns.conn.params["theme"] == "sumi")
+    look = assigns.conn.params["sumi"]
+    look = if List.keymember?(@sumi_themes, look, 0), do: look
+
+    assigns =
+      assign(assigns,
+        sumi: assigns.conn.params["theme"] == "sumi" or look != nil,
+        look: look,
+        themes: @sumi_themes
+      )
 
     ~H"""
     <!DOCTYPE html>
-    <html lang="en" data-theme={@conn.params["dark"] && "dark"} class={@conn.params["dark"] && "dark"}>
+    <html lang="en" data-theme={@look || (@conn.params["dark"] && "dark")} class={@conn.params["dark"] && "dark"}>
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -258,6 +302,7 @@ defmodule FudeDev.Layouts do
         <link :if={@sumi} rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap" />
         <link rel="stylesheet" href="/assets/fude.css" />
         <link :if={@sumi} rel="stylesheet" href="/assets/fude-sumi.css" />
+        {@look && Phoenix.HTML.raw("<style>" <> sumi_style(@look) <> "</style>")}
         <style>
           body { font-family: system-ui, sans-serif; margin: 0; background: var(--fude-surface); color: var(--fude-text); }
           main { max-width: 72rem; margin: 0 auto; padding: 2rem 1rem 4rem; }
@@ -294,6 +339,9 @@ defmodule FudeDev.Layouts do
         <main>
           <nav>
             <a href="/">Gallery</a><a href="/live">Live</a><a href="?theme=sumi">Sumi</a><a href="?dark=1">Dark</a><a href="?theme=sumi&dark=1">Sumi, dark</a><a href="?locale=de-DE">de-DE</a>
+          </nav>
+          <nav aria-label="Sumi's themes">
+            Sumi: <a :for={{id, name, _, _, _, _, _} <- @themes} href={"?sumi=#{id}"} aria-current={@look == id && "page"}>{name}</a>
           </nav>
           {@inner_content}
         </main>
