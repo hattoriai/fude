@@ -7,6 +7,11 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-24
+
+A chart's data in the plot's place, and a chart's Data that stays open as
+the LiveView renders it.
+
 ### Added
 
 - `table={:swap}`: a chart's data in its place, at its size, behind a
@@ -170,6 +175,7 @@ and tooltip fields shown.
 - An `"id"` for a layer and an annotation of a spec.
 - `mix fude.install`.
 
-[Unreleased]: https://github.com/hattoriai/fude/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/hattoriai/fude/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/hattoriai/fude/releases/tag/v0.3.0
 [0.2.0]: https://github.com/hattoriai/fude/releases/tag/v0.2.0
 [0.1.0]: https://github.com/hattoriai/fude/releases/tag/v0.1.0
