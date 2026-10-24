@@ -61,7 +61,7 @@ defmodule Fude do
     text: "Text at `x` and `y`.",
     sparkline: "A small line with no axes, for a table or a card.",
     number: "One number, large, with a `label`.",
-    trend: "One number with its change from `compare`.",
+    trend: "One number with its change from `compare`, and its history (`spark`).",
     progress: "One number on a bar towards a `goal`.",
     waterfall:
       "A waterfall: how each change of `y` (a step on `x`) moves a running total; `total` adds a bar of the end, `start` names the first bar as a total.",

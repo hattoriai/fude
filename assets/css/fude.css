@@ -821,3 +821,50 @@
     border: 1px solid currentColor;
   }
 }
+
+/* A number's history under it (a `spark` channel): the line in the
+   chart's first color, an area fading under it, and a dot on its last
+   point, the number itself. */
+.fude-spark {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 16rem;
+  height: var(--fude-spark-height, 2rem);
+  margin-top: 0.5rem;
+}
+
+.fude-single-center .fude-spark {
+  margin-inline: auto;
+}
+
+.fude-spark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.fude-spark-line {
+  fill: none;
+  stroke: var(--fude-series-1);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.fude-spark-area {
+  fill: var(--fude-series-1);
+  opacity: 0.12;
+}
+
+.fude-spark-last {
+  position: absolute;
+  right: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fude-series-1);
+  box-shadow: 0 0 0 2px var(--fude-surface);
+  transform: translate(50%, -50%);
+}

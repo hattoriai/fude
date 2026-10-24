@@ -7,6 +7,15 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A `spark` channel for `number` and `trend`: the number's history as a
+  small line under it, its value's field by the spark's (a time, in its
+  order), ending on its last point, the number itself. Drawn on the
+  server, as the number is; in the first color of the series, as high as
+  `--fude-spark-height`. In a spec, `"spark"` on the layer's channels. See
+  the Charts guide.
+
 ## [0.4.0] - 2026-10-24
 
 A chart that fills its box, as a dashboard's card, and draws again as the

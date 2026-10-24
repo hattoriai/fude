@@ -142,6 +142,34 @@ defmodule Fude.ComponentsTest do
            ]
   end
 
+  test "a trend with a spark draws its history under it, ending on its value" do
+    months = [
+      %{month: ~D[2026-03-01], mrr: 300, last: 280},
+      %{month: ~D[2026-01-01], mrr: 100, last: 280},
+      %{month: ~D[2026-02-01], mrr: 200, last: 280}
+    ]
+
+    assigns = %{chart: Fude.trend(months, value: :mrr, compare: :last, spark: :month)}
+    html = rendered_to_string(~H|<.chart id="mrr" chart={@chart} />|)
+    doc = LazyHTML.from_fragment(html)
+
+    assert [_] = doc |> LazyHTML.query(".fude-spark[aria-hidden=true]") |> Enum.to_list()
+    # In the order of the months: 100, 200, 300, up to the top.
+    assert [line] = doc |> LazyHTML.query(".fude-spark-line") |> LazyHTML.attribute("d")
+    assert line == "M0.0,30.0 50.0,16.0 100.0,2.0"
+    assert LazyHTML.attribute(LazyHTML.query(doc, ".fude-spark-last"), "style") == ["top: 6.25%"]
+  end
+
+  test "a spark needs two points, and a number without one has none" do
+    assigns = %{
+      one: Fude.number([%{d: ~D[2026-01-01], v: 1}], value: :v, spark: :d),
+      none: Fude.number([%{v: 1}, %{v: 2}], value: :v)
+    }
+
+    refute rendered_to_string(~H|<.chart id="a" chart={@one} />|) =~ "fude-spark"
+    refute rendered_to_string(~H|<.chart id="b" chart={@none} />|) =~ "fude-spark"
+  end
+
   test "sets a single value at the start, at its own size, when asked" do
     assigns = %{chart: Fude.number([%{n: 1}], value: :n, align: :start)}
     html = rendered_to_string(~H|<.chart id="n" chart={@chart} height={200} />|)

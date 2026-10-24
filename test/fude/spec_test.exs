@@ -326,4 +326,14 @@ defmodule Fude.SpecAtomsTest do
     assert {:error, [%{path: ["layers", 0, "id"], message: "must be text, got: 7"}]} =
              Fude.Spec.load(put_in(spec, ["layers", Access.at(0), "id"], 7))
   end
+
+  test "a trend's spark is in its spec" do
+    rows = [%{d: ~D[2026-01-01], v: 1}, %{d: ~D[2026-02-01], v: 2}]
+    chart = Fude.trend(rows, value: :v, spark: :d)
+    spec = Fude.Spec.dump(chart)
+    assert inspect(spec) =~ ~s("spark")
+
+    assert {:ok, loaded} = Fude.Spec.load(spec)
+    assert Fude.Spec.dump(loaded) == spec
+  end
 end
