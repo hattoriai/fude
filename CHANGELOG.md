@@ -19,6 +19,12 @@ A click on a mark sends its values: `select` on `<.chart>`.
   text, a number). On a line chart's crosshair, the `x`. It goes where
   `phx-target` says. See the Live guide, "Clicks on marks".
 
+### Fixed
+
+- The hook reads `phx-target` each time it sends an event, so a chart
+  that a render of the LiveView gives a target after it mounted sends to
+  it (it sent to the LiveView).
+
 ## [0.5.0] - 2026-10-24
 
 A number's history under it: a `spark` channel for `number` and `trend`.
