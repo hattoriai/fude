@@ -7,6 +7,10 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-24
+
+A click on a mark sends its values: `select` on `<.chart>`.
+
 ### Added
 
 - `select` on `<.chart>`: the event a click on a mark sends, or Enter on
@@ -207,7 +211,8 @@ and tooltip fields shown.
 - An `"id"` for a layer and an annotation of a spec.
 - `mix fude.install`.
 
-[Unreleased]: https://github.com/hattoriai/fude/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/hattoriai/fude/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/hattoriai/fude/releases/tag/v0.6.0
 [0.5.0]: https://github.com/hattoriai/fude/releases/tag/v0.5.0
 [0.4.0]: https://github.com/hattoriai/fude/releases/tag/v0.4.0
 [0.3.0]: https://github.com/hattoriai/fude/releases/tag/v0.3.0
