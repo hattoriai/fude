@@ -7,6 +7,17 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `Fude.Export`, and `Fude.to_markdown/2`, `Fude.to_text/2` and
+  `Fude.to_html/2`: a chart outside the browser, written on the server
+  from the chart (or a spec) and its data. Its title, subtitle, notes,
+  caption and source, and its data as the page's table has it (a single
+  number as its label and value), as Markdown, as text with tabs, or as
+  HTML with a table. `Fude.Export.render/3` takes the format as Kotoba's
+  embeds give it, so a chart embedded in a document is its table in the
+  document's Markdown and text, not only its title.
+
 ## [0.7.0] - 2026-10-24
 
 ### Added

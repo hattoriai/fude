@@ -33,6 +33,20 @@ defmodule Fude.Compile do
       end
   end
 
+  @doc false
+  # The data given with a chart (to <.chart>, to Fude.Export): the chart's
+  # own data, or a map of names for a chart of several datasets.
+  @spec datasets(Chart.t(), term()) :: map()
+  def datasets(_chart, nil), do: %{}
+
+  def datasets(%Chart{data: name}, data) when is_map(data) and not is_struct(data) do
+    if Map.has_key?(data, :columns) or Map.has_key?(data, "columns"),
+      do: %{name => data},
+      else: Map.new(data, fn {key, value} -> {to_string(key), value} end)
+  end
+
+  def datasets(%Chart{data: name}, data), do: %{name => data}
+
   # The data of a chart: its rows in columns, or a query that the database
   # aggregates (Fude.Query). Small multiples of a query read its rows.
   @query Fude.Query

@@ -136,6 +136,7 @@ defmodule Fude.MixProject do
         Live: [Fude.Live],
         Collaboration: [Fude.Issho, Fude.Issho.Place],
         Specs: [Fude.Spec],
+        Export: [Fude.Export],
         Testing: [Fude.Test]
       ]
     ]
