@@ -92,7 +92,7 @@ Add `fude` to the deps in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:fude, "~> 0.7"}
+    {:fude, "~> 0.8"}
   ]
 end
 ```
