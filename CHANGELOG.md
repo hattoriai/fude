@@ -7,6 +7,8 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-25
+
 ### Added
 
 - `Fude.Export`, and `Fude.to_markdown/2`, `Fude.to_text/2` and
@@ -250,7 +252,8 @@ and tooltip fields shown.
 - An `"id"` for a layer and an annotation of a spec.
 - `mix fude.install`.
 
-[Unreleased]: https://github.com/hattoriai/fude/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/hattoriai/fude/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/hattoriai/fude/releases/tag/v0.8.0
 [0.7.0]: https://github.com/hattoriai/fude/releases/tag/v0.7.0
 [0.6.1]: https://github.com/hattoriai/fude/releases/tag/v0.6.1
 [0.6.0]: https://github.com/hattoriai/fude/releases/tag/v0.6.0
