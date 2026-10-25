@@ -29,6 +29,10 @@ with it. It gives your app:
   the keyboard (the arrows move through the data, a screen reader says
   each value), and a table of the data under each chart;
 * SVG and PNG files of a chart, from the same drawing as the screen;
+* a chart outside the browser, as Markdown, plain text or HTML written on
+  the server (`Fude.to_markdown/2`, `Fude.Export`): its words and its data
+  as a table, for a document's copy, an email, or an agent that reads the
+  page;
 * collaboration on a chart, with [Issho](https://hex.pm/packages/issho)
   (`Fude.Issho`): a chart's spec as a room's shared state, the others'
   pointers on its marks, and tools for agents that change it as people
@@ -55,7 +59,7 @@ style sheet.
 | Specs | `Fude.Spec.dump/1` and `load/1`: JSON with a version, migrated forward; errors with their path and a suggestion (`did you mean "sum"?`) |
 | Interaction | a crosshair and one tooltip for every series on lines and areas, a tooltip on each mark of the others, a legend that highlights and hides, keyboard navigation with announcements |
 | Collaboration | `Fude.Issho`: a chart as an Issho room's shared state, changed by people with `Fude`'s functions and by agents with `read_chart` and `change_chart`, always valid; the others' pointers on its marks |
-| Export | `<.chart export>` buttons and `Fude.Live.export/3`: SVG, and PNG at twice the size |
+| Export | `<.chart export>` buttons and `Fude.Live.export/3`: SVG, and PNG at twice the size; `Fude.Export` on the server: Markdown, text and HTML of the chart's words and data, with no browser |
 | Locales | numbers, currencies and dates in the chart's locale, with the browser's `Intl` |
 | Theming | CSS custom properties, the Sumi theme, dark mode, reduced motion, forced colors |
 | Accessibility | a description for screen readers, keyboard navigation through the data, live announcements, a table of the data, contrast-checked colors |

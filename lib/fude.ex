@@ -175,6 +175,24 @@ defmodule Fude do
   def put_data(%Chart{} = chart, name, data),
     do: %{chart | datasets: Map.put(chart.datasets, to_string(name), data)}
 
+  @doc """
+  The chart as Markdown, for where the hook does not draw (a document's
+  copy, an agent that reads it): its words and its data as a table. See
+  `Fude.Export`.
+
+      Fude.bar(sales, x: :region, y: :revenue, title: "Revenue") |> Fude.to_markdown()
+  """
+  @spec to_markdown(Fude.Export.chart(), term()) :: String.t()
+  defdelegate to_markdown(chart, data \\ nil), to: Fude.Export
+
+  @doc "The chart as plain text: its words and its data by tabs. See `Fude.Export`."
+  @spec to_text(Fude.Export.chart(), term()) :: String.t()
+  defdelegate to_text(chart, data \\ nil), to: Fude.Export
+
+  @doc "The chart as HTML for a page with no LiveView: its words and a table. See `Fude.Export`."
+  @spec to_html(Fude.Export.chart(), term()) :: Phoenix.HTML.safe()
+  defdelegate to_html(chart, data \\ nil), to: Fude.Export
+
   defp chart(kind, data, opts) do
     {chart_opts, layer_opts} = Chart.split(opts)
 

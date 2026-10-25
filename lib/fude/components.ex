@@ -535,13 +535,13 @@ defmodule Fude.Components do
   defp default_height(_kind), do: 320
 
   defp compile(%{chart: %Chart{} = chart, data: data}) do
-    result(chart, Compile.compile(chart, datasets(chart, data)))
+    result(chart, Compile.compile(chart, Compile.datasets(chart, data)))
   end
 
   defp compile(%{spec: spec, data: data}) when is_map(spec) do
     case Spec.load(spec) do
       {:ok, chart} ->
-        result(chart, Compile.compile(chart, datasets(chart, data)))
+        result(chart, Compile.compile(chart, Compile.datasets(chart, data)))
 
       {:error, errors} ->
         {%{"v" => 1},
@@ -559,18 +559,6 @@ defmodule Fude.Components do
     do:
       {%{"v" => 1, "kind" => Atom.to_string(Chart.kind(chart) || :chart), "title" => chart.title},
        errors}
-
-  # The data given to the component: the chart's own data, or a map of
-  # names for a chart of several datasets.
-  defp datasets(_chart, nil), do: %{}
-
-  defp datasets(%Chart{data: name}, data) when is_map(data) and not is_struct(data) do
-    if Map.has_key?(data, :columns) or Map.has_key?(data, "columns"),
-      do: %{name => data},
-      else: Map.new(data, fn {key, value} -> {to_string(key), value} end)
-  end
-
-  defp datasets(%Chart{data: name}, data), do: %{name => data}
 
   # The arcs of a gauge, from the left over the top to the right: its track,
   # its value, and a tick at its target.
