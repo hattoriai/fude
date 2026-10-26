@@ -2,6 +2,18 @@
 
 ![Fude — Charts for Phoenix](https://raw.githubusercontent.com/hattoriai/fude/main/media/banner.png)
 
+<p>
+  <a href="https://hex.pm/packages/fude">
+    <img alt="Hex Version" src="https://img.shields.io/hexpm/v/fude.svg">
+  </a>
+  <a href="https://hexdocs.pm/fude">
+    <img src="https://img.shields.io/badge/docs-hexdocs-blue" alt="HexDocs">
+  </a>
+  <a href="https://github.com/hattoriai/fude/actions">
+    <img alt="CI Status" src="https://github.com/hattoriai/fude/actions/workflows/ci.yml/badge.svg">
+  </a>
+</p>
+
 Fude (筆, the brush) is charts for Phoenix. Sumi is the ink; Fude draws
 with it. It gives your app:
 
