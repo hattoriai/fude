@@ -95,6 +95,10 @@ defmodule Fude.MixProject do
         mix.exs
         .formatter.exs
         guides
+        media/banner.png
+        media/revenue-lines.png
+        media/revenue-regions.png
+        media/world.png
         README.md
         CHANGELOG.md
         LICENSE

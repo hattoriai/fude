@@ -14,7 +14,7 @@ mix fude.install
 ```
 
 The installer adds the `Fude` hook to `assets/js/app.js` and the style
-sheet to `assets/css/app.css` (see the README for the manual steps).
+sheet to `assets/css/app.css` (see [Manual setup](#manual-setup) below).
 
 ## 2. Import the components
 
@@ -77,3 +77,47 @@ Order |> Fude.query(Repo) |> Fude.bar(x: :status, y: {:count, :id})
 
 Next: [Charts](charts.md) for every kind, [Data](data.md) for the
 sources, [Telling the story](story.md) for the words and notes.
+
+## Manual setup
+
+To make the same changes by hand, import the hook in `assets/js/app.js`
+and add it to the hooks of the `LiveSocket`:
+
+```js
+import { Fude } from "fude"
+
+const liveSocket = new LiveSocket("/live", Socket, {
+  params: {_csrf_token: csrfToken},
+  hooks: {...colocatedHooks, Fude},
+})
+```
+
+Import the style sheet in `assets/css/app.css` (and the Sumi theme, if you
+want it: Sumi is the design system of Hattori AI, the makers of Fude,
+Masu, Kotoba, Koyomi and Jumon). Put these lines below the other `@import`
+lines of `app.css`:
+
+```css
+@import "../../deps/fude/priv/static/fude.css";
+/* @import "../../deps/fude/priv/static/fude-sumi.css"; */
+```
+
+For map charts, register the maps the app draws (see the
+[Maps](maps.md) guide):
+
+```js
+import { registerMap } from "fude"
+import world from "fude/maps/world.json"
+
+registerMap("world", world)
+```
+
+### `NODE_PATH=deps`
+
+`import { Fude } from "fude"` resolves through the `NODE_PATH` of your
+esbuild profile, which must have `deps/`. The Phoenix generators already
+set it. If your profile has no `NODE_PATH`, add it in `config/config.exs`:
+
+```elixir
+env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
+```
