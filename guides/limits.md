@@ -2,8 +2,6 @@
 
 What Fude does not do yet. Each is a good first issue to open.
 
-* **Two y axes.** A chart has one y scale. Two measures of different
-  scales are two charts, or small multiples.
 * **Times are in UTC.** Times are drawn and written in UTC; a time zone
   for the chart is to come.
 * **Maps.** The world and the US states; street maps with tiles are an
