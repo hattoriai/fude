@@ -113,6 +113,7 @@
   --fude-border: var(--color-base-300, var(--sumi-line, var(--fude-sumi-line)));
   --fude-grid: color-mix(in oklab, var(--color-base-300, var(--sumi-line, var(--fude-sumi-line))) 75%, var(--color-base-100, var(--sumi-paper, var(--fude-sumi-paper))));
   --fude-baseline: color-mix(in oklab, var(--color-base-content, var(--sumi-ink, var(--fude-sumi-ink))) 35%, transparent);
+  --fude-context: color-mix(in oklab, var(--color-base-content, var(--sumi-ink, var(--fude-sumi-ink))) 22%, var(--color-base-100, var(--sumi-paper, var(--fude-sumi-paper))));
   --fude-accent: var(--color-sumi-blade, var(--sumi-accent, #e84a1c));
 
   /* The series: the blade first. */

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatter, parseFormat, tickFormatter } from "../src/format";
+import { compactFormatter, formatter, labelFormatter, parseFormat, tickFormatter, unitTicks } from "../src/format";
 
 test("a format of the wire carries its digits after a colon", () => {
   assert.deepEqual(parseFormat("number:0"), { name: "number", digits: 0, suffix: null });
@@ -61,4 +61,35 @@ test("ticks take the digits of their step, not the channel's", () => {
   const tick = tickFormatter("number:3", ticks, "en");
   assert.deepEqual(ticks.map(tick), ["0.0", "0.5", "1.0", "1.5"]);
   assert.deepEqual([0, 0.1, 0.2].map(tickFormatter("percent:3", [0, 0.1, 0.2], "en")), ["0%", "10%", "20%"]);
+});
+
+test("a value axis has its unit on the top tick only", () => {
+  const ticks = [0, 100000, 200000, 300000, 400000];
+  const euros = unitTicks("currency:EUR", ticks, "en");
+  assert.equal(euros.top(400000), "€400K");
+  assert.equal(euros.rest!(300000), "300K");
+  const shares = unitTicks("percent", [0, 0.1, 0.2, 0.3], "en");
+  assert.equal(shares.top(0.3), "30%");
+  assert.equal(shares.rest!(0.2), "20");
+  const times = unitTicks("number|×", [0, 10, 20], "en");
+  assert.equal(times.top(20), "20×");
+  assert.equal(times.rest!(10), "10");
+  // Bytes change their unit from tick to tick; a plain number has none.
+  assert.equal(unitTicks("decimal_bytes|/s", [1e7, 1e8], "en").rest, null);
+  assert.equal(unitTicks(null, [0, 5, 10], "en").rest, null);
+});
+
+test("labels with no format are compact from 100,000, as single values are", () => {
+  const big = labelFormatter(null, [1888214.4, 120000], "en");
+  assert.equal(big(1888214.4), "1.9M");
+  const small = labelFormatter(null, [993, 1442], "en");
+  assert.equal(small(1442), "1,442");
+  assert.equal(labelFormatter("number:0", [1888214.4], "en")(1888214.4), "1,888,214");
+  assert.equal(labelFormatter(":1|×", [250000], "en")(250000), "250.0K×");
+});
+
+test("the compact form of a format, for labels where the full one does not fit", () => {
+  assert.equal(compactFormatter("currency:EUR", "en")(-210000), "-€210K");
+  assert.equal(compactFormatter(null, "en")(1009), "1K");
+  assert.equal(compactFormatter("percent", "en")(0.25), "25%");
 });

@@ -22,6 +22,8 @@
   --fude-surface: #ffffff;
   --fude-grid: #e8e7e1;
   --fude-baseline: #c3c2b7;
+  /* The series a highlight sets back: gray, under the ones that matter. */
+  --fude-context: #c9c8c1;
   --fude-border: #d9d9de;
   --fude-accent: #2f5bd3;
   --fude-series-1: #2a78d6;
@@ -86,6 +88,7 @@
   --fude-surface: #17171a;
   --fude-grid: #2a2a2d;
   --fude-baseline: #45454a;
+  --fude-context: #4a4a50;
   --fude-border: #34343a;
   --fude-accent: #7b9cff;
   --fude-series-1: #3987e5;
@@ -116,7 +119,16 @@
   --fude-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
+/* A chart takes the width it is given; as a container of its own width (for
+   its words), it would otherwise take none in a row of flex items. An app's
+   own width wins: this one has no specificity. */
+:where(.fude) {
+  width: 100%;
+}
+
 .fude {
+  /* The words are set for the chart's own width, wherever it is. */
+  container-type: inline-size;
   margin: 0;
   color: var(--fude-text);
   font-family: var(--fude-font);
@@ -131,34 +143,46 @@
   box-sizing: border-box;
 }
 
-/* The words: a title and a subtitle above, a caption and a source below,
-   as a graphics desk sets them. */
+/* The words: a title and a subtitle (the dek) above, a caption and a
+   source below, as a graphics desk sets them: the title the one thing read
+   first, the dek under it, and the notes small and quiet. Each size is a
+   custom property, for a page's own scale. */
 .fude-head {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
-  margin-bottom: 0.75rem;
+  gap: 0.25rem;
+  margin-bottom: 0.875rem;
 }
 
 .fude-title {
-  font-weight: 600;
-  font-size: 1.0625em;
-  line-height: 1.3;
+  font-weight: 650;
+  font-size: var(--fude-title-size, 1.25em);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
 .fude-subtitle {
+  max-width: 60ch;
   color: var(--fude-secondary);
-  font-size: 0.875em;
+  font-size: var(--fude-dek-size, 0.9375em);
+  line-height: 1.35;
+  text-wrap: pretty;
 }
 
 .fude-foot {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem 0.75rem;
-  margin: 0.5rem 0 0;
+  margin: 0.625rem 0 0;
   color: var(--fude-muted);
-  font-size: 0.75em;
+  font-size: var(--fude-note-size, 0.75em);
+}
+
+.fude-caption {
+  flex-basis: 100%;
+  color: var(--fude-secondary);
+  font-size: 1.0833em;
 }
 
 .fude-export {
@@ -323,7 +347,7 @@
   background: none;
   color: var(--fude-secondary);
   font: inherit;
-  font-size: 0.8125em;
+  font-size: var(--fude-legend-size, 0.875em);
   cursor: default;
 }
 
@@ -388,6 +412,66 @@
   min-height: 0;
   border-radius: var(--fude-radius);
   touch-action: pan-y;
+}
+
+/* Numbers line up where they stand in columns: the data table's cells and
+   the tooltip's values (the ticks and the labels set it themselves). Not on
+   words, where it would widen a hyphen. */
+.fude-data td,
+.fude-data-over td,
+.fude-tooltip-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A legend that labels on the marks make redundant: out of sight, and
+   still the keyboard's way to hide a series, shown when it has the focus. */
+.fude-legend.fude-legend-quiet:not(:focus-within) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The names at the ends of lines: a click hides or shows a line. */
+.fude-axes .fude-end-label {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* Laid out for its box, at every size: a small card has smaller words
+   and closer lines; a wide chart, a larger title. */
+@container (max-width: 420px) {
+  .fude-head {
+    margin-bottom: 0.625rem;
+  }
+
+  .fude-title {
+    font-size: var(--fude-title-size-small, 1.0625em);
+  }
+
+  .fude-subtitle {
+    font-size: var(--fude-dek-size-small, 0.875em);
+  }
+
+  .fude-legend {
+    gap: 0.125rem 0.75rem;
+  }
+
+  .fude-legend-item {
+    font-size: var(--fude-legend-size-small, 0.8125em);
+  }
+}
+
+@container (min-width: 900px) {
+  .fude-title {
+    font-size: var(--fude-title-size-large, 1.4375em);
+  }
+
+  .fude-subtitle {
+    font-size: var(--fude-dek-size-large, 1em);
+  }
 }
 
 /* A chart with a brush: a drag across the plot chooses a range. */

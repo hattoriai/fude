@@ -56,6 +56,10 @@ defmodule Fude.Channel do
       a color for each category, in order.
     * `:mid` - the value at the middle of a diverging scheme: 0 when not
       given.
+    * `:highlight` - the series of a `color` channel that matter: a value
+      or a list of them (`highlight: "Online"`). They keep their colors and
+      are drawn over the others, which are gray (`--fude-context`), as a
+      graphics desk sets one line against the rest.
     * `:title` - the title of the axis or the legend; the field's name when
       not given, `false` for none.
     * `:scale` - a keyword list: `:type` (`:linear`, `:log`, `:sqrt`),
@@ -86,6 +90,7 @@ defmodule Fude.Channel do
           suffix: String.t() | nil,
           scheme: atom() | [String.t()] | nil,
           mid: number() | nil,
+          highlight: [term()] | nil,
           title: String.t() | false | nil,
           scale: map() | nil,
           stack: atom() | false | nil,
@@ -105,6 +110,7 @@ defmodule Fude.Channel do
     :suffix,
     :scheme,
     :mid,
+    :highlight,
     :title,
     :scale,
     :stack,
@@ -161,6 +167,28 @@ defmodule Fude.Channel do
     do:
       is_binary(color) and byte_size(color) <= 64 and
         color =~ ~r/^(#[0-9a-fA-F]{3,8}|[a-z]+\([0-9a-zA-Z.,%\s\/-]*\)|[a-z]+)$/
+
+  @doc false
+  # The series a channel highlights: a value or a list of them, each text,
+  # a number or an atom (as text).
+  def highlights(value) when is_list(value) and value != [] do
+    values = Enum.map(value, &highlight_value/1)
+    if Enum.any?(values, &(&1 == :error)), do: :error, else: {:ok, values}
+  end
+
+  def highlights(value) do
+    case highlight_value(value) do
+      :error -> :error
+      single -> {:ok, [single]}
+    end
+  end
+
+  defp highlight_value(value) when is_binary(value) or is_number(value), do: value
+
+  defp highlight_value(value) when is_atom(value) and not is_boolean(value) and not is_nil(value),
+    do: Atom.to_string(value)
+
+  defp highlight_value(_value), do: :error
 
   @doc false
   # Words after a value: a short string, written as text.
@@ -245,6 +273,13 @@ defmodule Fude.Channel do
 
   defp put(_name, channel, {:mid, mid}) when is_number(mid), do: %{channel | mid: mid}
 
+  defp put(name, channel, {:highlight, highlight}) do
+    case highlights(highlight) do
+      {:ok, values} -> %{channel | highlight: values}
+      :error -> raise ArgumentError, bad_key(name, :highlight, highlight, expected(:highlight))
+    end
+  end
+
   defp put(_name, channel, {:title, title}) when is_binary(title) or title == false,
     do: %{channel | title: title}
 
@@ -296,6 +331,7 @@ defmodule Fude.Channel do
     do: Enum.map_join(@schemes, ", ", &inspect/1) <> ", or a list of two colors or more"
 
   defp expected(:mid), do: "a number"
+  defp expected(:highlight), do: "a value or a list of values (text or numbers)"
   defp expected(:title), do: "a string or false"
   defp expected(:bin), do: "true, or count: n or step: n"
   defp expected(:axis), do: ":left or :right"
@@ -303,7 +339,7 @@ defmodule Fude.Channel do
   defp expected(_key),
     do:
       "one of :field, :type, :aggregate, :time, :bin, :sort, :format, :digits, :suffix, " <>
-        ":scheme, :mid, :title, :scale, :stack, :value, :axis"
+        ":scheme, :mid, :highlight, :title, :scale, :stack, :value, :axis"
 
   defp bad(name, value) do
     "Fude: #{inspect(name)} must be a field, {aggregate, field}, {unit, field}, {:bin, field}, " <>

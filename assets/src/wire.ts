@@ -19,6 +19,8 @@ export interface Scale {
   scheme?: string | string[];
   /** The value at the middle of a diverging scheme. */
   mid?: number;
+  /** The series that keep their colors; the others are gray. */
+  highlight?: unknown[];
   /** False for a color with no legend: a funnel's stages, which its axis names. */
   legend?: boolean;
 }

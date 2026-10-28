@@ -861,10 +861,15 @@ defmodule Fude.Compile do
       rows: rows,
       channels: %{},
       scales: scales,
-      options: %{
-        inner: if(kind == :donut, do: layer.options[:inner] || 0.6, else: 0),
-        labels: layer.options[:labels] != false
-      }
+      # Labels where they fit unless given (`labels: true` all of them,
+      # `false` none); the values' format, for a donut's total.
+      options:
+        %{
+          inner: if(kind == :donut, do: layer.options[:inner] || 0.6, else: 0),
+          format: format(layer.channels[:value])
+        }
+        |> Map.merge(Map.take(layer.options, [:labels]))
+        |> Map.reject(fn {_key, value} -> is_nil(value) end)
     }
   end
 
@@ -888,7 +893,8 @@ defmodule Fude.Compile do
                 %{
                   "type" => "sequential",
                   "domain" => extent(rows, :color) |> pair(),
-                  "title" => Channel.title(channel)
+                  "title" => Channel.title(channel),
+                  "format" => format(channel)
                 },
                 channel
               )
@@ -1254,12 +1260,24 @@ defmodule Fude.Compile do
       Map.put(
         scales,
         "color",
-        scheme(
-          %{"type" => "ordinal", "domain" => values, "title" => Channel.title(channel)},
-          channel
-        )
+        %{"type" => "ordinal", "domain" => values, "title" => Channel.title(channel)}
+        |> scheme(channel)
+        |> highlight(channel, values)
       )
     end
+  end
+
+  # The series a color highlights, as the domain has them (a number's text
+  # matches the number): the others are gray.
+  defp highlight(scale, %Channel{highlight: nil}, _values), do: scale
+
+  defp highlight(scale, %Channel{highlight: wanted}, values) do
+    picked =
+      Enum.filter(values, fn v ->
+        Enum.any?(wanted, &(&1 == v or to_string(&1) == to_string(v)))
+      end)
+
+    Map.put(scale, "highlight", picked)
   end
 
   # A color scale's scheme: its name or its list of colors, and the middle

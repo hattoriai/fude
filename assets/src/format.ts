@@ -115,6 +115,36 @@ function write(format: string | null, own: number | undefined, locale: string | 
   }
 }
 
+/**
+ * The writer of a set of value labels: in the format given; with none,
+ * compact when the largest is 100,000 or more (as a single value is), so
+ * that the labels read as their axis does, and alike.
+ */
+export function labelFormatter(format: string | null | undefined, values: (number | null | undefined)[], locale?: string): (value: number) => string {
+  if (parseFormat(format).name) return formatter(format, locale);
+  const max = Math.max(0, ...values.map((v) => (v == null ? 0 : Math.abs(v))));
+  // A format of no name is its digits and its suffix alone (":1|×").
+  return formatter(max >= 100000 ? `compact${format ?? ""}` : format, locale);
+}
+
+/**
+ * The compact form of a format, for labels where the full one does not
+ * fit: "€210K" for "currency:EUR", "1.2M" for a number; the others (a
+ * percent, bytes, a duration) as they are.
+ */
+export function compactFormatter(format: string | null | undefined, locale?: string): (value: number) => string {
+  const { name, suffix } = parseFormat(format);
+  const tail = suffix ? (v: string) => v + suffix : (v: string) => v;
+  if (name && name.startsWith("currency:")) {
+    const currency = name.slice(9);
+    return (v) => tail(numberFormat(locale, { style: "currency", currency, notation: "compact", minimumFractionDigits: 0, maximumFractionDigits: 1 }).format(v));
+  }
+  if (!name || name === "number" || name === "integer" || name === "compact") {
+    return (v) => tail(numberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(v));
+  }
+  return formatter(format, locale);
+}
+
 // As many fraction digits as a value needs, up to 3 below 1 and 2 above.
 function fractionDigits(value: number): number {
   const abs = Math.abs(value);
@@ -156,7 +186,7 @@ function tickWriter(format: string | null, ticks: number[], locale: string | und
   if (format && format.startsWith("currency:")) {
     if (max >= 1000) {
       const currency = format.slice(9);
-      return (v) => numberFormat(locale, { style: "currency", currency, notation: "compact", maximumFractionDigits: 1 }).format(v);
+      return (v) => numberFormat(locale, { style: "currency", currency, notation: "compact", minimumFractionDigits: 0, maximumFractionDigits: 1 }).format(v);
     }
     return formatter(format, locale, digits);
   }
@@ -165,6 +195,27 @@ function tickWriter(format: string | null, ticks: number[], locale: string | und
     return (v) => numberFormat(locale, { notation: "compact", maximumFractionDigits: compactDigits(step, max) }).format(v);
   }
   return (v) => numberFormat(locale, { maximumFractionDigits: digits, minimumFractionDigits: digits }).format(v);
+}
+
+/**
+ * The ticks of a value axis as a graphics desk writes them: the unit (a
+ * currency, a percent sign, a suffix) on the top tick only ("€400K"), the
+ * others plain ("300K"). Bytes and durations keep theirs on every tick, as
+ * their units change from one to the next. `rest` is null when the format
+ * has no unit to leave out.
+ */
+export function unitTicks(format: string | null | undefined, ticks: number[], locale?: string): { top: (value: number) => string; rest: ((value: number) => string) | null } {
+  const top = tickFormatter(format, ticks, locale);
+  const { name, digits, suffix } = parseFormat(format);
+  const plain = digits === undefined ? "" : `:${digits}`;
+  if (name === "percent") {
+    const step = ticks.length > 1 ? Math.abs(ticks[1]! - ticks[0]!) * 100 : 1;
+    const places = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
+    return { top, rest: (v) => numberFormat(locale, { maximumFractionDigits: places, minimumFractionDigits: places }).format(v * 100) };
+  }
+  if (name && name.startsWith("currency:")) return { top, rest: tickFormatter(plain || null, ticks, locale) };
+  if (suffix && name !== "bytes" && name !== "decimal_bytes" && name !== "duration") return { top, rest: tickFormatter(`${name ?? ""}${plain}` || null, ticks, locale) };
+  return { top, rest: null };
 }
 
 // The digits of compact ticks: 1.5K needs one, 1K, 2K none.

@@ -619,6 +619,13 @@ defmodule Fude.Spec do
   defp channel_key("digits", digits),
     do: {:error, "must be a whole number from 0 to 20, got: #{inspect(digits)}"}
 
+  defp channel_key("highlight", highlight) do
+    case Channel.highlights(highlight) do
+      {:ok, values} -> {:ok, :highlight, values}
+      :error -> {:error, "must be a value or a list of values, got: #{inspect(highlight)}"}
+    end
+  end
+
   defp channel_key("suffix", suffix) do
     if Channel.suffix?(suffix),
       do: {:ok, :suffix, suffix},
@@ -641,8 +648,8 @@ defmodule Fude.Spec do
 
   defp channel_key(key, _value) do
     keys =
-      ~w(field type aggregate time bin sort format digits suffix scheme mid title scale stack value
-         axis)
+      ~w(field type aggregate time bin sort format digits suffix scheme mid highlight title scale
+         stack value axis)
 
     {:error, "is not a key of a channel" <> Fude.Names.suggest(key, keys)}
   end

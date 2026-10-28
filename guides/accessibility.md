@@ -14,8 +14,10 @@ use a mouse can do.
   the arrows choose a range from where the keyboard is, Enter zooms to it
   or sends it, and Escape goes back.
 * **A table.** Under each chart, a toggle opens a table of its data, as
-  the chart draws it (summed, in bins). It is on the page before the
-  hook mounts, and with JavaScript off. With `table={:swap}`, a **Data**
+  the chart draws it (summed, in bins). The hook writes its rows from the
+  chart's config when it is first opened, so that the page carries the
+  data once; small multiples have theirs from the server. With
+  `table={:swap}`, a **Data**
   button (`aria-pressed`, and `aria-controls` the table) shows it in the
   plot's place, a region that the keyboard scrolls.
 * **Single numbers** are HTML: a `progressbar` and a `meter` with their

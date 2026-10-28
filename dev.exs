@@ -154,7 +154,7 @@ defmodule FudeDev.Data do
     end
   end
 
-  def kpis, do: [%{mrr: 184_320.5, last: 171_240.0, done: 68}]
+  def kpis, do: [%{mrr: 184_320.5, last: 171_240.0, done: 68, orders: 3_482}]
 
   # A year of monthly revenue, newest first, as a trend reads it.
   def mrr_months do
@@ -354,7 +354,7 @@ defmodule FudeDev.Layouts do
       <body>
         <main>
           <nav>
-            <a href="/">Gallery</a><a href="/live">Live</a><a href="?theme=sumi">Sumi</a><a href="?dark=1">Dark</a><a href="?theme=sumi&dark=1">Sumi, dark</a><a href="?locale=de-DE">de-DE</a>
+            <a href="/">Gallery</a><a href="/newsroom">Newsroom</a><a href="/live">Live</a><a href="?theme=sumi">Sumi</a><a href="?dark=1">Dark</a><a href="?theme=sumi&dark=1">Sumi, dark</a><a href="?locale=de-DE">de-DE</a>
           </nav>
           <nav aria-label="Sumi's themes">
             Sumi: <a :for={{id, name, _, _, _, _, _} <- @themes} href={"?sumi=#{id}"} aria-current={@look == id && "page"}>{name}</a>
@@ -650,6 +650,159 @@ defmodule FudeDev.LiveLive do
   end
 end
 
+defmodule FudeDev.NewsroomLive do
+  @moduledoc """
+  Each kind of chart as a graphics desk would publish it (#10): a title
+  that says what it shows, a dek, the data labelled, a note where the
+  story is, and a source line. The page that the README's pictures come
+  from.
+  """
+
+  use Phoenix.LiveView
+
+  import Fude.Components
+
+  alias FudeDev.Data
+
+  def mount(params, _session, socket) do
+    {:ok, assign(socket, locale: params["locale"] || "en-GB")}
+  end
+
+  def render(assigns) do
+    ~H"""
+    <div class="numbers">
+      <.chart
+        id="news-mrr"
+        locale={@locale}
+        chart={Fude.trend(Data.mrr_months(), value: [field: :mrr, format: {:currency, "EUR"}], spark: :month, label: "Monthly recurring revenue")}
+      />
+      <.chart id="news-orders" locale={@locale} chart={Fude.number(Data.kpis(), value: :orders, label: "Orders this month")} />
+      <.chart id="news-done" locale={@locale} chart={Fude.progress(Data.kpis(), value: :done, goal: 100, label: "Onboarding done, of 100")} />
+    </div>
+    <div class="grid">
+      <.chart
+        id="news-online"
+        locale={@locale}
+        chart={
+          Fude.line(Data.monthly(), x: :month, y: [field: :revenue, format: {:currency, "EUR"}, title: "Revenue"],
+            color: [field: :channel, highlight: "Online"], curve: :monotone,
+            title: "Online pulled away from the other channels",
+            subtitle: "Monthly revenue by channel, 2025–2026",
+            source: "Made-up data")
+          |> Fude.annotate(:band, x: {~D[2025-11-01], ~D[2026-01-01]}, text: "Holidays")
+          |> Fude.annotate(:label, x: ~D[2026-12-01], y: 98_000, text: "Record month: €98K")
+        }
+      />
+      <.chart
+        id="news-regions"
+        locale={@locale}
+        chart={
+          Fude.bar(Data.regions(), x: [field: :region, sort: :"-y"], y: [field: :revenue, aggregate: :sum, format: {:currency, "EUR"}, title: "Revenue"],
+            horizontal: true,
+            title: "The north still sells the most",
+            subtitle: "Revenue by region, first quarter",
+            source: "Made-up data")
+        }
+      />
+      <.chart
+        id="news-stacked"
+        locale={@locale}
+        chart={
+          Fude.bar(Data.regions(), x: [field: :region, sort: :"-y"], y: [field: :revenue, format: {:currency, "EUR"}, title: "Revenue"], color: :channel,
+            title: "The north sells the most, mostly in its shops",
+            subtitle: "Revenue by region and channel, with each region's total",
+            source: "Made-up data")
+        }
+      />
+      <.chart
+        id="news-status"
+        locale={@locale}
+        chart={
+          Fude.donut(Data.status(), value: :orders, color: :status,
+            title: "Three in five orders have arrived",
+            subtitle: "Orders by status, this month",
+            source: "Made-up data")
+        }
+      />
+      <.chart
+        id="news-activity"
+        locale={@locale}
+        chart={
+          Fude.heatmap(Data.activity(), x: :hour, y: :day, color: [field: :events, title: "Events"],
+            title: "Weekdays peak in the early afternoon",
+            subtitle: "Events by hour of the day and day of the week",
+            source: "Made-up data")
+        }
+      />
+      <.chart
+        id="news-profit"
+        locale={@locale}
+        chart={
+          Fude.waterfall(Data.profit(), x: :step, y: [field: :amount, format: {:currency, "EUR"}], start: "Revenue", total: "Profit",
+            title: "Salaries take half of the revenue",
+            subtitle: "From revenue to profit, third quarter",
+            source: "Made-up data")
+        }
+      />
+      <.chart
+        id="news-customers"
+        locale={@locale}
+        chart={
+          Fude.scatter(Data.customers(), x: [field: :orders, title: "Orders"], y: [field: :spend, format: {:currency, "EUR"}, title: "Spend"],
+            color: [field: :channel, highlight: "Online"],
+            title: "Spend grows with orders, in every channel",
+            subtitle: "Spend and orders of 160 customers",
+            source: "Made-up data")
+        }
+      />
+      <.chart
+        id="news-throughput"
+        locale={@locale}
+        chart={
+          Fude.layers(Data.throughput(), [
+            Fude.scatter(
+              x: [field: :rate, format: :decimal_bytes, suffix: "/s", scale: [type: :log, domain: [1.0e7, 2.5e10]], title: "Throughput · log scale"],
+              y: [field: :bench, title: false],
+              color: [field: :parser, title: "Parser", scheme: ["#8a8a85", "#e07b4f"]],
+              connect: true, labels: true),
+            Fude.text(y: :bench, text: [field: :speedup, format: :number, digits: 1, suffix: "×", title: "Speedup"])
+          ], title: "The new parser is faster on every benchmark", subtitle: "Throughput of two parsers, higher is better", caption: "Median of 3 runs", source: "Made-up data", height: 380)
+        }
+      />
+      <.chart
+        id="news-signups"
+        locale={@locale}
+        chart={
+          Fude.funnel(Data.signups(), x: :stage, y: [field: :people, title: "People"], step: true, labels: :inside,
+            title: "Four in five visitors never start signing up",
+            subtitle: "Sign-ups in October, by stage",
+            source: "Made-up data")
+        }
+      />
+      <.chart
+        id="news-regions-multiples"
+        locale={@locale}
+        chart={
+          Fude.area(Data.region_months(), x: :month, y: [field: :revenue, format: :compact, title: "Revenue"], color: :channel)
+          |> Fude.facet(:region)
+          |> Fude.title("Online grows in every region", subtitle: "Monthly revenue by channel, by region")
+        }
+      />
+      <.chart
+        id="news-world"
+        locale={@locale}
+        chart={
+          Fude.choropleth(Data.countries(), region: :country, color: [field: :users, title: "Users"],
+            title: "Where the users are",
+            subtitle: "Users by country",
+            source: "Made-up data; Natural Earth")
+        }
+      />
+    </div>
+    """
+  end
+end
+
 defmodule FudeDev.Router do
   use Phoenix.Router
 
@@ -667,6 +820,7 @@ defmodule FudeDev.Router do
 
     live("/", FudeDev.GalleryLive)
     live("/live", FudeDev.LiveLive)
+    live("/newsroom", FudeDev.NewsroomLive)
   end
 end
 

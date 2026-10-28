@@ -22,7 +22,38 @@ defmodule Fude.ComponentsTest do
     assert Enum.count(LazyHTML.query(doc, ~s|#revenue-plot[phx-update="ignore"][role="img"]|)) ==
              1
 
-    assert LazyHTML.text(LazyHTML.query(doc, "tbody tr:first-child")) =~ "North"
+    # The table's rows are the hook's to write, from the config (#4).
+    assert Enum.count(
+             LazyHTML.query(
+               doc,
+               ~s|details.fude-data #revenue-rows[data-fude-rows][phx-update="ignore"]|
+             )
+           ) ==
+             1
+
+    assert Enum.empty?(LazyHTML.query(doc, "tbody"))
+  end
+
+  test "the page carries a chart's data once: in its config, not again in a table (#4)" do
+    rows = for i <- 1..1000, do: %{x: i * 1.5, y: :math.sin(i) * 100, s: "s#{rem(i, 3)}"}
+    assigns = %{chart: Fude.scatter(rows, x: :x, y: :y, color: :s)}
+    html = rendered_to_string(~H|<.chart id="points" chart={@chart} />|)
+
+    [config] =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("figure")
+      |> LazyHTML.attribute("data-fude")
+
+    # The HTML is the config and a little more, not the config and a table three times its size.
+    assert byte_size(html) < byte_size(config) * 1.5
+  end
+
+  test "small multiples, with no hook on the figure, keep the server's table" do
+    rows = for r <- ["A", "B"], m <- 1..3, do: %{r: r, m: m, v: m * 2}
+    assigns = %{chart: rows |> Fude.line(x: :m, y: :v) |> Fude.facet(:r)}
+    doc = LazyHTML.from_fragment(rendered_to_string(~H|<.chart id="by-r" chart={@chart} />|))
+    assert LazyHTML.text(LazyHTML.query(doc, "details.fude-data tbody tr:first-child")) =~ "A"
   end
 
   test "select names the event a click on a mark sends" do
@@ -109,12 +140,13 @@ defmodule Fude.ComponentsTest do
 
     assert Enum.count(LazyHTML.query(doc, ".fude-frame > #revenue-plot.fude-plot")) == 1
 
-    assert LazyHTML.text(
+    assert Enum.count(
              LazyHTML.query(
                doc,
-               ".fude-frame > #revenue-data.fude-data-over tbody tr:first-child"
+               ".fude-frame > #revenue-data.fude-data-over > #revenue-rows[data-fude-rows]"
              )
-           ) =~ "North"
+           ) ==
+             1
 
     assert Enum.empty?(LazyHTML.query(doc, "details.fude-data"))
 
@@ -296,6 +328,18 @@ defmodule Fude.ComponentsTest do
     html = rendered_to_string(~H|<.chart id="n" chart={@chart} height={:fill} />|)
     assert html =~ "fude-single-center"
     refute html =~ "height: "
+  end
+
+  test "the shared legend of small multiples grays the series a highlight sets back" do
+    rows = for r <- ["A", "B"], c <- ["x", "y"], m <- 1..2, do: %{r: r, c: c, m: m, v: m}
+
+    assigns = %{
+      chart: rows |> Fude.line(x: :m, y: :v, color: [field: :c, highlight: "x"]) |> Fude.facet(:r)
+    }
+
+    html = rendered_to_string(~H|<.chart id="hl" chart={@chart} />|)
+    assert html =~ "var(--fude-context)"
+    assert html =~ "var(--fude-series-1)"
   end
 
   test "the shared legend of small multiples takes the color's scheme" do

@@ -86,8 +86,10 @@ test.describe("the gallery", () => {
     const labels = await page.locator("#orders-revenue .fude-axes text").allTextContents();
     expect(labels).toContain("Orders");
     expect(labels).toContain("Revenue");
-    // The right axis's ticks, in euros (as the browser's locale writes them).
-    expect(labels.filter((label) => label.includes("€")).length).toBeGreaterThan(2);
+    // The right axis's ticks: in euros on the top one only, as a graphics
+    // desk writes them ("€100k", then "90k"…), in the browser's locale.
+    expect(labels.filter((label) => label.includes("€")).length).toBe(1);
+    expect(labels.filter((label) => /^\d+k$/i.test(label)).length).toBeGreaterThan(2);
     await pointAt(page, "orders-revenue", 0.6, 0.6);
     const text = await tooltip(page, "orders-revenue");
     expect(text).toMatch(/[\d,]+\s*Orders/);
@@ -298,12 +300,39 @@ test.describe("the gallery", () => {
     await expect(page.locator("#visits-spark-area svg text")).toHaveText(/^[\d.,]+\s?[kK]$/);
   });
 
-  test("the legend of a line chart hides a series", async ({ page }) => {
+  test("the names at the ends of the lines take the legend's place, and hide a series", async ({ page }) => {
     await openPage(page);
+    // The legend is the keyboard's way in only: out of sight until it has the focus.
+    const legend = page.locator("#revenue-lines .fude-legend");
+    await expect(legend).toHaveClass(/fude-legend-quiet/);
+    const end = page.locator("#revenue-lines .fude-end-label", { hasText: /^Retail$/ });
+    await end.click();
+    await expect(page.locator("#revenue-lines .fude-end-label", { hasText: /^Retail$/ })).toHaveAttribute("opacity", "0.4");
     const retail = page.locator("#revenue-lines .fude-legend-item", { hasText: "Retail" });
-    await retail.click();
     await expect(retail).toHaveAttribute("aria-pressed", "false");
-    await expect(page.locator("#revenue-lines .fude-axes text", { hasText: /^Retail$/ })).toHaveCount(0);
+    // The keyboard shows it again, from the legend.
+    await retail.focus();
+    await expect(retail).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(retail).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("a legend reads in the order of the marks: a stack from its top segment down", async ({ page }) => {
+    await openPage(page);
+    await expect(page.locator("#revenue-regions .fude-legend-item").first()).toHaveText("Partners");
+    await expect(page.locator("#revenue-regions .fude-legend")).not.toHaveClass(/fude-legend-quiet/);
+  });
+
+  test("labels on the marks: a donut's total, compact values where full ones do not fit, and bars that need no value axis", async ({ page }) => {
+    await openPage(page);
+    await expect(page.locator("#status svg text", { hasText: /^6,860$/ })).toHaveCount(1);
+    await expect(page.locator("#status .fude-legend")).toHaveClass(/fude-legend-quiet/);
+    await expect(page.locator("#profit svg text", { hasText: /^-?€\d+k$/i })).not.toHaveCount(0);
+    // A value in every cell of a heatmap, or none.
+    const cells = await page.locator("#activity svg text[data-key^='v:']").count();
+    expect(cells).toBe(7 * 17);
+    // Horizontal bars with their values: no ticks of a value axis.
+    await expect(page.locator("#regions-horizontal svg text", { hasText: /^\d+k$/ })).toHaveCount(0);
   });
 
   test("the data moves when it changes", async ({ page }) => {
@@ -362,6 +391,26 @@ test.describe("the gallery", () => {
       ]);
       expect(download.suggestedFilename()).toBe(`online-keeps-growing.${format}`);
     }
+  });
+});
+
+test.describe("the newsroom", () => {
+  test("draws every kind as a newsroom would publish it, with no error", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(String(error)));
+    await openPage(page, "/newsroom");
+    // A highlight: the series that matters named in bold, the others gray.
+    await expect(page.locator("#news-online .fude-end-label", { hasText: "Online" }).locator("text")).toHaveAttribute("font-weight", "600");
+    await expect(page.locator("#news-online .fude-end-label", { hasText: "Retail" }).locator("text")).not.toHaveAttribute("font-weight", /.*/);
+    // A stack's total, and a callout.
+    await expect(page.locator("#news-stacked svg text", { hasText: /^€136,306$/ })).toHaveCount(1);
+    await expect(page.locator("#news-online svg text", { hasText: "Record month" })).toHaveCount(1);
+    // The table is the hook's: written when it is opened.
+    const data = page.locator("#news-regions details.fude-data");
+    await expect(data.locator("tbody tr")).toHaveCount(0);
+    await data.locator("summary").click();
+    await expect(data.locator("tbody tr")).toHaveCount(5);
+    expect(errors).toEqual([]);
   });
 });
 

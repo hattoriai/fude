@@ -14,15 +14,62 @@ Fude.line(sales, x: {:month, :placed_on}, y: {:sum, :total}, color: :channel,
 
 ## Labels on the marks
 
-* A line chart of four series or fewer labels each line at its end,
-  with a dot, and moves labels apart that would touch, with a leader to
-  their line. The legend stays above.
-* `labels: true` writes the value at the end of each bar, and by each
-  point of a scatter or a bubble.
+The data is labelled where the labels fit, with no option: `labels:
+true` labels every mark that can be, `labels: false` none.
+
+* **Lines** of four series or fewer are named at their ends, with a dot,
+  moved apart where they would touch, with a leader to their line. A
+  click on a name hides its line, or shows it again; `labels: true` adds
+  each line's last value to its name, and a line of no series is labelled
+  by its last value.
+* **Bars** have their values at their ends, all of them or none; compact
+  ("€210K") where the full values do not fit. A **stack** has its total
+  at its end, and each segment's value inside it where it fits, in the
+  color that reads on it. **Horizontal bars** with their values leave out
+  their value axis. Bars under a line (two measures) are labelled only
+  when asked.
+* **Pies and donuts** name each slice with its share, inside it where
+  they fit, else outside with a short line; a donut has its total in its
+  hole.
+* **Heatmaps** have each cell's value, in the color that reads on it: all
+  of them, compact if need be, or none.
+* **Points** of a scatter or a bubble have their values with `labels:
+  true`.
 * A text layer with no `x` writes a column beside the categories of `y`,
   under its title: a ratio or a count beside each row.
 * Names of categories wrap onto two lines, or stagger, before any is
   left out.
+* With no format, labels are compact from 100,000, as single values are.
+
+## Legends
+
+A legend is there when labels cannot name the series. Where they do
+(lines named at their ends, a pie of six slices or fewer with its
+labels), the legend is out of sight, and still the keyboard's way to hide
+a series: it shows when it has the focus. A legend reads in the order of
+the marks: a vertical stack from its top segment down, lines from the
+highest at their end.
+
+## One series against the rest
+
+`highlight` on a color names the series that matter; they keep their
+colors and are drawn over the others, in gray (`--fude-context`), and
+their names are bold:
+
+```elixir
+Fude.line(sales, x: :month, y: :revenue, color: [field: :channel, highlight: "Online"])
+```
+
+A list highlights several. A line chart of more than five series reads
+better as small multiples, or with a highlight; the browser's console
+says so.
+
+## Units
+
+A value axis writes its unit on its top tick only, as a graphics desk
+does: "€400K", then "300K", "200K". A currency, a percent and a
+`suffix` are units; bytes and durations keep theirs on every tick, as
+they change from one to the next. Labels and tooltips always have them.
 
 ## Notes on the data
 
@@ -36,10 +83,13 @@ chart
 |> Fude.annotate(:line, y: 4000, text: "Goal")
 ```
 
-* `:label` - words with a line to their point, placed where they stay in
-  the plot.
-* `:band` - a shaded range of `x` or `y`, under the marks.
-* `:line` - a dashed line across the chart, with its words.
+* `:label` - a callout: a ringed dot on its point, a short line, and its
+  words, the first line bold, where they cover the least of the data
+  (above or below it, right or left, near or farther), in the plot.
+* `:band` - a shaded range of `x` or `y`, under the marks, its words at
+  its top.
+* `:line` - a dashed line across the chart, its words at its start or
+  its end, where they cover the least of the data. A rule's label too.
 
 Notes are part of the spec, a date as its text.
 

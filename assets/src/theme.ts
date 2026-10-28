@@ -9,6 +9,8 @@ export interface Theme {
   muted: string;
   grid: string;
   baseline: string;
+  /** The gray of the series a highlight sets back. */
+  context: string;
   surface: string;
   empty: string;
   /** The colors of roles: a waterfall's increase, decrease and total. */
@@ -82,6 +84,7 @@ export function readTheme(el: Element): Theme {
     muted: get("--fude-muted", "#6f6d68"),
     grid: get("--fude-grid", "#e1e0d9"),
     baseline: get("--fude-baseline", "#c3c2b7"),
+    context: get("--fude-context", "#c9c8c1"),
     surface,
     empty: get("--fude-map-empty", "#e8e7e1"),
     roles: {

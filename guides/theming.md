@@ -7,9 +7,11 @@ ancestor or on `.fude` wins.
 | Property | Is |
 | --- | --- |
 | `--fude-font`, `--fude-font-size` | the type of the chart's words |
+| `--fude-title-size`, `--fude-dek-size`, `--fude-note-size`, `--fude-legend-size` | the title (1.25em), the subtitle (0.9375em), the caption and source (0.75em), the legend (0.875em); each with `-small` (a chart under 420 pixels wide) and the title and subtitle with `-large` (900 pixels and wider) |
 | `--fude-text`, `--fude-secondary`, `--fude-muted` | the words: titles and values, subtitles and labels, axes |
 | `--fude-surface` | the paper under the chart: the gaps between marks and the rings of points |
 | `--fude-grid`, `--fude-baseline` | the hairline grid, and the line at zero |
+| `--fude-context` | the gray of the series a highlight sets back |
 | `--fude-series-1` to `--fude-series-8` | the colors of the series, in order |
 | `--fude-sequential` | the ramp of a number's color, light to dark, as a list (the scheme `:blue`); or `accent`, a ramp of `--fude-accent` from the surface to the text |
 | `--fude-scheme-green`, `-orange`, `-purple`, `-gray`, `-viridis`, `-red-blue`, `-red-green` | the named schemes of a color channel, each a list |
