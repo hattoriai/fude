@@ -2109,10 +2109,11 @@ export class Chart {
         };
       default: {
         const rows = [
-          { value: this.valueText(c.x?.[row], scales.x), name: scales.x?.title ?? "x", color: null },
-          { value: this.valueText(c.y?.[row], ls.y), name: ls.y?.title ?? "y", color: null },
+          // An axis with no title (`title: false`): its value alone.
+          { value: this.valueText(c.x?.[row], scales.x), name: scales.x?.title ?? "", color: null },
+          { value: this.valueText(c.y?.[row], ls.y), name: ls.y?.title ?? "", color: null },
         ];
-        if (c.size) rows.push({ value: this.valueText(c.size[row], scales.size), name: scales.size?.title ?? "size", color: null });
+        if (c.size) rows.push({ value: this.valueText(c.size[row], scales.size), name: scales.size?.title ?? "", color: null });
         const title = c.color && scales.color?.type === "ordinal" ? this.valueText(series, scales.color) : "";
         return { title, rows };
       }
