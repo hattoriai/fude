@@ -400,7 +400,8 @@ test.describe("the kinds: timeline, box plot, candlestick, treemap, radar, radia
     await pointAt(page, "plan", 0.45, 0.5);
     const tip = await tooltip(page, "plan");
     expect(tip).toContain("Web app");
-    expect(tip).toContain("28 Mar – 29 Apr 2026");
+    // Some versions of ICU put thin spaces around the dash of a range.
+    expect(tip).toMatch(/28 Mar\s–\s29 Apr 2026/);
     expect(tip).toContain("32 days");
   });
 
