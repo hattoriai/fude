@@ -24,10 +24,11 @@ test.describe("the election page", () => {
     expect(words.filter((word) => word === "83")).toHaveLength(1);
     await expect(page.locator("#results .fude-legend")).toBeHidden();
     // Three columns: changes of seats, votes, changes of votes, none over another.
-    const boxes = await Promise.all(["+25", "29.4%", "+5.6"].map((word) => page.locator("#results svg text", { hasText: exactly(word) }).boundingBox()));
-    for (const box of boxes) expect(box).not.toBeNull();
-    expect(boxes[0]!.x + boxes[0]!.width).toBeLessThan(boxes[1]!.x);
-    expect(boxes[1]!.x + boxes[1]!.width).toBeLessThan(boxes[2]!.x);
+    // Each column's words end at its own edge (their x, as WebKit's boxes of
+    // SVG text are not to be trusted), apart by more than a word's width.
+    const edges = await Promise.all(["+25", "29.4%", "+5.6"].map(async (word) => Number(await page.locator("#results svg text", { hasText: exactly(word) }).getAttribute("x"))));
+    expect(edges[1]! - edges[0]!).toBeGreaterThan(30);
+    expect(edges[2]! - edges[1]!).toBeGreaterThan(30);
     // A change up is in the up color, down in the down color.
     const up = await page.locator("#results svg text", { hasText: /^\+25$/ }).getAttribute("fill");
     const down = await page.locator("#results svg text", { hasText: /^−36$/ }).getAttribute("fill");
@@ -43,11 +44,12 @@ test.describe("the election page", () => {
     expect(words.some((word) => /\d,\d{3}%/.test(word) || word === "180%")).toBe(false);
     const majority = page.locator("#split svg text", { hasText: "116 for a majority" });
     await expect(majority).toHaveCount(1);
-    // Its words above the bar of seats, not above the plot.
-    const seats = await page.locator("#split svg text", { hasText: /^Seats$/ }).boundingBox();
-    const label = await majority.boundingBox();
-    expect(label!.y + label!.height).toBeLessThanOrEqual(seats!.y + 2);
-    expect(label!.y).toBeGreaterThan(seats!.y - 80);
+    // Its words above the bar of seats, not above the plot: by their y (the
+    // baseline of the words, the middle of the bar's name).
+    const seats = Number(await page.locator("#split svg text", { hasText: /^Seats$/ }).getAttribute("y"));
+    const label = Number(await majority.getAttribute("y"));
+    expect(label).toBeLessThan(seats);
+    expect(label).toBeGreaterThan(seats - 80);
   });
 
   test("a parliament: its total, its majority, a party's seats in the tooltip; the keyboard goes party by party", async ({ page }) => {
