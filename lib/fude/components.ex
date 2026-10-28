@@ -141,7 +141,7 @@ defmodule Fude.Components do
       >
         <.plot id={@id} wire={@wire} fill={@fill} height={@plot_height} />
         <div id={"#{@id}-data"} class="fude-data-over" role="region" aria-label="Data" tabindex="0">
-          <.data_table heads={@heads} rows={@rows} />
+          <.data_rows id={@id} />
         </div>
       </div>
       <.panels
@@ -160,7 +160,8 @@ defmodule Fude.Components do
         phx-mounted={JS.ignore_attributes(["open"])}
       >
         <summary>Data</summary>
-        <.data_table heads={@heads} rows={@rows} />
+        <.data_rows :if={@plotted} id={@id} />
+        <.data_table :if={!@plotted} heads={@heads} rows={@rows} />
       </details>
       <p :if={@swap} class="fude-data-toggle">
         <button
@@ -269,9 +270,19 @@ defmodule Fude.Components do
     domain
     |> Enum.with_index()
     |> Enum.map(fn {name, i} -> {to_string(name), swatch(scale, i)} end)
+    |> Enum.zip(domain)
+    |> Enum.map(fn {{name, color}, value} ->
+      # A series a highlight sets back is gray, as it is in the panels.
+      if set_back?(scale, value), do: {name, "var(--fude-context)"}, else: {name, color}
+    end)
   end
 
   defp legend(_scale), do: []
+
+  defp set_back?(%{"highlight" => wanted}, value),
+    do: not Enum.any?(wanted, &(&1 == value or to_string(&1) == to_string(value)))
+
+  defp set_back?(_scale, _value), do: false
 
   defp swatch(%{"roles" => roles}, i) when is_list(roles), do: "var(--fude-#{Enum.at(roles, i)})"
 
@@ -514,6 +525,18 @@ defmodule Fude.Components do
       phx-update="ignore"
     >
     </div>
+    """
+  end
+
+  attr :id, :string, required: true
+
+  # The table of a chart that the hook draws: the hook writes it from the
+  # chart's config the first time it is opened, and again as the chart
+  # changes, so that the page carries the data once (#4). The table of
+  # small multiples (no hook on the figure) is the server's.
+  defp data_rows(assigns) do
+    ~H"""
+    <div id={"#{@id}-rows"} class="fude-data-rows" data-fude-rows phx-update="ignore"></div>
     """
   end
 

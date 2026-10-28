@@ -278,6 +278,25 @@ defmodule Fude.SpecTest do
       assert Enum.find(errors, &(&1.path == ["connect"]))
     end
 
+    test "takes back a highlight, and refuses what is not one" do
+      chart =
+        Fude.line(x: :month, y: :revenue, color: [field: :channel, highlight: ["Online", 2026]])
+
+      assert %{"color" => %{"highlight" => ["Online", 2026]}} = Spec.dump(chart)
+
+      assert {:ok, ^chart} =
+               chart |> Spec.dump() |> JSON.encode!() |> JSON.decode!() |> Spec.load()
+
+      assert {:error, [%{path: ["color", "highlight"]}]} =
+               Spec.load(%{
+                 "fude" => 1,
+                 "kind" => "line",
+                 "x" => "m",
+                 "y" => "v",
+                 "color" => %{"field" => "c", "highlight" => %{"a" => 1}}
+               })
+    end
+
     test "takes back a brush, and refuses another" do
       chart = Fude.line(x: :day, y: :visits, brush: :select)
       assert %{"brush" => "select"} = Spec.dump(chart)

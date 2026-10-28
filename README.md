@@ -15,7 +15,7 @@ where data needs to be understood at a glance. Start with a bar or line
 chart, then add things like annotations, multiple series, maps, or live
 updates as the story calls for them.
 
-![A line chart of monthly revenue by channel, with a holiday band and an annotation](media/revenue-lines.png)
+![A line chart of monthly revenue by channel: Online highlighted in blue over the other channels in gray, a shaded holiday period, and a callout on the record month](media/revenue-lines.png)
 
 Fude includes bar, line, area, scatter, pie, donut, histogram, heatmap,
 waterfall, funnel and map charts, as well as sparklines and single-value
@@ -25,10 +25,22 @@ in layers or small multiples.
 
 <table>
 <tr>
-<td><img src="media/revenue-regions.png" alt="Stacked bar chart of revenue by region and channel"></td>
+<td><img src="media/revenue-regions.png" alt="Stacked bar chart of revenue by region and channel, each region's total above its stack and each channel's value inside its segment"></td>
 <td><img src="media/world.png" alt="World map colored by users per country"></td>
 </tr>
 </table>
+
+Charts are set as a graphics desk sets them, by default: a title that
+reads first, the data labelled where the labels fit (and the legend left
+out where they name every series), the unit on the top tick only, and
+notes placed off the data. The same charts with Vega-Lite's defaults and
+with Fude's (the line chart adds a highlight and two notes, both options;
+the bars and the donut are as they come):
+
+![The same line chart, bar chart and donut drawn with Vega-Lite's defaults and with Fude](media/fude-vs-vega-lite.png)
+
+`mix dev` serves these at <http://localhost:4099/newsroom>: each kind as
+a newsroom would publish it.
 
 ## Quickstart
 

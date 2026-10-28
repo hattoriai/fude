@@ -266,6 +266,51 @@ defmodule Fude.CompileTest do
     end
   end
 
+  describe "a highlight (#10)" do
+    test "names the series that keep their colors, as the domain has them" do
+      wire =
+        compile!(
+          Fude.line(@sales,
+            x: :region,
+            y: :revenue,
+            color: [field: :channel, highlight: "Online"]
+          )
+        )
+
+      assert wire["scales"]["color"]["highlight"] == ["Online"]
+
+      wire =
+        compile!(
+          Fude.bar(@sales,
+            x: :region,
+            y: :revenue,
+            color: [field: :channel, highlight: [:Retail, "Nope"]]
+          )
+        )
+
+      assert wire["scales"]["color"]["highlight"] == ["Retail"]
+
+      refute Map.has_key?(
+               compile!(Fude.bar(@sales, x: :region, y: :revenue, color: :channel))["scales"][
+                 "color"
+               ],
+               "highlight"
+             )
+    end
+
+    test "is a value or a list of them" do
+      assert_raise ArgumentError,
+                   ~r/:highlight of :color must be a value or a list of values/,
+                   fn ->
+                     Fude.line(@sales,
+                       x: :region,
+                       y: :revenue,
+                       color: [field: :channel, highlight: %{a: 1}]
+                     )
+                   end
+    end
+  end
+
   describe "brushes (#13)" do
     test "go on the wire as what a drag does; none unless asked" do
       wire = compile!(Fude.line(@sales, x: :region, y: :revenue, brush: :zoom))

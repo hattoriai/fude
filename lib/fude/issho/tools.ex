@@ -92,7 +92,8 @@ if Code.ensure_loaded?(Issho.Tool) do
       "format", "digits" (decimals, 0 to 20), "suffix" (words after each
       value: "×", "/s"), "scheme" (a color's: blue, green, orange, purple,
       gray, viridis, red_blue, red_green, categorical, okabe_ito, or a list
-      of colors), "mid", "title", "sort", "stack"}. A scatter or a bubble
+      of colors), "mid", "highlight" (a color's series that keep their colors, the
+      others gray), "title", "sort", "stack"}. A scatter or a bubble
       may have "connect" (a line between the points of each category: a
       dumbbell) and "labels" (each point's value). A text layer with "y"
       and "text" and no "x" is a column at the right of the plot, beside

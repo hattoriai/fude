@@ -9,6 +9,37 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Editorial defaults (#10): charts are set as a graphics desk sets them.
+  - **Labels on the marks, where they fit**, with no option (`labels:
+    true` all, `false` none): values at the ends of bars, compact where
+    the full ones do not fit; a stack's total at its end and its
+    segments' values inside them; horizontal bars with their values and
+    no value axis; a pie's or a donut's slices named with their shares,
+    inside or outside, and a donut's total in its hole; a heatmap's
+    values in its cells. `labels: true` on a line adds its last value.
+    Labels with no format are compact from 100,000.
+  - **Legends only where labels cannot name the series**: lines named at
+    their ends, and small pies, keep a legend out of sight that the
+    keyboard still reaches; a click on a line's name hides it. A legend
+    reads in the order of the marks.
+  - **`highlight` on a color**: the series that matter keep their colors,
+    the others are gray (`--fude-context`). In specs as `"highlight"`.
+  - **Type**: a title that reads first (1.25em), a dek, quiet notes; each
+    a custom property, set for the chart's own width with container
+    queries. The unit of a value axis on its top tick only.
+  - **Marks**: bars stand apart in their bands; a line's points that
+    crowd (a narrow panel) are left out; callouts and the words of rules
+    go where they cover the least of the data.
+  - A hint in the browser's console for a line chart of more than five
+    series: small multiples, or a highlight.
+  - `mix dev` has a newsroom page: each kind as a newsroom would publish
+    it. The README compares it with Vega-Lite.
+- The data table is written by the hook from the chart's config, when it
+  is first opened (#4): a chart's HTML no longer carries its data twice.
+  A scatter of 1,000 points goes from 89.6 KB of HTML to 28.7 KB. The
+  table of a streamed chart now has its new rows. Small multiples keep
+  the server's table.
+
 - Brushing (#13): `brush: :zoom` or `brush: :select` on a chart. A drag
   across the x axis (a long press, then a drag, on a phone; Shift and the
   arrows on the keyboard) chooses a range, snapped to whole units of a
@@ -43,6 +74,8 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Labels drew only on bars: `labels` on a pie, a donut, a heatmap, a
+  line or an area did nothing (#10).
 - A text layer drew nothing in the browser.
 - A log scale with a `domain` of its own widened it to whole powers of
   ten; it keeps it now, as a linear scale does, with the powers of ten

@@ -11,7 +11,8 @@ What Fude does not do yet. Each is a good first issue to open.
   to come.
 * **Appending** suits charts whose marks are their rows.
 * **Small multiples of a query** read the query's rows, not its groups.
-* **The table of a streamed chart** is the one of the last render.
+* **The data table** needs JavaScript, as the plot does: the hook writes
+  it from the chart's config (small multiples have the server's).
 * **Brushing** is across the x axis, of times and numbers (bands of
   months too), not of categories or of a horizontal bar's amounts.
 * **Messages.** The few words that Fude writes itself ("Data", "Total",

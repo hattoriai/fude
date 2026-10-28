@@ -4,14 +4,15 @@
 // the config changes, moving each mark from where it was.
 
 import { alpha, mix, ramp, readTheme, rgb, type Theme } from "./theme";
-import { formatTime, formatter, parseFormat, tickFormatter, timeTickFormatter } from "./format";
+import { compactFormatter, formatTime, formatter, labelFormatter, parseFormat, tickFormatter, timeTickFormatter, unitTicks } from "./format";
 import { position, windowBand, type Position } from "./scale";
 import { numberRangeLabel, ordered, sentValue, snapBins, snapNumbers, snapTimes, timeRangeLabel, timeUnit } from "./brush";
-import { draw, easeOut, tween, type Datum, type DotShape, type Paint, type PathPoint, type PathShape, type Shape } from "./shapes";
+import { draw, easeOut, tween, type ArcShape, type Datum, type DotShape, type Paint, type RectShape, type PathPoint, type PathShape, type Shape } from "./shapes";
 import { loadMap, type LoadedMap } from "./maps";
 import { png, save, svgDocument, SvgContext } from "./export";
 import { categorical, dataValue, datumOf, fraction, matches, same, type Datum as PlaceDatum, type Place } from "./places";
 import { matching, publish, subscribe, type LinkMessage, type LinkValue } from "./link";
+import { tableElement, tableOf } from "./table";
 import type { Config, Layer, Scale } from "./wire";
 
 export interface Transport {
@@ -29,7 +30,7 @@ interface Layout {
   y?: Position;
   /** The right axis: the y of the layers on it. */
   yRight?: Position;
-  labels: { text: string; y: number; at: number; color: string }[];
+  labels: { text: string; y: number; at: number; color: string; series: number; hidden: boolean }[];
 }
 
 // A brush shared by the panels of small multiples (#13): its zoom, or the
@@ -127,7 +128,17 @@ export class Chart {
       const button = (event.target as Element).closest?.("[data-fude-export]");
       const format = button?.getAttribute("data-fude-export");
       if (format === "svg" || format === "png") void this.download(format);
+      // The Data button of a table in the plot's place: its rows, written now.
+      if ((event.target as Element).closest?.(".fude-data-toggle")) this.writeTable();
     });
+    // The Data toggle below the chart: its rows, written when it opens.
+    el.addEventListener(
+      "toggle",
+      (event) => {
+        if ((event.target as HTMLDetailsElement).open) this.writeTable();
+      },
+      true,
+    );
     if (!this.plot) return;
     this.build(this.plot);
     this.render(true);
@@ -137,6 +148,17 @@ export class Chart {
     const onGroup = (event: Event) => this.followGroup((event as CustomEvent<GroupMessage>).detail);
     document.addEventListener(GROUP_EVENT, onGroup);
     this.cleanups.push(() => document.removeEventListener(GROUP_EVENT, onGroup));
+  }
+
+  private tableWritten = false;
+
+  // The chart's data as a table, in the place the server kept for it (#4):
+  // written the first time it is opened, then again as the data changes.
+  private writeTable(): void {
+    const place = this.el.querySelector<HTMLElement>("[data-fude-rows]");
+    if (!place) return;
+    place.replaceChildren(tableElement(tableOf(this.config)));
+    this.tableWritten = true;
   }
 
   /** Takes the server's new render: draws again, moving the marks. */
@@ -155,6 +177,7 @@ export class Chart {
     this.raw = raw;
     this.config = JSON.parse(raw) as Config;
     this.locale = this.config.locale ?? undefined;
+    if (this.tableWritten) this.writeTable();
     this.hover = null;
     this.linked = null;
     // The server's next render ends a chosen range; a zoom of categories
@@ -174,6 +197,7 @@ export class Chart {
     if (!this.config.layers || !wire.layers) return;
     this.config = merge(this.config, wire, max);
     this.raw = this.el.dataset.fude ?? "{}";
+    if (this.tableWritten) this.writeTable();
     if (this.plot) this.render(true);
   }
 
@@ -190,8 +214,8 @@ export class Chart {
     this.highlight = highlight;
     const color = this.config.scales?.color;
     const legend =
-      this.config.legend !== false && color?.type === "ordinal" && (color.domain ?? []).length > 1
-        ? (color.domain ?? []).map((name, i) => ({ name: String(name), color: this.color(i) }))
+      this.config.legend !== false && color?.type === "ordinal" && (color.domain ?? []).length > 1 && !this.labelsNameSeries()
+        ? this.legendOrder((color.domain ?? []).length).map((i) => ({ name: String(color.domain![i]), color: this.color(i) }))
         : [];
     return svgDocument({
       width: this.layout?.width ?? this.stage.clientWidth,
@@ -468,9 +492,22 @@ export class Chart {
 
   // -- Rendering ------------------------------------------------------------
 
+  private hinted = false;
+
+  // A line or an area chart of more than five series reads better as small
+  // multiples: the page's developer hears so once, in the console.
+  private hintMultiples(): void {
+    const count = (this.config.scales?.color?.domain ?? []).length;
+    const paths = (this.config.layers ?? []).some((layer) => layer.mark === "line" || layer.mark === "area");
+    if (this.hinted || !paths || count <= 5 || this.el.dataset.fudeGroup || this.config.scales?.color?.highlight) return;
+    this.hinted = true;
+    console.info(`Fude: the chart ${this.id} draws ${count} series in one plot; small multiples (Fude.facet/3) read better above five, or a highlight of the ones that matter.`);
+  }
+
   private render(animate: boolean): void {
     const config = this.config;
     if (!config.layers) return;
+    this.hintMultiples();
     this.stage.setAttribute("aria-label", config.description ?? config.title ?? "Chart");
     this.renderLegend();
     const width = this.stage.clientWidth;
@@ -655,13 +692,14 @@ export class Chart {
     const labels = this.directLabels();
     let right = width - pad - (labels ? Math.min(width * 0.25, Math.max(...labels.map((l) => this.measure(l.text))) + 14) : 0);
 
-    // Value labels at the ends of horizontal bars take a margin too.
-    const barLabels = (this.config.layers ?? []).find((layer) => layer.mark === "bar" && layer.options.labels === true && layer.horizontal);
+    // Value labels at the ends of horizontal bars (their totals, on stacks)
+    // take a margin too; with a value of each bar, the bars need no value axis.
+    const barLabels = (this.config.layers ?? []).find((layer) => layer.mark === "bar" && layer.horizontal && !layer.options.funnel && this.labelMode(layer) !== "none");
     if (barLabels && xs?.domain) {
-      const format = formatter(xs.format, this.locale);
-      const widest = Math.max(0, ...((barLabels.columns.x ?? []) as (number | null)[]).map((v) => (v == null ? 0 : this.measure(format(v)))));
+      const widest = Math.max(0, ...this.barEndTexts(barLabels).map((text) => this.measure(text)));
       right -= widest + 8;
     }
+    if (axes && this.valueAxisDropped()) bottom = height - 6;
 
     // A column of text at the right of the plot (a text layer with no x)
     // takes a margin as wide as its widest words or its title, and its
@@ -753,6 +791,194 @@ export class Chart {
     return words;
   }
 
+  // -- Labels on the marks ---------------------------------------------------
+
+  // How a layer labels its marks: all of them (`labels: true`), none
+  // (`false`), or those that fit (the default).
+  private labelMode(layer: Layer): "all" | "none" | "fit" {
+    const labels = layer.options.labels;
+    return labels === true ? "all" : labels === false ? "none" : "fit";
+  }
+
+  // Whether bars stack to totals that their labels give (not a waterfall's
+  // steps, a funnel's stages or shares of 100%).
+  private stacksTotals(layer: Layer): boolean {
+    return layer.stack === "zero";
+  }
+
+  // The words at the ends of a layer of bars: each bar's value, or each
+  // stack's total; as wide as the margin a horizontal chart keeps for them.
+  private barEndTexts(layer: Layer): string[] {
+    const c = layer.columns;
+    const values = (layer.horizontal ? c.x : c.y) ?? [];
+    const cats = (layer.horizontal ? c.y : c.x) ?? [];
+    const scale = this.scalesOf(layer)[layer.horizontal ? "x" : "y"];
+    const ends = this.stacksTotals(layer) ? [...this.totals(cats, values).values()] : (values as (number | null)[]);
+    const write = labelFormatter(scale?.format, ends, this.locale);
+    return ends.filter((v): v is number => v != null).map(write);
+  }
+
+  // The total of each stack: its positive values summed (what reaches out
+  // from the baseline), or its negatives when it has nothing above.
+  private totals(cats: (number | null)[], values: (number | null)[]): Map<number, number> {
+    const up = new Map<number, number>();
+    const down = new Map<number, number>();
+    cats.forEach((cat, i) => {
+      const v = values[i];
+      if (cat == null || v == null) return;
+      const side = v >= 0 ? up : down;
+      side.set(cat, (side.get(cat) ?? 0) + v);
+    });
+    const out = new Map<number, number>();
+    for (const cat of new Set([...up.keys(), ...down.keys()])) out.set(cat, up.has(cat) ? up.get(cat)! : down.get(cat)!);
+    return out;
+  }
+
+  // Whether horizontal bars give each value at their ends, so that their
+  // value axis (its ticks and lines) is left out.
+  private valueAxisDropped(): boolean {
+    const layers = this.config.layers ?? [];
+    return (
+      layers.length > 0 &&
+      layers.every((layer) => layer.mark === "bar" && layer.horizontal && !layer.stack && !layer.options.funnel && this.labelMode(layer) !== "none") &&
+      !this.zoom
+    );
+  }
+
+  // The value labels of a layer of bars: at the end of each bar (below a
+  // negative one); on stacks, each stack's total at its end, and each
+  // segment's value inside it where it fits, in the color that reads on it.
+  // Where they fit (the default), the ends are all written or none.
+  private barLabelsOf(layer: Layer, index: number): { text: string; x: number; y: number; anchor: "start" | "middle" | "end"; inside?: string; key: string }[] {
+    const mode = this.labelMode(layer);
+    if (mode === "none" || layer.options.funnel === true || layer.stack === "center") return [];
+    const horizontal = layer.horizontal;
+    const c = layer.columns;
+    const values = ((horizontal ? c.x : c.y) ?? []) as (number | null)[];
+    const cats = ((horizontal ? c.y : c.x) ?? []) as (number | null)[];
+    const scale = this.scalesOf(layer)[horizontal ? "x" : "y"];
+    const rects = this.shapes.filter((shape): shape is RectShape => shape.type === "rect" && shape.datum.layer === index);
+    if (!rects.length) return [];
+    const cat = horizontal ? this.layout?.y : this.layout?.x;
+    const step = cat && cat.count > 1 ? Math.abs(cat.at(1) - cat.at(0)) : (cat?.bandwidth ?? 40);
+    const out: { text: string; x: number; y: number; anchor: "start" | "middle" | "end"; inside?: string; key: string }[] = [];
+    const ends: typeof out = [];
+
+    if (this.stacksTotals(layer)) {
+      const totals = this.totals(cats, values);
+      const write = labelFormatter(scale?.format, [...totals.values()], this.locale);
+      const byCat = new Map<number, RectShape[]>();
+      for (const rect of rects) {
+        const k = cats[rect.datum.row];
+        if (k == null) continue;
+        byCat.set(k, [...(byCat.get(k) ?? []), rect]);
+      }
+      for (const [k, group] of byCat) {
+        const total = totals.get(k);
+        if (total == null) continue;
+        const text = write(total);
+        const key = `v:${index}:total:${k}`;
+        if (horizontal) {
+          const end = total >= 0 ? Math.max(...group.map((r) => r.x + r.w)) : Math.min(...group.map((r) => r.x));
+          ends.push({ text, x: end + (total >= 0 ? 6 : -6), y: group[0]!.y + group[0]!.h / 2, anchor: total >= 0 ? "start" : "end", key });
+        } else {
+          const end = total >= 0 ? Math.min(...group.map((r) => r.y)) : Math.max(...group.map((r) => r.y + r.h));
+          ends.push({ text, x: group[0]!.x + group[0]!.w / 2, y: total >= 0 ? end - 6 : end + 14, anchor: "middle", key });
+        }
+      }
+      // Each segment's value inside it, where it fits.
+      const inner = labelFormatter(scale?.format, values, this.locale);
+      for (const rect of rects) {
+        const v = values[rect.datum.row];
+        if (v == null) continue;
+        const text = inner(v);
+        const width = this.measure(text);
+        const fits = horizontal ? width + 8 <= rect.w && rect.h >= 14 : width + 6 <= rect.w && rect.h >= 18;
+        if (fits) out.push({ text, x: rect.x + rect.w / 2, y: rect.y + rect.h / 2, anchor: "middle", inside: onColor(rect.color), key: `v:${rect.key}` });
+      }
+    } else {
+      const write = labelFormatter(scale?.format, values, this.locale);
+      for (const rect of rects) {
+        const v = values[rect.datum.row];
+        if (v == null) continue;
+        const text = write(v);
+        const key = `v:${rect.key}`;
+        const down = v < 0 && layer.stack !== "waterfall";
+        if (horizontal) ends.push({ text, x: down ? rect.x - 6 : rect.x + rect.w + 6, y: rect.y + rect.h / 2, anchor: down ? "end" : "start", key });
+        else ends.push({ text, x: rect.x + rect.w / 2, y: down ? rect.y + rect.h + 14 : rect.y - 6, anchor: "middle", key });
+      }
+    }
+
+    // Where they fit: each in its band (across a horizontal bar, as tall
+    // as a line), compact if the full values do not fit ("€210K"), or none
+    // at all, so that a chart's labels read as a set.
+    if (mode === "fit") {
+      // Other marks over the bars (a line of another measure) would cross
+      // their labels: those come only when asked.
+      const others = (this.config.layers ?? []).some((other) => other.mark === "line" || other.mark === "area" || other.mark === "point");
+      if (others) return [];
+      if (horizontal) return rects.every((r) => r.h >= 10) ? [...ends, ...out] : out;
+      const groups = !layer.stack && c.color && cat?.kind === "band" ? Math.max(1, (this.scalesOf(layer).color?.domain ?? []).length) : 1;
+      const room = step / groups - 2;
+      const fits = (list: typeof ends) => list.length <= 40 && list.every((end) => this.measure(end.text) <= room);
+      if (fits(ends)) return [...ends, ...out];
+      const compact = compactFormatter(scale?.format, this.locale);
+      const totals = this.stacksTotals(layer) ? this.totals(cats, values) : null;
+      const short = ends.map((end) => {
+        const k = Number(end.key.split(":").pop());
+        const rect = rects.find((r) => `v:${r.key}` === end.key);
+        const v = totals ? totals.get(k) : rect ? values[rect.datum.row] : null;
+        return { ...end, text: v == null ? end.text : compact(v) };
+      });
+      return fits(short) ? [...short, ...out] : out;
+    }
+    return [...ends, ...out];
+  }
+
+  // The labels of a pie's or a donut's slices: its name and share inside
+  // the slice where they fit, else outside it, with a short line to it.
+  private sliceLabels(layer: Layer, r0: number, r1: number): { inside: boolean; lines: string[]; row: number; a: number }[] {
+    if (this.labelMode(layer) === "none") return [];
+    const c = layer.columns;
+    const color = this.config.scales?.color;
+    const percent = formatter("percent", this.locale);
+    const out: { inside: boolean; lines: string[]; row: number; a: number }[] = [];
+    for (let row = 0; row < layer.n; row++) {
+      const a0 = c.a0?.[row] ?? 0;
+      const a1 = c.a1?.[row] ?? 0;
+      const share = a1 - a0;
+      if (share <= 0) continue;
+      const name = String(color?.domain?.[c.color?.[row] ?? -1] ?? "");
+      const pct = percent(share);
+      const a = -Math.PI / 2 + ((a0 + a1) / 2) * Math.PI * 2;
+      const rm = r0 > 0 ? (r0 + r1) / 2 : r1 * 0.62;
+      const wide = Math.max(this.measure(name), this.measure(pct)) + 8;
+      // Inside when the two lines' box is in the slice: each corner within
+      // the ring and within the slice's angles.
+      const x = Math.cos(a) * rm;
+      const y = Math.sin(a) * rm;
+      const corners = [
+        [x - wide / 2, y - 15],
+        [x + wide / 2, y - 15],
+        [x - wide / 2, y + 15],
+        [x + wide / 2, y + 15],
+      ];
+      const turn = (px: number, py: number) => {
+        let t = (Math.atan2(py, px) + Math.PI / 2) / (Math.PI * 2);
+        if (t < 0) t += 1;
+        return t;
+      };
+      const inside = corners.every(([px, py]) => {
+        const r = Math.hypot(px!, py!);
+        const t = turn(px!, py!);
+        const within = a0 <= a1 ? t >= a0 && t <= a1 : t >= a0 || t <= a1;
+        return r >= r0 + 2 && r <= r1 - 2 && (share >= 0.999 || within);
+      });
+      out.push({ inside, lines: inside ? [name, pct] : [`${name} ${pct}`], row, a });
+    }
+    return out;
+  }
+
   // A sparkline's last value, in its y format, when it writes it.
   private sparkValue(layer: Layer): { row: number; text: string } | null {
     if (layer.options.value !== true) return null;
@@ -778,10 +1004,13 @@ export class Chart {
     return words;
   }
 
+  // The room between bands: none between a heatmap's cells; between bars,
+  // as much as about two thirds of a bar, so that bars stand apart in a wide
+  // band, as a graphics desk sets them.
   private bandPadding(axis: "x" | "y"): number {
     const marks = (this.config.layers ?? []).map((layer) => layer.mark);
     if (marks.includes("rect")) return 0;
-    return axis === "x" ? 0.28 : 0.3;
+    return axis === "x" ? 0.38 : 0.36;
   }
 
   // The series a line or an area chart labels at its end: four or fewer.
@@ -795,22 +1024,44 @@ export class Chart {
     if (!x || x.type === "band") return null;
     // The right axis takes the margin where the labels would go: the legend names the series.
     if (this.config.scales?.yRight) return null;
-    if (!color || color.type !== "ordinal") return null;
+    // `labels: true` adds each line's last value to its name; a line of
+    // no series is labelled by its last value alone.
+    const valued = paths.some((layer) => layer.options.labels === true);
+    const write = labelFormatter(this.config.scales?.y?.format, paths.flatMap((layer) => (layer.columns.y ?? []) as (number | null)[]), this.locale);
+    const value = (series: number) => {
+      const v = this.lastOwnValue(series);
+      return v === null ? "" : write(v);
+    };
+    if (!color || color.type !== "ordinal") return valued && paths.length === 1 && !paths[0]!.columns.color ? [{ series: 0, text: value(0) }] : null;
     const domain = color.domain ?? [];
     if (domain.length < 1 || domain.length > 4) return null;
-    return domain.map((value, series) => ({ series, text: String(value) }));
+    return domain.map((name, series) => ({ series, text: valued ? `${String(name)} ${value(series)}`.trim() : String(name) }));
+  }
+
+  // A series' last value of its own (not the top of its stack).
+  private lastOwnValue(series: number): number | null {
+    for (const layer of this.config.layers ?? []) {
+      if (layer.mark !== "line" && layer.mark !== "area") continue;
+      const colors = layer.columns.color;
+      const ys = layer.columns.y;
+      if (!ys) continue;
+      for (let i = layer.n - 1; i >= 0; i--) {
+        if ((colors ? colors[i] : 0) === series && ys[i] != null) return ys[i]!;
+      }
+    }
+    return null;
   }
 
   // Each label at its line's last value, moved apart where they would
   // touch; a label moved off its line gets a leader (drawn in renderAxes).
   private placeLabels(labels: { series: number; text: string }[], layout: Layout): Layout["labels"] {
     const y = layout.y!;
-    const ends: { text: string; y: number; at: number; color: string }[] = [];
+    // A hidden series keeps its label, faded, to show it again.
+    const ends: Layout["labels"] = [];
     for (const { series, text } of labels) {
-      if (this.hidden.has(series)) continue;
       const end = this.lastValue(series);
       if (end === null) continue;
-      ends.push({ text, y: y.at(end), at: y.at(end), color: this.color(series) });
+      ends.push({ text, y: y.at(end), at: y.at(end), color: this.color(series), series, hidden: this.hidden.has(series) });
     }
     ends.sort((a, b) => a.y - b.y);
     const gap = 15;
@@ -837,7 +1088,16 @@ export class Chart {
 
   // -- Colors -----------------------------------------------------------------
 
+  // Whether a series is set back by a highlight of others.
+  private setBack(series: number | null | undefined): boolean {
+    const scale = this.config.scales?.color;
+    if (series === null || series === undefined || !scale?.highlight) return false;
+    const value = scale.domain?.[series];
+    return !scale.highlight.some((wanted) => wanted === value || String(wanted) === String(value));
+  }
+
   private color(series: number | null | undefined): string {
+    if (this.setBack(series)) return this.theme.context;
     if (series === null || series === undefined) return this.theme.series[0]!;
     const scale = this.config.scales?.color;
     // A color by its role (a waterfall's increase), not by its place.
@@ -1080,7 +1340,16 @@ export class Chart {
         row: i,
       });
     }
-    for (const path of bySeries.values()) {
+    // The highlighted series over the ones set back.
+    const ordered = [...bySeries.values()].sort((a, b) => Number(!this.setBack(a.series)) - Number(!this.setBack(b.series)));
+    for (const path of ordered) {
+      // Points closer than about three dots apart read as a dashed line
+      // (a narrow panel of small multiples): the line goes without them.
+      if (path.dots) {
+        const xs = path.points.filter((point) => point.y !== null).map((point) => point.x);
+        const closest = xs.slice(1).reduce((min, x, i) => Math.min(min, Math.abs(x - xs[i]!)), Infinity);
+        if (closest < 11) path.dots = false;
+      }
       shapes.push(path);
       // A sparkline's dots: at its last value, or at its last, lowest and highest.
       if (spark && (layer.options.points === "last" || layer.options.points === "extremes")) {
@@ -1167,8 +1436,14 @@ export class Chart {
     const c = layer.columns;
     const cx = layout.width / 2;
     const cy = layout.height / 2;
-    const r1 = Math.max(10, Math.min(layout.width, layout.height) / 2 - 6);
     const inner = typeof layer.options.inner === "number" ? layer.options.inner : 0;
+    let r1 = Math.max(10, Math.min(layout.width, layout.height) / 2 - 6);
+    // Labels outside the slices take room around the pie.
+    const outside = this.sliceLabels(layer, r1 * inner, r1).filter((label) => !label.inside);
+    if (outside.length) {
+      const widest = Math.max(...outside.map((label) => this.measure(label.lines[0]!)));
+      r1 = Math.max(40, Math.min(layout.width / 2 - widest - 24, layout.height / 2 - 24));
+    }
     for (let i = 0; i < layer.n; i++) {
       const series = c.color?.[i] ?? null;
       shapes.push({
@@ -1305,6 +1580,16 @@ export class Chart {
     return (value) => format(value);
   }
 
+  // A value axis's ticks with its unit on the top one only ("€400K", then
+  // "300K"); the other axes' as they are.
+  private valueTickFormat(scale: Scale, pos: Position): (value: number, index: number, ticks: number[]) => string {
+    if (pos.kind === "time" || pos.kind === "band" || pos.kind === "point") return this.tickFormat(scale, pos);
+    const { top, rest } = unitTicks(scale.format, pos.ticks, this.locale);
+    if (!rest) return (value) => top(value);
+    const highest = Math.max(...pos.ticks);
+    return (value) => (value === highest ? top(value) : rest(value));
+  }
+
   private bandLabel(scale: Scale, value: unknown, index: number): string {
     if (scale.time && typeof value === "number") {
       return timeTickFormatter(scale.time as never, this.locale)(value, index, (scale.domain ?? []) as number[]);
@@ -1334,6 +1619,7 @@ export class Chart {
       }
     }
 
+    this.renderSliceLabels(svg);
     if (!axes) return;
 
     // The frame of a sequence of renders (a race of bars): its label, large,
@@ -1345,7 +1631,7 @@ export class Chart {
 
     // The value axis: hairline grids at its ticks, labels beside them.
     if (y && scales.y) {
-      const format = this.tickFormat(scales.y, y);
+      const format = this.valueTickFormat(scales.y, y);
       y.ticks.forEach((tick, i) => {
         const py = y.kind === "band" || y.kind === "point" ? y.at(tick) + y.bandwidth / 2 : Math.round(y.at(tick)) + 0.5;
         if (y.kind !== "band" && y.kind !== "point") {
@@ -1365,7 +1651,7 @@ export class Chart {
     // (the left axis's lines would cross its own).
     const yr = layout.yRight;
     if (yr && scales.yRight) {
-      const format = this.tickFormat(scales.yRight, yr);
+      const format = this.valueTickFormat(scales.yRight, yr);
       yr.ticks.forEach((tick, i) => {
         const py = Math.round(yr.at(tick)) + 0.5;
         text(svg, format(tick, i, yr.ticks), layout.right + 8, py, { anchor: "start", baseline: "middle", fill: theme.muted, tabular: true });
@@ -1376,7 +1662,11 @@ export class Chart {
     }
 
     const funnel = (this.config.layers ?? []).some((layer) => layer.options.funnel === true);
-    if (x && scales.x && !funnel) {
+    if (x && scales.x && !funnel && this.valueAxisDropped()) {
+      // Bars that give their values need no value axis: only their baseline.
+      const zero = x.at(Math.max(Math.min(0, x.domain[1]), x.domain[0]));
+      line(svg, Math.round(zero) + 0.5, layout.top, Math.round(zero) + 0.5, layout.bottom, theme.baseline);
+    } else if (x && scales.x && !funnel) {
       const format = this.tickFormat(scales.x, x);
       const ticks = this.thinTicks(x, format);
       const vertical = x.kind !== "band" && x.kind !== "point";
@@ -1401,13 +1691,15 @@ export class Chart {
     (this.config.layers ?? []).forEach((layer) => {
       if (layer.mark !== "rule" || typeof layer.options.label !== "string") return;
       const yv = layer.columns.y?.[0];
-      if (yv != null && y) text(svg, layer.options.label, layout.left + 4, y.at(yv) - 6, { anchor: "start", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface });
+      if (yv != null && y) this.acrossLabel(layer.options.label, y.at(yv), layout);
     });
 
     // Direct labels: at the end of each line, with a leader when moved.
+    // They name the series in the legend's place: a click hides or shows
+    // its line (a hidden one's label fades), a hover brings it forward.
     for (const label of layout.labels) {
       const lx = layout.right + 8;
-      if (Math.abs(label.y - label.at) > 3) line(svg, layout.right + 2, label.at, lx - 2, label.y, theme.muted);
+      if (Math.abs(label.y - label.at) > 3 && !label.hidden) line(svg, layout.right + 2, label.at, lx - 2, label.y, theme.muted);
       const key = document.createElementNS(SVG, "rect");
       key.setAttribute("x", String(lx));
       key.setAttribute("y", String(label.y - 1));
@@ -1415,8 +1707,27 @@ export class Chart {
       key.setAttribute("height", "2");
       key.setAttribute("rx", "1");
       key.setAttribute("fill", label.color);
-      svg.append(key);
-      text(svg, label.text, lx + 12, label.y, { anchor: "start", baseline: "middle", fill: theme.text });
+      const highlighted = !!this.config.scales?.color?.highlight && !this.setBack(label.series);
+      text(svg, label.text, lx + 12, label.y, { anchor: "start", baseline: "middle", fill: this.setBack(label.series) ? theme.muted : theme.text, weight: highlighted ? 600 : undefined });
+      const words = svg.lastElementChild as SVGTextElement;
+      const group = document.createElementNS(SVG, "g");
+      group.setAttribute("class", "fude-end-label");
+      group.setAttribute("data-series", String(label.series));
+      if (label.hidden) group.setAttribute("opacity", "0.4");
+      group.append(key, words);
+      svg.append(group);
+      group.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.toggleSeries(label.series);
+      });
+      group.addEventListener("pointerenter", () => {
+        this.highlight = label.hidden ? null : label.series;
+        this.repaint();
+      });
+      group.addEventListener("pointerleave", () => {
+        this.highlight = null;
+        this.repaint();
+      });
     }
 
     // The connectors of a waterfall: from the end of each bar to the next.
@@ -1451,17 +1762,39 @@ export class Chart {
       }
     });
 
-    // Value labels at the ends of bars.
+    // Value labels of bars: at their ends, a stack's total at its end, and
+    // its segments' values inside them where they fit.
     (this.config.layers ?? []).forEach((layer, index) => {
-      if (layer.mark !== "bar" || layer.options.labels !== true) return;
-      const value = formatter(scales[layer.horizontal ? "x" : "y"]?.format, this.locale);
-      for (const shape of this.shapes) {
-        if (shape.type !== "rect" || shape.datum.layer !== index) continue;
-        const v = (layer.horizontal ? layer.columns.x : layer.columns.y)?.[shape.datum.row];
-        if (v == null) continue;
-        const key = `v:${shape.key}`;
-        if (layer.horizontal) text(svg, value(v), shape.x + shape.w + 6, shape.y + shape.h / 2, { anchor: "start", baseline: "middle", fill: theme.secondary, halo: theme.surface, tabular: true, key });
-        else text(svg, value(v), shape.x + shape.w / 2, shape.y - 6, { anchor: "middle", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface, tabular: true, key });
+      if (layer.mark !== "bar") return;
+      for (const label of this.barLabelsOf(layer, index)) {
+        const middle = label.inside !== undefined || layer.horizontal;
+        text(svg, label.text, label.x, label.y, {
+          anchor: label.anchor,
+          baseline: middle ? "middle" : "alphabetic",
+          fill: label.inside ?? theme.secondary,
+          halo: label.inside === undefined ? theme.surface : undefined,
+          tabular: true,
+          key: label.key,
+        });
+      }
+    });
+
+    // Values in a heatmap's cells, in the color that reads on each: all of
+    // them, compact if the full values do not fit ("1.2K"), or none, so that
+    // the cells read as a set.
+    (this.config.layers ?? []).forEach((layer, index) => {
+      const color = scales.color;
+      const mode = this.labelMode(layer);
+      if (layer.mark !== "rect" || mode === "none" || color?.type !== "sequential") return;
+      const values = (layer.columns.color ?? []) as (number | null)[];
+      const cells = this.shapes.filter((shape): shape is RectShape => shape.type === "rect" && shape.datum.layer === index && values[shape.datum.row] != null);
+      if (!cells.length) return;
+      const fits = (write: (v: number) => string) => cells.every((cell) => this.measure(write(values[cell.datum.row]!)) + 4 <= cell.w && cell.h >= 14);
+      const full = labelFormatter(color.format, values, this.locale);
+      const write = fits(full) ? full : fits(compactFormatter(color.format, this.locale)) ? compactFormatter(color.format, this.locale) : null;
+      if (!write) return;
+      for (const cell of cells) {
+        text(svg, write(values[cell.datum.row]!), cell.x + cell.w / 2, cell.y + cell.h / 2, { anchor: "middle", baseline: "middle", fill: onColor(cell.color), tabular: true, key: `v:${cell.key}` });
       }
     });
 
@@ -1542,6 +1875,53 @@ export class Chart {
     svg.append(cross);
   }
 
+  // The labels of pies and donuts, and a donut's total in its hole.
+  private renderSliceLabels(svg: SVGSVGElement): void {
+    const theme = this.theme;
+    (this.config.layers ?? []).forEach((layer, index) => {
+      if (layer.mark !== "arc") return;
+      const arcs = this.shapes.filter((shape): shape is ArcShape => shape.type === "arc" && shape.datum.layer === index);
+      const first = arcs[0];
+      if (!first) return;
+      const { cx, cy, r0, r1 } = first;
+      const placed: [number, number, number, number][] = [];
+      for (const label of this.sliceLabels(layer, r0, r1)) {
+        const arc = arcs.find((shape) => shape.datum.row === label.row);
+        if (!arc) continue;
+        const key = `v:${arc.key}`;
+        if (label.inside) {
+          const rm = r0 > 0 ? (r0 + r1) / 2 : r1 * 0.62;
+          const x = cx + Math.cos(label.a) * rm;
+          const y = cy + Math.sin(label.a) * rm;
+          const fill = onColor(arc.color);
+          text(svg, label.lines[0]!, x, y - 7, { anchor: "middle", baseline: "middle", fill, key });
+          text(svg, label.lines[1]!, x, y + 8, { anchor: "middle", baseline: "middle", fill, tabular: true, weight: 600, key: `${key}:share` });
+          continue;
+        }
+        const cos = Math.cos(label.a);
+        const sin = Math.sin(label.a);
+        const x = cx + cos * (r1 + 12);
+        const y = cy + sin * (r1 + 12);
+        const width = this.measure(label.lines[0]!);
+        const box: [number, number, number, number] = [cos >= 0 ? x : x - width, y - 8, cos >= 0 ? x + width : x, y + 8];
+        // A label that would cover another is left out: the tooltip has it.
+        if (placed.some(([x0, y0, x1, y1]) => box[0] < x1 && box[2] > x0 && box[1] < y1 && box[3] > y0)) continue;
+        placed.push(box);
+        line(svg, cx + cos * (r1 + 2), cy + sin * (r1 + 2), cx + cos * (r1 + 9), cy + sin * (r1 + 9), theme.muted);
+        text(svg, label.lines[0]!, x + (cos >= 0 ? 2 : -2), y, { anchor: cos >= 0 ? "start" : "end", baseline: "middle", fill: theme.secondary, tabular: true, key });
+      }
+      // A donut's total, large in its hole.
+      if (r0 >= 28 && this.labelMode(layer) !== "none") {
+        const values = (layer.columns.value ?? []) as (number | null)[];
+        const total = values.reduce<number>((sum, v) => sum + (v ?? 0), 0);
+        const write = labelFormatter(layer.options.format as string | undefined, [total], this.locale);
+        const size = Math.max(16, Math.min(30, r0 * 0.42));
+        text(svg, write(total), cx, cy - size * 0.2, { anchor: "middle", baseline: "middle", fill: theme.text, tabular: true, size, weight: 600, key: `v:${index}:total` });
+        text(svg, "Total", cx, cy + size * 0.75, { anchor: "middle", baseline: "middle", fill: theme.muted, key: `v:${index}:total-word` });
+      }
+    });
+  }
+
   // The notes on the chart: bands under the marks; lines, and labels with a
   // line to their point, over them. A label goes where it stays inside the
   // plot: up and to the right of its point, else left, else below.
@@ -1584,7 +1964,7 @@ export class Chart {
         band.setAttribute("fill", theme.text);
         band.setAttribute("fill-opacity", "0.06");
         this.grid.append(band);
-        if (note.text) text(this.svg, note.text, x0 + 6, y0 + 14, { anchor: "start", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface });
+        if (note.text) text(this.svg, note.text, x0 + 6, y0 + 14, { anchor: "start", baseline: "alphabetic", fill: theme.muted, halo: theme.surface, weight: 500 });
         continue;
       }
 
@@ -1593,7 +1973,7 @@ export class Chart {
         const py = center(y, note.y);
         if (py !== null && note.x === null) {
           dashed(this.svg, layout.left, py, layout.right, py, theme.secondary);
-          if (note.text) text(this.svg, note.text, layout.left + 4, py - 6, { anchor: "start", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface });
+          if (note.text) this.acrossLabel(note.text, py, layout);
         } else if (px !== null) {
           dashed(this.svg, px, layout.top, px, layout.bottom, theme.secondary);
           if (note.text) text(this.svg, note.text, px + 6, layout.top + 12, { anchor: "start", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface });
@@ -1601,27 +1981,97 @@ export class Chart {
         continue;
       }
 
-      // A label.
+      // A callout: a ringed dot on its point, a short leader, and its words
+      // where they cover the least of the data, inside the plot.
       const px = center(x, note.x) ?? (layout.left + layout.right) / 2;
       const py = center(y, note.y) ?? layout.top + 4;
       if (!note.text) continue;
-      const lines = this.wrap(note.text, 150) ?? [note.text];
+      const lines = this.wrap(note.text, 160) ?? [note.text];
       const width = Math.max(...lines.map((line) => this.measure(line)));
-      const right = px + 18 + width < layout.right;
-      const below = py - 24 - lines.length * 14 < layout.top;
-      const tx = right ? px + 18 : px - 18;
-      const ty = below ? py + 28 : py - 22 - (lines.length - 1) * 14;
-      line(this.svg, px, py, right ? tx - 4 : tx + 4, below ? ty - 12 : ty + 4 + (lines.length - 1) * 14, theme.secondary);
+      const height = lines.length * 15;
+      const spot = this.calloutSpot(px, py, width, height, layout);
+      const { tx, ty, right, below } = spot;
+      const lx = right ? tx - 4 : tx + 4;
+      const ly = below ? ty - 12 : ty + 4 + (lines.length - 1) * 15;
+      line(this.svg, px + (lx > px ? 4 : -4), py + (ly > py ? 4 : -4), lx, ly, theme.secondary);
       const dot = document.createElementNS(SVG, "circle");
       dot.setAttribute("cx", String(px));
       dot.setAttribute("cy", String(py));
-      dot.setAttribute("r", "2.5");
-      dot.setAttribute("fill", theme.text);
+      dot.setAttribute("r", "3.5");
+      dot.setAttribute("fill", theme.surface);
+      dot.setAttribute("stroke", theme.text);
+      dot.setAttribute("stroke-width", "1.5");
       this.svg.append(dot);
       lines.forEach((words, i) => {
-        text(this.svg, words, tx, ty + i * 14, { anchor: right ? "start" : "end", baseline: "alphabetic", fill: theme.text, halo: theme.surface });
+        text(this.svg, words, tx, ty + i * 15, { anchor: right ? "start" : "end", baseline: "alphabetic", fill: theme.text, halo: theme.surface, weight: i === 0 ? 600 : undefined });
       });
     }
+  }
+
+  // Where a callout's words go: of the places around its point (up or
+  // down, right or left, near or farther), the one inside the plot whose
+  // box covers the fewest of the data's marks, the nearest first.
+  private calloutSpot(px: number, py: number, width: number, height: number, layout: Layout): { tx: number; ty: number; right: boolean; below: boolean } {
+    const covers = this.coverage();
+    let best: { tx: number; ty: number; right: boolean; below: boolean } | null = null;
+    let bestScore = Infinity;
+    for (const reach of [18, 44, 80]) {
+      // Up, down, or level with the point (`null`), to its right or left.
+      for (const [right, below] of [[true, false], [false, false], [true, true], [false, true], [false, null], [true, null]] as [boolean, boolean | null][]) {
+        const tx = right ? px + reach : px - reach;
+        const ty = below === null ? py + 4 - (height - 15) / 2 : below ? py + Math.min(reach, 44) + 10 : py - Math.min(reach, 44) - 4 - (height - 15);
+        const x0 = right ? tx - 3 : tx - width - 3;
+        const y0 = ty - 12;
+        const outside = x0 < layout.left - 4 || x0 + width + 6 > layout.width || y0 < 0 || y0 + height + 2 > layout.bottom;
+        // Covering the data costs more than a longer leader.
+        const score = (outside ? 1000 : 0) + covers(x0, y0, x0 + width + 6, y0 + height + 2) * 10 + reach / 10;
+        if (score < bestScore) {
+          bestScore = score;
+          best = { tx, ty, right, below: below === true };
+        }
+      }
+    }
+    return best!;
+  }
+
+  // How much of the data's marks a box covers: the points of lines and
+  // areas (and between them), dots, and bars (each counting more).
+  private coverage(): (x0: number, y0: number, x1: number, y1: number) => number {
+    const samples: [number, number][] = [];
+    for (const shape of this.shapes) {
+      if (shape.type === "line" || shape.type === "area") {
+        const drawn = shape.points.filter((point) => point.y !== null);
+        drawn.forEach((point, i) => {
+          samples.push([point.x, point.y!]);
+          const next = drawn[i + 1];
+          if (next) for (const t of [0.25, 0.5, 0.75]) samples.push([point.x + (next.x - point.x) * t, point.y! + (next.y! - point.y!) * t]);
+        });
+      } else if (shape.type === "dot") samples.push([shape.x, shape.y]);
+    }
+    const rects = this.shapes.filter((shape): shape is RectShape => shape.type === "rect");
+    return (x0, y0, x1, y1) =>
+      samples.filter(([sx, sy]) => sx >= x0 && sx <= x1 && sy >= y0 && sy <= y1).length +
+      rects.filter((r) => r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0).length * 4;
+  }
+
+  // The words of a line across the plot (a rule, a note's line): at its
+  // start or its end, above it or below, where they cover the least data.
+  private acrossLabel(words: string, py: number, layout: Layout): void {
+    const covers = this.coverage();
+    const width = this.measure(words);
+    let best = { x: layout.left + 4, y: py - 6, anchor: "start" as "start" | "end" };
+    let bestScore = Infinity;
+    for (const [end, below] of [[false, false], [true, false], [false, true], [true, true]] as [boolean, boolean][]) {
+      const x = end ? layout.right - 4 : layout.left + 4;
+      const y = below ? py + 16 : py - 6;
+      const x0 = end ? x - width - 3 : x - 3;
+      const score = covers(x0, y - 12, x0 + width + 6, y + 3) * 10 + (end ? 1 : 0) + (below ? 2 : 0) + (y - 12 < 0 || y + 3 > layout.bottom ? 1000 : 0);
+      if (score < bestScore) {
+        bestScore = score;
+        best = { x, y, anchor: end ? "end" : "start" };
+      }
+    }
+    text(this.svg, words, best.x, best.y, { anchor: best.anchor, baseline: "alphabetic", fill: this.theme.secondary, halo: this.theme.surface });
   }
 
   private isHorizontalBars(): boolean {
@@ -2670,6 +3120,39 @@ export class Chart {
     legend.append(ramp);
   }
 
+  // Hides a series, or shows it again; one is always shown.
+  private toggleSeries(series: number): void {
+    const count = (this.config.scales?.color?.domain ?? []).length;
+    if (this.hidden.has(series)) this.hidden.delete(series);
+    else if (this.hidden.size < count - 1) this.hidden.add(series);
+    this.highlight = null;
+    this.render(true);
+  }
+
+  // Whether labels on the marks name every series, so that the legend says
+  // nothing more: lines with their names at their ends, a pie of six slices
+  // or fewer with its labels.
+  private labelsNameSeries(): boolean {
+    const layers = this.config.layers ?? [];
+    if (this.directLabels()?.length) return true;
+    const slices = (this.config.scales?.color?.domain ?? []).length;
+    return layers.length > 0 && layers.every((layer) => layer.mark === "arc" && this.labelMode(layer) !== "none") && slices <= 6;
+  }
+
+  // The legend in the reading order of the marks: a vertical stack from
+  // its top segment down, lines from the highest at their end; otherwise
+  // as the series come.
+  private legendOrder(count: number): number[] {
+    const order = Array.from({ length: count }, (_, i) => i);
+    const layers = this.config.layers ?? [];
+    if (layers.some((layer) => (layer.mark === "bar" || layer.mark === "area") && !layer.horizontal && (layer.stack === "zero" || layer.stack === "normalize"))) return order.reverse();
+    if (layers.some((layer) => layer.mark === "line") && layers.every((layer) => layer.mark === "line" || layer.mark === "rule" || layer.mark === "text")) {
+      const last = new Map(order.map((series) => [series, this.lastValue(series) ?? -Infinity]));
+      return order.sort((a, b) => last.get(b)! - last.get(a)!);
+    }
+    return order;
+  }
+
   private renderLegend(): void {
     const legend = this.legend;
     legend.replaceChildren();
@@ -2691,9 +3174,13 @@ export class Chart {
       return;
     }
     legend.hidden = false;
+    // Labels on the marks that name every series make the legend a
+    // keyboard's way in only: out of sight until it has the focus.
+    legend.classList.toggle("fude-legend-quiet", this.labelsNameSeries());
     const mark = layers.find((layer) => layer.columns.color)?.mark ?? "bar";
     const toggles = layers.every((layer) => layer.mark === "line" || layer.mark === "point");
-    domain.forEach((value, series) => {
+    this.legendOrder(domain.length).forEach((series) => {
+      const value = domain[series];
       const item = document.createElement("button");
       item.type = "button";
       item.className = "fude-legend-item";
@@ -2702,11 +3189,7 @@ export class Chart {
       item.append(swatch, document.createTextNode(String(value)));
       if (toggles) {
         item.setAttribute("aria-pressed", String(!this.hidden.has(series)));
-        item.addEventListener("click", () => {
-          if (this.hidden.has(series)) this.hidden.delete(series);
-          else if (this.hidden.size < domain.length - 1) this.hidden.add(series);
-          this.render(true);
-        });
+        item.addEventListener("click", () => this.toggleSeries(series));
       } else {
         item.tabIndex = -1;
       }
