@@ -236,6 +236,48 @@ defmodule Fude.SpecTest do
       assert message =~ ~s|did you mean "color"?|
     end
 
+    test "takes back a dumbbell: joined points, their labels, suffixes and a column of text" do
+      chart =
+        Fude.layers(nil, [
+          Fude.scatter(
+            x: [field: :rate, format: :decimal_bytes, suffix: "/s", scale: [type: :log]],
+            y: :bench,
+            color: :parser,
+            connect: true,
+            labels: true
+          ),
+          Fude.text(y: :bench, text: [field: :speedup, digits: 1, suffix: "×"])
+        ])
+
+      spec = Spec.dump(chart)
+
+      assert %{
+               "layers" => [
+                 %{"connect" => true, "labels" => true, "x" => %{"suffix" => "/s"}},
+                 %{"text" => %{"suffix" => "×"}}
+               ]
+             } = spec
+
+      assert {:ok, ^chart} = spec |> JSON.encode!() |> JSON.decode!() |> Spec.load()
+    end
+
+    test "a suffix is short words, and connect true or false" do
+      spec = %{
+        "fude" => 1,
+        "kind" => "scatter",
+        "x" => %{"field" => "rate", "suffix" => 5},
+        "y" => "bench",
+        "connect" => "yes"
+      }
+
+      assert {:error, errors} = Spec.load(spec)
+
+      assert %{message: "must be a string of 1 to 16" <> _} =
+               Enum.find(errors, &(&1.path == ["x", "suffix"]))
+
+      assert Enum.find(errors, &(&1.path == ["connect"]))
+    end
+
     test "names a missing channel" do
       assert {:error, [%{path: ["y"], message: "is missing: a bar chart needs it"}]} =
                Spec.load(%{"fude" => 1, "kind" => "bar", "x" => "region"})
@@ -275,10 +317,10 @@ defmodule Fude.SpecTest do
       tuple({member_of(Fude.Channel.time_units()), field()}),
       tuple({constant(:bin), field()}),
       map(
-        {field(), member_of([:compact, :percent, {:currency, "EUR"}]),
-         member_of(["A title", false])},
-        fn {f, format, title} ->
-          [field: f, format: format, title: title]
+        {field(), member_of([:compact, :percent, :decimal_bytes, {:currency, "EUR"}]),
+         member_of(["A title", false]), member_of([nil, "×", "/s"])},
+        fn {f, format, title, suffix} ->
+          [field: f, format: format, title: title] ++ if(suffix, do: [suffix: suffix], else: [])
         end
       )
     ])

@@ -266,6 +266,133 @@ defmodule Fude.CompileTest do
     end
   end
 
+  describe "suffixes" do
+    test "go on the wire after the format and its digits, after a bar" do
+      wire =
+        compile!(
+          Fude.bar([%{r: "N", v: 2.5}],
+            x: :r,
+            y: [field: :v, format: :number, digits: 1, suffix: "×"]
+          )
+        )
+
+      assert wire["scales"]["y"]["format"] == "number:1|×"
+
+      assert compile!(Fude.number([%{n: 1}], value: [field: :n, suffix: "×"]))["single"]["format"] ==
+               "|×"
+
+      wire =
+        compile!(
+          Fude.scatter([%{a: 1.0e6, b: 1}],
+            x: [field: :a, format: :decimal_bytes, suffix: "/s"],
+            y: :b
+          )
+        )
+
+      assert wire["scales"]["x"]["format"] == "decimal_bytes|/s"
+    end
+
+    test "are short words" do
+      assert_raise ArgumentError, ~r/:suffix of :y must be a string of 1 to 16 characters/, fn ->
+        Fude.bar([%{r: "N", v: 1}], x: :r, y: [field: :v, suffix: ""])
+      end
+
+      assert_raise ArgumentError, ~r/:suffix of :y must be a string/, fn ->
+        Fude.bar([%{r: "N", v: 1}], x: :r, y: [field: :v, suffix: :x])
+      end
+    end
+  end
+
+  describe "dumbbells: points joined in each category" do
+    @runs [
+      %{bench: "ASCII", parser: "Old", rate: 25.6e6, speedup: 24.2},
+      %{bench: "ASCII", parser: "New", rate: 618.6e6, speedup: 24.2},
+      %{bench: "CSI", parser: "Old", rate: 100.4e6, speedup: 2.2},
+      %{bench: "CSI", parser: "New", rate: 224.5e6, speedup: 2.2}
+    ]
+
+    test "connect and labels are options of the points" do
+      wire =
+        compile!(
+          Fude.scatter(@runs,
+            x: [field: :rate, scale: [type: :log]],
+            y: :bench,
+            color: :parser,
+            connect: true,
+            labels: true
+          )
+        )
+
+      assert [%{"mark" => "point", "options" => %{"connect" => true, "labels" => true}}] =
+               wire["layers"]
+
+      assert wire["scales"]["y"]["type"] == "band"
+      assert wire["scales"]["x"]["type"] == "log"
+    end
+
+    test "points have neither unless asked" do
+      wire = compile!(Fude.scatter(@runs, x: :rate, y: :bench))
+      assert [%{"options" => options}] = wire["layers"]
+      assert options == %{}
+    end
+
+    test "a bubble joins its points too, across a category on x" do
+      wire = compile!(Fude.bubble(@runs, x: :bench, y: :rate, size: :speedup, connect: true))
+      assert [%{"options" => %{"connect" => true}}] = wire["layers"]
+    end
+
+    test "connect needs a category to join the points of" do
+      assert {:error, [message]} =
+               Compile.compile(Fude.scatter(@runs, x: :rate, y: :speedup, connect: true))
+
+      assert message =~ "connect joins the points of each category"
+      assert message =~ "needs a category on x or y"
+    end
+
+    test "connect and labels are true or false" do
+      assert_raise ArgumentError, ~r/:connect of a scatter chart must be true or false/, fn ->
+        Fude.scatter(@runs, x: :rate, y: :bench, connect: :yes)
+      end
+    end
+
+    test "a text layer with no x is a column beside each category, under its title" do
+      wire =
+        compile!(
+          Fude.layers(@runs, [
+            Fude.scatter(x: :rate, y: :bench, color: :parser, connect: true),
+            Fude.text(y: :bench, text: [field: :speedup, format: :number, digits: 1, suffix: "×"])
+          ])
+        )
+
+      assert [_points, text] = wire["layers"]
+      assert text["mark"] == "text"
+
+      assert text["options"] == %{
+               "column" => true,
+               "format" => "number:1|×",
+               "title" => "Speedup"
+             }
+
+      # One value for each category, its first.
+      assert text["columns"]["y"] == [0, 1]
+      assert text["columns"]["text"] == [24.2, 2.2]
+    end
+
+    test "a text layer at x and y keeps every row, and its title has no column" do
+      wire =
+        compile!(
+          Fude.layers(@runs, [
+            Fude.scatter(x: :rate, y: :bench),
+            Fude.text(x: :rate, y: :bench, text: [field: :parser, title: false])
+          ])
+        )
+
+      assert [_points, text] = wire["layers"]
+      assert text["options"] == %{}
+      assert length(text["columns"]["text"]) == 4
+    end
+  end
+
   describe "the right axis" do
     @days for d <- 0..4,
               do: %{day: Date.add(~D[2026-01-01], d), orders: d + 1, revenue: (d + 1) * 1000}

@@ -216,6 +216,22 @@ defmodule FudeDev.Data do
     ]
   end
 
+  # Throughput of two parsers on six benchmarks, in bytes a second: a row
+  # for each, with the speedup of the new one.
+  def throughput do
+    for {bench, old, new} <- [
+          {"ASCII", 25.6e6, 618.6e6},
+          {"Unicode", 33.5e6, 914.7e6},
+          {"Opaque Unicode", 60.8e6, 155.6e6},
+          {"CSI", 100.4e6, 224.5e6},
+          {"Images", 66.5e6, 4.65e9},
+          {"Escape codes", 5.90e9, 13.40e9}
+        ],
+        {parser, rate} <- [{"Old parser", old}, {"New parser", new}] do
+      %{bench: bench, parser: parser, rate: rate, speedup: new / old}
+    end
+  end
+
   # Users by country, by ISO code; a few by name.
   def countries do
     codes =
@@ -437,6 +453,18 @@ defmodule FudeDev.GalleryLive do
         chart={Fude.bar(regions(@shuffled), x: [field: :region, sort: :"-y"], y: {:sum, :revenue}, horizontal: true, labels: true,
           frame: if(@shuffled, do: "Q2", else: "Q1"),
           title: "Total revenue by region", height: 260)}
+      />
+      <.chart
+        id="throughput"
+        locale={@locale}
+        chart={Fude.layers(Data.throughput(), [
+          Fude.scatter(
+            x: [field: :rate, format: :decimal_bytes, suffix: "/s", scale: [type: :log, domain: [1.0e7, 2.5e10]], title: "Throughput · log scale"],
+            y: [field: :bench, title: false],
+            color: [field: :parser, title: "Parser", scheme: ["#8a8a85", "#e07b4f"]],
+            connect: true, labels: true),
+          Fude.text(y: :bench, text: [field: :speedup, format: :number, digits: 1, suffix: "×", title: "Speedup"])
+        ], title: "Parsing throughput", subtitle: "Higher is better", caption: "Median of 3 runs", height: 380)}
       />
       <.chart
         id="activity"

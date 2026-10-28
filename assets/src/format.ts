@@ -38,13 +38,33 @@ function dateFormat(locale: string | undefined, options: Intl.DateTimeFormatOpti
 const BYTES = ["byte", "kilobyte", "megabyte", "gigabyte", "terabyte", "petabyte"];
 
 /**
- * A format of the wire and its digits: "number:0" is "number" with no
- * decimals, "currency:EUR:2" a currency with two, ":0" no format with none.
+ * A format of the wire, its digits and its suffix: "number:0" is "number"
+ * with no decimals, "currency:EUR:2" a currency with two, ":0" no format
+ * with none; "number:1|×" writes "×" after each value, "|×" with no format.
  */
-export function parseFormat(format: string | null | undefined): { name: string | null; digits: number | undefined } {
-  const match = /^(.*?)(?::(\d+))?$/.exec(format ?? "");
+export function parseFormat(format: string | null | undefined): { name: string | null; digits: number | undefined; suffix: string | null } {
+  const bar = (format ?? "").indexOf("|");
+  const suffix = bar < 0 ? null : format!.slice(bar + 1) || null;
+  const match = /^(.*?)(?::(\d+))?$/.exec(bar < 0 ? (format ?? "") : format!.slice(0, bar));
   const name = match?.[1] || null;
-  return { name, digits: match?.[2] === undefined ? undefined : Number(match[2]) };
+  return { name, digits: match?.[2] === undefined ? undefined : Number(match[2]), suffix };
+}
+
+// A writer of values with the suffix of its format after each.
+function suffixed(write: (value: number) => string, suffix: string | null): (value: number) => string {
+  return suffix ? (v) => write(v) + suffix : write;
+}
+
+// Bytes in steps of 1,024 (1 KB is 1,024 bytes) or of 1,000 (decimal).
+function bytes(base: number, locale: string | undefined, digits: number | undefined): (value: number) => string {
+  return (v) => {
+    let i = 0;
+    while (Math.abs(v) >= base && i < BYTES.length - 1) {
+      v /= base;
+      i++;
+    }
+    return numberFormat(locale, { style: "unit", unit: BYTES[i], unitDisplay: "short", ...(digits === undefined ? { maximumFractionDigits: 1 } : fixed(digits)) }).format(v);
+  };
 }
 
 // Exactly so many decimals, when they are given.
@@ -54,15 +74,18 @@ function fixed(digits: number | undefined): Intl.NumberFormatOptions {
 
 /**
  * A function that writes a value of a format: "number", "integer",
- * "percent", "compact", "currency:EUR", "bytes", "duration" (seconds), or
- * none (as a number, with no more digits than it needs). The digits of the
- * format ("number:0") are exactly its decimals; the digits given, at most.
+ * "percent", "compact", "currency:EUR", "bytes", "decimal_bytes",
+ * "duration" (seconds), or none (as a number, with no more digits than it
+ * needs). The digits of the format ("number:0") are exactly its decimals;
+ * the digits given, at most. Its suffix ("|×") follows each value.
  */
 export function formatter(format: string | null | undefined, locale?: string, digits?: number): (value: number) => string {
   const parsed = parseFormat(format);
-  format = parsed.name;
+  return suffixed(write(parsed.name, parsed.digits, locale, digits), parsed.suffix);
+}
+
+function write(format: string | null, own: number | undefined, locale: string | undefined, digits: number | undefined): (value: number) => string {
   // The channel's digits are exact; those given are at most.
-  const own = parsed.digits;
   switch (format) {
     case "integer":
       return (v) => numberFormat(locale, { maximumFractionDigits: 0 }).format(v);
@@ -73,14 +96,9 @@ export function formatter(format: string | null | undefined, locale?: string, di
     case "compact":
       return (v) => numberFormat(locale, { notation: "compact", maximumFractionDigits: 1, ...fixed(own) }).format(v);
     case "bytes":
-      return (v) => {
-        let i = 0;
-        while (Math.abs(v) >= 1024 && i < BYTES.length - 1) {
-          v /= 1024;
-          i++;
-        }
-        return numberFormat(locale, { style: "unit", unit: BYTES[i], unitDisplay: "short", maximumFractionDigits: 1 }).format(v);
-      };
+      return bytes(1024, locale, own);
+    case "decimal_bytes":
+      return bytes(1000, locale, own);
     case "duration":
       return (v) => duration(v, locale);
     default:
@@ -126,7 +144,11 @@ function duration(seconds: number, locale?: string): string {
  * axis's format.
  */
 export function tickFormatter(format: string | null | undefined, ticks: number[], locale?: string): (value: number) => string {
-  format = parseFormat(format).name;
+  const { name, suffix } = parseFormat(format);
+  return suffixed(tickWriter(name, ticks, locale), suffix);
+}
+
+function tickWriter(format: string | null, ticks: number[], locale: string | undefined): (value: number) => string {
   const step = ticks.length > 1 ? Math.abs(ticks[1]! - ticks[0]!) : 1;
   const digits = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
   const max = Math.max(...ticks.map(Math.abs), 0);
@@ -138,7 +160,7 @@ export function tickFormatter(format: string | null | undefined, ticks: number[]
     }
     return formatter(format, locale, digits);
   }
-  if (format === "bytes" || format === "duration") return formatter(format, locale);
+  if (format === "bytes" || format === "decimal_bytes" || format === "duration") return formatter(format, locale);
   if (max >= 1000 && format !== "integer" && format !== "number") {
     return (v) => numberFormat(locale, { notation: "compact", maximumFractionDigits: compactDigits(step, max) }).format(v);
   }

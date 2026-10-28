@@ -828,13 +828,15 @@ defmodule Fude.Compile do
         scales
       end
 
+    connect!(layer, scales)
+
     %{
       mark: "point",
       layer: layer,
       rows: rows,
       channels: %{x: :x, y: :y},
       scales: scales,
-      options: %{}
+      options: Map.take(layer.options, [:connect, :labels])
     }
   end
 
@@ -965,15 +967,37 @@ defmodule Fude.Compile do
         {Atom.to_string(name), continuous_or_band(channel, data, rows, name, layer.channels)}
       end
 
+    # With a category on y and no x, the text is a column at the right of
+    # the plot, under its title: one value for each category, its first.
+    column? =
+      not Map.has_key?(layer.channels, :x) and match?(%{"y" => %{"type" => "band"}}, scales)
+
+    rows = if column?, do: Enum.uniq_by(rows, & &1[:y]), else: rows
+    text = layer.channels.text
+
     %{
       mark: "text",
       layer: layer,
       rows: rows,
       channels: %{x: :x, y: :y},
       scales: scales,
-      options: %{}
+      options:
+        %{column: column?, format: format(text), title: if(column?, do: Channel.title(text))}
+        |> Map.reject(fn {_key, value} -> value in [nil, false] end)
     }
   end
+
+  # Points joined in each category: a category on x or on y, which the
+  # line runs across.
+  defp connect!(%Layer{kind: kind, options: %{connect: true}}, scales) do
+    unless Enum.any?(["x", "y"], &match?(%{"type" => "band"}, scales[&1])) do
+      raise ArgumentError,
+            "Fude: connect joins the points of each category: a #{kind} chart with " <>
+              "connect: true needs a category on x or y"
+    end
+  end
+
+  defp connect!(_layer, _scales), do: :ok
 
   defp position(axis, false), do: Atom.to_string(axis)
   defp position(:x, true), do: "y"
@@ -1291,10 +1315,14 @@ defmodule Fude.Compile do
 
   # A channel's format as the browser reads it: "number", "currency:EUR",
   # with its digits after a colon when it has them ("number:0",
-  # "currency:EUR:2", ":0" with no format).
+  # "currency:EUR:2", ":0" with no format), and its suffix after a bar
+  # ("number:1|×", "|×" with no format).
   defp format(nil), do: nil
-  defp format(%Channel{digits: nil} = channel), do: base_format(channel)
-  defp format(%Channel{digits: digits} = channel), do: "#{base_format(channel)}:#{digits}"
+  defp format(%Channel{suffix: nil} = channel), do: digits_format(channel)
+  defp format(%Channel{suffix: suffix} = channel), do: "#{digits_format(channel)}|#{suffix}"
+
+  defp digits_format(%Channel{digits: nil} = channel), do: base_format(channel)
+  defp digits_format(%Channel{digits: digits} = channel), do: "#{base_format(channel)}:#{digits}"
 
   defp base_format(%Channel{format: {:currency, code}}), do: "currency:" <> code
 

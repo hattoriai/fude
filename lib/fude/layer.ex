@@ -65,12 +65,12 @@ defmodule Fude.Layer do
     scatter: %{
       channels: [:x, :y, :color, :size, :shape, :opacity, :tooltip, :detail],
       needs: [:x, :y],
-      options: []
+      options: [connect: :boolean, labels: :boolean]
     },
     bubble: %{
       channels: [:x, :y, :color, :size, :opacity, :tooltip, :detail],
       needs: [:x, :y, :size],
-      options: []
+      options: [connect: :boolean, labels: :boolean]
     },
     pie: %{
       channels: [:value, :color, :tooltip],

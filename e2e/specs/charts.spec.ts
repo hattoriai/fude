@@ -159,6 +159,22 @@ test.describe("the gallery", () => {
     await expect(outside).toHaveCount(1);
   });
 
+  test("a dumbbell joins each category's points, writes their values and a column beside them", async ({ page }) => {
+    await openPage(page);
+    const svg = page.locator("#throughput svg.fude-axes:not(.fude-grid)");
+    // Each point's value, in its format and suffix: the greatest above, the least below.
+    // By their places in the plot (WebKit's boxes of SVG text are not theirs).
+    const high = Number(await svg.locator("text", { hasText: /^618\.6\sMB\/s$/ }).getAttribute("y"));
+    const low = Number(await svg.locator("text", { hasText: /^25\.6\sMB\/s$/ }).getAttribute("y"));
+    expect(low).toBeGreaterThan(high + 20);
+    // The ticks of the log scale are round: decimal bytes.
+    await expect(svg.locator("text", { hasText: /^1\sGB\/s$/ })).toHaveCount(1);
+    // The column of text: its title, and one value for each category.
+    await expect(svg.locator("text", { hasText: "Speedup" })).toHaveCount(1);
+    await expect(svg.locator('text[text-anchor="end"]', { hasText: /×$/ })).toHaveCount(6);
+    await expect(svg.locator("text", { hasText: "24.2×" })).toHaveCount(1);
+  });
+
   test("a sparkline writes its last value at the end of its line", async ({ page }) => {
     await openPage(page);
     // Compact, as y's format says: "4.3K" or "4.3k", by the browser's ICU.

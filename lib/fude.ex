@@ -51,14 +51,17 @@ defmodule Fude do
     bar: "Bars: a category on `x` and a number on `y`; `horizontal: true` turns them.",
     line: "Lines: a time or a number on `x`, a number on `y`, a line for each `color`.",
     area: "Areas: as lines, filled down to zero; stacked when they have a `color`.",
-    scatter: "Points at `x` and `y`, colored by `color` and sized by `size`.",
-    bubble: "Points at `x` and `y`, sized by `size`.",
+    scatter:
+      "Points at `x` and `y`, colored by `color` and sized by `size`; `connect: true` joins the points of each category (a dumbbell), `labels: true` writes their values.",
+    bubble:
+      "Points at `x` and `y`, sized by `size`; `connect: true` joins the points of each category, `labels: true` writes their values.",
     pie: "A pie: a slice for each `color`, as large as its `value`.",
     donut: "A donut: a pie with a hole (`inner`, the hole's share of the radius).",
     histogram: "A histogram: the numbers of `x` counted in bins (`bins`, about how many).",
     heatmap: "A heatmap: a cell for each `x` and `y`, colored by `color`.",
     rule: "A rule across the chart at `x` or at `y`, with a `label`.",
-    text: "Text at `x` and `y`.",
+    text:
+      "Text at `x` and `y`; with a category on `y` and no `x`, a column at the right of the plot, beside each category.",
     sparkline: "A small line with no axes, for a table or a card.",
     number: "One number, large, with a `label`.",
     trend: "One number with its change from `compare`, and its history (`spark`).",

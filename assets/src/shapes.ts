@@ -84,6 +84,8 @@ export interface RuleShape {
   y2: number;
   color: string;
   dashed: boolean;
+  /** The width of its line: 1.5 unless given. */
+  width?: number;
 }
 
 /** A region of a map: its path in the map's units, placed by `k`, `tx`, `ty`. */
@@ -377,7 +379,7 @@ function drawArc(ctx: CanvasRenderingContext2D, s: ArcShape, paint: Paint, opaci
 function drawRule(ctx: CanvasRenderingContext2D, s: RuleShape, opacity: number): void {
   ctx.globalAlpha = opacity;
   ctx.strokeStyle = s.color;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = s.width ?? 1.5;
   ctx.setLineDash(s.dashed ? [4, 4] : []);
   ctx.beginPath();
   ctx.moveTo(s.x1, s.y1);
