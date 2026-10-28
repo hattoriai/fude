@@ -49,6 +49,43 @@ defmodule Fude.ComponentsTest do
     assert byte_size(html) < byte_size(config) * 1.5
   end
 
+  test "a long series is sent packed, and read back as the same rows" do
+    rows =
+      for d <- 0..499,
+          s <- ["North", "South"],
+          do: %{day: Date.add(~D[2024-01-01], d), s: s, v: d * 0.5 + byte_size(s)}
+
+    chart = Fude.line(rows, x: :day, y: :v, color: :s)
+    assigns = %{chart: chart}
+    html = rendered_to_string(~H|<.chart id="days" chart={@chart} />|)
+
+    [config] =
+      html
+      |> LazyHTML.from_fragment()
+      |> LazyHTML.query("figure")
+      |> LazyHTML.attribute("data-fude")
+
+    sent = JSON.decode!(config)
+
+    assert %{"from" => _, "step" => 86_400_000, "deltas" => _} =
+             hd(sent["layers"])["columns"]["x"]
+
+    {:ok, wire} = Fude.Compile.compile(chart)
+    assert Fude.Wire.unpack(sent)["layers"] == JSON.decode!(JSON.encode!(wire["layers"]))
+    assert Fude.Test.data(html, "days") == Fude.Test.data(plain_render(wire), "days")
+
+    assert hd(Fude.Test.data(html, "days")) == %{
+             "Day" => ~D[2024-01-01],
+             "V" => 5.0,
+             "S" => "North"
+           }
+  end
+
+  # A figure with the wire as it was sent before packing.
+  defp plain_render(wire),
+    do:
+      ~s|<figure id="days" data-fude="#{Phoenix.HTML.html_escape(JSON.encode!(wire)) |> Phoenix.HTML.safe_to_string()}"></figure>|
+
   test "small multiples, with no hook on the figure, keep the server's table" do
     rows = for r <- ["A", "B"], m <- 1..3, do: %{r: r, m: m, v: m * 2}
     assigns = %{chart: rows |> Fude.line(x: :m, y: :v) |> Fude.facet(:r)}

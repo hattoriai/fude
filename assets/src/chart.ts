@@ -13,7 +13,7 @@ import { png, save, svgDocument, SvgContext } from "./export";
 import { categorical, dataValue, datumOf, fraction, matches, same, type Datum as PlaceDatum, type Place } from "./places";
 import { matching, publish, subscribe, type LinkMessage, type LinkValue } from "./link";
 import { tableElement, tableOf } from "./table";
-import type { Config, Layer, Scale } from "./wire";
+import { unpack, type Config, type Layer, type Scale } from "./wire";
 
 export interface Transport {
   push(event: string, payload: object, onReply?: (reply: Record<string, unknown>) => void): void;
@@ -118,7 +118,7 @@ export class Chart {
     this.transport = transport;
     this.raw = el.dataset.fude ?? "{}";
     this.selectedRaw = el.dataset.fudeSelected;
-    this.config = JSON.parse(this.raw) as Config;
+    this.config = unpack(JSON.parse(this.raw) as Config);
     this.id = this.config.id ?? el.id;
     this.locale = this.config.locale ?? undefined;
     this.theme = readTheme(el);
@@ -175,7 +175,7 @@ export class Chart {
     }
     this.selectedRaw = this.el.dataset.fudeSelected;
     this.raw = raw;
-    this.config = JSON.parse(raw) as Config;
+    this.config = unpack(JSON.parse(raw) as Config);
     this.locale = this.config.locale ?? undefined;
     if (this.tableWritten) this.writeTable();
     this.hover = null;
@@ -195,7 +195,7 @@ export class Chart {
    */
   append(wire: Config, max: number | null): void {
     if (!this.config.layers || !wire.layers) return;
-    this.config = merge(this.config, wire, max);
+    this.config = merge(this.config, unpack(wire), max);
     this.raw = this.el.dataset.fude ?? "{}";
     if (this.tableWritten) this.writeTable();
     if (this.plot) this.render(true);

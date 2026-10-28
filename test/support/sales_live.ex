@@ -26,6 +26,13 @@ defmodule FudeTest.SalesLive do
     {:noreply, Fude.Live.append(socket, "revenue", chart, [row], max: 50)}
   end
 
+  # Rows enough that their days are sent packed.
+  def handle_event("stream_days", _params, socket) do
+    chart = Fude.line(x: :day, y: :revenue)
+    rows = for d <- 0..199, do: %{day: Date.add(~D[2026-01-01], d), revenue: d * 2}
+    {:noreply, Fude.Live.append(socket, "revenue", chart, rows)}
+  end
+
   def handle_event("more", _params, socket) do
     {:noreply, update(socket, :sales, &[%{region: "East", channel: "Online", revenue: 40} | &1])}
   end

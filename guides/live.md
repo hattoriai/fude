@@ -31,6 +31,25 @@ def handle_info({:order, _order}, socket) do
 end
 ```
 
+### What a render sends
+
+The browser gets the chart's config, in the page and again in each
+render that changes it. Long columns go packed (`Fude.Wire`): a time
+series' days as steps of a day, numbers of a few decimals as whole
+steps, so that 4 series of 1,000 days are 35 KB, not 89 KB. A column is
+packed only when it comes back as the very same numbers. Every render
+still sends the whole config of a chart that changed: for one new point
+at a time, append it (below).
+
+The socket sends what LiveView sends as it is. Its messages compress
+well (a chart's config to a quarter or less), with `compress: true` on the
+socket of your endpoint, if your proxies pass the compressed messages:
+
+```elixir
+socket "/live", Phoenix.LiveView.Socket,
+  websocket: [connect_info: [session: @session_options], compress: true]
+```
+
 ## Streaming points
 
 For a chart that grows a point at a time, `Fude.Live.append/5` sends only

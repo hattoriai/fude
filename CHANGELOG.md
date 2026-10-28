@@ -9,6 +9,15 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A chart's long columns are sent packed (`Fude.Wire`): a time series'
+  days as steps of a day from the first, numbers of a few decimals as
+  whole steps; the browser unpacks them. A column is packed only when
+  that is much smaller and unpacking gives back the very same numbers,
+  checked as it is packed; the rest go as before. 4 series of 1,000 days
+  go from 87.9 KB to 35.4 KB, in the page and in each render that
+  changes them (and in `Fude.Live.append`). `Fude.Test` reads packed
+  charts as before. The live guide shows `compress: true` on the socket.
+
 - Editorial defaults (#10): charts are set as a graphics desk sets them.
   - **Labels on the marks, where they fit**, with no option (`labels:
     true` all, `false` none): values at the ends of bars, compact where

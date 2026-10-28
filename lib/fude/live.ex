@@ -98,7 +98,11 @@ defmodule Fude.Live do
   def append(socket, id, %Chart{} = chart, rows, opts \\ []) do
     case Compile.compile(%{chart | datasets: %{}}, %{chart.data => rows}) do
       {:ok, wire} ->
-        Phoenix.LiveView.push_event(socket, "fude:append", %{id: id, wire: wire, max: opts[:max]})
+        Phoenix.LiveView.push_event(socket, "fude:append", %{
+          id: id,
+          wire: Fude.Wire.pack(wire),
+          max: opts[:max]
+        })
 
       {:error, errors} ->
         raise ArgumentError,

@@ -220,7 +220,7 @@ defmodule Fude.Components do
         %{
           id: "#{assigns.id}-#{index}",
           title: panel["title"],
-          config: JSON.encode!(config),
+          config: config |> Fude.Wire.pack() |> JSON.encode!(),
           description: config["description"]
         }
       end)
@@ -471,6 +471,7 @@ defmodule Fude.Components do
       |> Map.put("locale", assigns.locale)
       |> Map.put("id", assigns.id)
       |> animate(assigns.animate)
+      |> Fude.Wire.pack()
       |> JSON.encode!()
 
     assigns
