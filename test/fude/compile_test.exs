@@ -266,6 +266,35 @@ defmodule Fude.CompileTest do
     end
   end
 
+  describe "brushes (#13)" do
+    test "go on the wire as what a drag does; none unless asked" do
+      wire = compile!(Fude.line(@sales, x: :region, y: :revenue, brush: :zoom))
+      assert wire["brush"] == "zoom"
+
+      assert compile!(Fude.line(@sales, x: :region, y: :revenue, brush: :select))["brush"] ==
+               "select"
+
+      assert compile!(Fude.line(@sales, x: :region, y: :revenue))["brush"] == nil
+    end
+
+    test "are :zoom, :select or false" do
+      assert_raise ArgumentError, ~r/:brush of a chart must be :zoom, :select or false/, fn ->
+        Fude.line(@sales, x: :region, y: :revenue, brush: :pan)
+      end
+    end
+
+    test "go with every panel of small multiples" do
+      wire =
+        compile!(
+          @sales
+          |> Fude.bar(x: :channel, y: :revenue, brush: :zoom)
+          |> Fude.facet(:region)
+        )
+
+      assert wire["brush"] == "zoom"
+    end
+  end
+
   describe "suffixes" do
     test "go on the wire after the format and its digits, after a bar" do
       wire =

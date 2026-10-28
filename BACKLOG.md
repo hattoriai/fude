@@ -57,12 +57,6 @@ points). Appending to a chart that aggregates (a bar of sums) needs the
 browser to fold a row into its group; the table under a streamed chart
 is the one of its last render.
 
-## Brushing and zooming
-
-A range of a chart chosen with the pointer or the keyboard, sent to the
-LiveView as an event (a filter for the other charts of a page), and
-zooming a time axis.
-
 ## Messages in the chart's locale
 
 The few words that Fude writes itself ("Data", "Total", the

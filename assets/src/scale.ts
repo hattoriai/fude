@@ -60,6 +60,22 @@ function band(count: number, [r0, r1]: [number, number], padding: number): Posit
   };
 }
 
+/**
+ * A band of a window of categories, from `i0` to `i1` (a zoom): their
+ * bands fill the range; the others are outside it.
+ */
+export function windowBand([i0, i1]: [number, number], range: [number, number], padding = 0.25): Position {
+  const inner = band(i1 - i0 + 1, range, padding);
+  return {
+    ...inner,
+    at: (i) => inner.at(i - i0),
+    ticks: inner.ticks.map((tick) => tick + i0),
+    domain: [i0, i1],
+    invert: (p) => inner.invert(p) + i0,
+    index: (p) => inner.index(p) + i0,
+  };
+}
+
 function point(count: number, [r0, r1]: [number, number]): Position {
   const step = count > 1 ? (r1 - r0) / (count - 1) : 0;
   const at = (i: number) => (count > 1 ? r0 + i * step : (r0 + r1) / 2);

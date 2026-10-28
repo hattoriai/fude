@@ -5,7 +5,8 @@
 
 import { alpha, mix, ramp, readTheme, rgb, type Theme } from "./theme";
 import { formatTime, formatter, parseFormat, tickFormatter, timeTickFormatter } from "./format";
-import { position, type Position } from "./scale";
+import { position, windowBand, type Position } from "./scale";
+import { numberRangeLabel, ordered, sentValue, snapBins, snapNumbers, snapTimes, timeRangeLabel, timeUnit } from "./brush";
 import { draw, easeOut, tween, type Datum, type DotShape, type Paint, type PathPoint, type PathShape, type Shape } from "./shapes";
 import { loadMap, type LoadedMap } from "./maps";
 import { png, save, svgDocument, SvgContext } from "./export";
@@ -29,6 +30,16 @@ interface Layout {
   /** The right axis: the y of the layers on it. */
   yRight?: Position;
   labels: { text: string; y: number; at: number; color: string }[];
+}
+
+// A brush shared by the panels of small multiples (#13): its zoom, or the
+// range it chose, on the scales they share.
+const GROUP_EVENT = "fude:group";
+interface GroupMessage {
+  group: string;
+  from: unknown;
+  zoom: [number, number] | null;
+  chosen: [number, number] | null;
 }
 
 // A linked chart's place shown here: the crosshair's x (lines, areas), and
@@ -73,6 +84,21 @@ export class Chart {
   // Where a linked chart's hover is shown here (#14): the crosshair's x, or
   // the marks at it, with no tooltip.
   private linked: Linked | null = null;
+  // The brush (#13): the range a drag (or Shift and the arrows) is
+  // choosing, in pixels across the plot; a touch's press before it starts;
+  // the x axis's zoom and the range chosen for the server, in the x
+  // scale's terms (a band's indices); and whether a drag just ended, so
+  // that its click is not a click on a mark.
+  private drag: { from: number; to: number; pointer: number | null } | null = null;
+  private press: { pointer: number; x: number; y: number; timer: number } | null = null;
+  private zoom: [number, number] | null = null;
+  private chosen: [number, number] | null = null;
+  private dragged = false;
+  // Whether this chart's own brush made the zoom or the range: the one
+  // panel of small multiples that shows the button that clears it.
+  private brushed = false;
+  private brushButton!: HTMLButtonElement;
+  private brushLabel!: HTMLElement;
   private highlight: number | null = null;
   private hidden = new Set<number>();
   private cursor = -1;
@@ -108,6 +134,9 @@ export class Chart {
     this.observe();
     this.share();
     this.cleanups.push(subscribe((message) => this.follow(message)));
+    const onGroup = (event: Event) => this.followGroup((event as CustomEvent<GroupMessage>).detail);
+    document.addEventListener(GROUP_EVENT, onGroup);
+    this.cleanups.push(() => document.removeEventListener(GROUP_EVENT, onGroup));
   }
 
   /** Takes the server's new render: draws again, moving the marks. */
@@ -128,6 +157,10 @@ export class Chart {
     this.locale = this.config.locale ?? undefined;
     this.hover = null;
     this.linked = null;
+    // The server's next render ends a chosen range; a zoom of categories
+    // ends too, as they may not be the same.
+    this.chosen = null;
+    if (this.config.scales?.x?.type === "band") this.zoom = null;
     this.hideTip();
     if (this.plot) this.render(true);
   }
@@ -175,9 +208,17 @@ export class Chart {
       legend,
       ramp: this.exportRamp(),
       grid: this.grid,
-      marks: ctx.parts,
+      marks: this.zoomClip(ctx.parts),
       axes: this.svg,
     });
+  }
+
+  // Zoomed, the file's marks are cut at the plot, as on the screen.
+  private zoomClip(parts: string[]): string[] {
+    const layout = this.layout;
+    if (!this.zoom || !layout) return parts;
+    const rect = `<rect x="${layout.left - 1}" y="0" width="${layout.right - layout.left + 2}" height="${layout.height}"/>`;
+    return [`<defs><clipPath id="fude-zoom">${rect}</clipPath></defs><g clip-path="url(#fude-zoom)">`, ...parts, "</g>"];
   }
 
   private exportRamp(): { stops: string[]; low: string; high: string; title?: string } | null {
@@ -232,16 +273,49 @@ export class Chart {
     this.live.setAttribute("aria-live", "polite");
     this.note = div("fude-note");
     this.note.hidden = true;
-    this.stage.append(this.grid, this.canvas, this.svg, this.tip, this.note);
+    this.brushButton = document.createElement("button");
+    this.brushButton.type = "button";
+    this.brushButton.className = "fude-brush-reset";
+    this.brushButton.hidden = true;
+    this.brushButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.clearBrush(true);
+      this.stage.focus();
+    });
+    this.brushLabel = div("fude-brush-label");
+    this.brushLabel.setAttribute("aria-hidden", "true");
+    this.stage.append(this.grid, this.canvas, this.svg, this.tip, this.note, this.brushLabel, this.brushButton);
     plot.append(this.legend, this.stage, this.live);
 
-    this.stage.addEventListener("pointermove", (event) => this.onPointer(event));
+    this.stage.addEventListener("pointerdown", (event) => this.onBrushDown(event));
+    this.stage.addEventListener("pointermove", (event) => {
+      if (!this.onBrushMove(event)) this.onPointer(event);
+    });
+    this.stage.addEventListener("pointerup", (event) => this.onBrushUp(event));
+    this.stage.addEventListener("pointercancel", () => this.cancelBrush());
     this.stage.addEventListener("pointerleave", () => this.setHover(null));
     this.stage.addEventListener("keydown", (event) => this.onKey(event));
     this.stage.addEventListener("blur", () => this.setHover(null));
     this.stage.addEventListener("click", (event) => {
+      // The click that ends a drag is the drag's, not a mark's.
+      if (this.dragged) {
+        this.dragged = false;
+        return;
+      }
       this.onPointer(event as PointerEvent);
       this.select();
+    });
+    this.stage.addEventListener("dblclick", () => this.clearBrush(true));
+    // A touch that brushes (after its long press) does not scroll the page.
+    this.stage.addEventListener(
+      "touchmove",
+      (event) => {
+        if (this.drag) event.preventDefault();
+      },
+      { passive: false },
+    );
+    this.cleanups.push(() => {
+      if (this.press) clearTimeout(this.press.timer);
     });
   }
 
@@ -507,6 +581,14 @@ export class Chart {
     const paint = this.paintOptions();
     // What leaves shrinks to where it grew from as it fades.
     for (const shape of this.leaving) draw(ctx, shape.type === "rect" ? tween(shape, { ...shape, ...shape.from }, t) : shape, paint, 1 - raw);
+    // Zoomed, the marks stay in the plot: what is outside the range is cut.
+    const layout = this.layout;
+    if (this.zoom && layout) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(layout.left - 1, 0, layout.right - layout.left + 2, layout.height);
+      ctx.clip();
+    }
     const drawn = new Map<string, Shape>();
     for (const shape of this.shapes) {
       const now = tween(from.get(shape.key), shape, t);
@@ -515,6 +597,7 @@ export class Chart {
     }
     this.drawn = drawn;
     this.paintHover(ctx);
+    if (this.zoom && layout) ctx.restore();
   }
 
   private repaint(): void {
@@ -645,7 +728,7 @@ export class Chart {
     layout.top = top;
     layout.right = right;
     layout.bottom = bottom;
-    if (xs) layout.x = position(xs, [left, right], xs.type === "time" ? 90 : 80, this.bandPadding("x"));
+    if (xs) layout.x = this.xPosition(xs, [left, right], xs.type === "time" ? 90 : 80, this.bandPadding("x"));
     // Names of categories on two lines take a line more below.
     if (this.wrapsLabels(layout)) layout.bottom = bottom = bottom - 14;
     // Categories run down from the top; numbers up from the bottom.
@@ -1440,6 +1523,20 @@ export class Chart {
 
     this.renderAnnotations(layout);
 
+    // Zoomed, the words of marks outside the range go with them.
+    if (this.zoom) {
+      for (const el of svg.querySelectorAll<SVGGraphicsElement>('[data-key^="v:"], [data-key^="t:"]')) {
+        const x = Number(el.getAttribute("x"));
+        const width = Number(el.getAttribute("width") || 0);
+        if (x + width < layout.left - 1 || x > layout.right + 1) el.remove();
+      }
+    }
+
+    const brush = document.createElementNS(SVG, "g");
+    brush.setAttribute("class", "fude-brush");
+    this.grid.append(brush);
+    this.renderBrush();
+
     const cross = document.createElementNS(SVG, "g");
     cross.setAttribute("class", "fude-cross");
     svg.append(cross);
@@ -1587,7 +1684,7 @@ export class Chart {
     const seen = new Map<string, number>();
     for (const shape of this.shapes) {
       if (shape.type !== "line" && shape.type !== "area") continue;
-      for (const point of shape.points) if (point.y !== null) seen.set(point.k, point.x);
+      for (const point of shape.points) if (point.y !== null && this.inPlot(point.x)) seen.set(point.k, point.x);
     }
     return [...seen.entries()].map(([k, px]) => ({ k, px })).sort((a, b) => a.px - b.px);
   }
@@ -1595,7 +1692,15 @@ export class Chart {
   private marks(): Shape[] {
     return this.shapes
       .filter((shape) => shape.type === "rect" || shape.type === "dot" || shape.type === "arc" || (shape.type === "region" && shape.datum !== null))
-      .filter((shape) => !shape.key.endsWith(":end"));
+      .filter((shape) => !shape.key.endsWith(":end"))
+      .filter((shape) => !this.zoom || shape.type === "region" || this.inPlot(this.anchor(shape).px));
+  }
+
+  // Whether a pixel across is in the plot: zoomed, the marks outside it
+  // are not there to hover.
+  private inPlot(px: number): boolean {
+    const layout = this.layout;
+    return !this.zoom || !layout || (px >= layout.left - 0.5 && px <= layout.right + 0.5);
   }
 
   private onPointer(event: PointerEvent): void {
@@ -1828,6 +1933,19 @@ export class Chart {
   }
 
   private onKey(event: KeyboardEvent): void {
+    // The brush: Escape clears it (and the zoom), Enter commits the range
+    // that Shift and the arrows chose.
+    if (event.key === "Escape" && (this.zoom || this.chosen || this.drag)) {
+      event.preventDefault();
+      this.drag = null;
+      return this.clearBrush(true);
+    }
+    if (event.key === "Enter" && this.drag && this.drag.pointer === null) {
+      event.preventDefault();
+      return this.commitBrush();
+    }
+    const brushing = event.shiftKey && (event.key === "ArrowLeft" || event.key === "ArrowRight") && this.brushMode() !== null;
+    const before = this.hover?.px ?? null;
     if ((event.key === "Enter" || event.key === " ") && this.selectEvent() && this.hover) {
       event.preventDefault();
       return this.select();
@@ -1863,6 +1981,250 @@ export class Chart {
       if ("datum" in mark && mark.datum) this.setHover({ kind: "mark", key: mark.key, datum: mark.datum, ...this.anchor(mark) });
     }
     this.live.textContent = this.tipText();
+    // Shift and the arrows: a range from where the keyboard was.
+    if (brushing && this.hover) {
+      if (this.drag && this.drag.pointer === null) this.drag.to = this.hover.px;
+      else this.drag = { from: before ?? this.hover.px, to: this.hover.px, pointer: null };
+      this.renderBrush();
+      const label = this.brushLabel.textContent;
+      if (label) this.live.textContent = `${label}. Enter to ${this.brushMode() === "zoom" ? "zoom" : "choose it"}.`;
+    } else if (this.drag && this.drag.pointer === null) {
+      this.drag = null;
+      this.renderBrush();
+    }
+  }
+
+  // -- Brush (#13) ------------------------------------------------------------
+
+  /** What a drag across the x axis does here: "zoom", "select", or null (no brush, or an axis it cannot brush). */
+  private brushMode(): "zoom" | "select" | null {
+    const mode = this.config.brush;
+    const x = this.config.scales?.x;
+    if ((mode !== "zoom" && mode !== "select") || !x || this.config.axes === false) return null;
+    const layers = this.config.layers ?? [];
+    if (layers.some((layer) => layer.horizontal || layer.options.funnel === true)) return null;
+    // Times and numbers; bands of times (bars of months).
+    if (x.type === "band") return x.time ? mode : null;
+    return x.type === "time" || x.type === "linear" || x.type === "log" || x.type === "sqrt" ? mode : null;
+  }
+
+  private onBrushDown(event: PointerEvent): void {
+    const layout = this.layout;
+    if (!this.brushMode() || !layout || event.button !== 0) return;
+    const rect = this.stage.getBoundingClientRect();
+    const px = event.clientX - rect.left;
+    const py = event.clientY - rect.top;
+    if (px < layout.left || px > layout.right || py < layout.top || py > layout.bottom) return;
+    this.dragged = false;
+    if (event.pointerType === "touch") {
+      // A long press, then a drag: a swipe still scrolls the page.
+      const pointer = event.pointerId;
+      const timer = window.setTimeout(() => {
+        this.press = null;
+        this.drag = { from: px, to: px, pointer };
+        this.setHover(null);
+        this.renderBrush();
+      }, 450);
+      this.press = { pointer, x: event.clientX, y: event.clientY, timer };
+      return;
+    }
+    this.drag = { from: px, to: px, pointer: event.pointerId };
+    this.stage.setPointerCapture?.(event.pointerId);
+  }
+
+  /** Moves a drag; true when the pointer is brushing, not hovering. */
+  private onBrushMove(event: PointerEvent): boolean {
+    const press = this.press;
+    if (press && press.pointer === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > 8) {
+      clearTimeout(press.timer);
+      this.press = null;
+    }
+    const drag = this.drag;
+    if (!drag || drag.pointer !== event.pointerId || !this.layout) return false;
+    const rect = this.stage.getBoundingClientRect();
+    drag.to = Math.max(this.layout.left, Math.min(this.layout.right, event.clientX - rect.left));
+    if (Math.abs(drag.to - drag.from) > 4) {
+      this.setHover(null);
+      this.renderBrush();
+    }
+    return true;
+  }
+
+  private onBrushUp(event: PointerEvent): void {
+    if (this.press && this.press.pointer === event.pointerId) {
+      clearTimeout(this.press.timer);
+      this.press = null;
+    }
+    const drag = this.drag;
+    if (!drag || drag.pointer !== event.pointerId) return;
+    if (Math.abs(drag.to - drag.from) > 4) {
+      this.dragged = true;
+      this.commitBrush();
+    } else {
+      // Too short to be a range: a click.
+      this.drag = null;
+      this.renderBrush();
+    }
+  }
+
+  private cancelBrush(): void {
+    if (this.press) clearTimeout(this.press.timer);
+    this.press = null;
+    if (this.drag) {
+      this.drag = null;
+      this.renderBrush();
+    }
+  }
+
+  /** The range between two pixels across, in the x scale's terms, snapped to the axis. */
+  private brushRange(p0: number, p1: number): [number, number] | null {
+    const x = this.layout?.x;
+    const scale = this.config.scales?.x;
+    if (!x || !scale) return null;
+    if (x.kind === "band") return ordered(x.index(p0), x.index(p1));
+    const a = x.invert(p0);
+    const b = x.invert(p1);
+    if (scale.type === "time") return snapTimes(a, b, timeUnit(scale.unit));
+    if (scale.bins) return snapBins(a, b, scale.bins.start, scale.bins.step);
+    return snapNumbers(a, b, Math.abs(x.domain[1] - x.domain[0]));
+  }
+
+  // A range as the reader reads it: "Mar – May 2026", "1,200–3,400".
+  private rangeText([from, to]: [number, number]): string {
+    const scale = this.config.scales?.x;
+    if (!scale) return "";
+    if (scale.type === "band") {
+      const a = scale.domain?.[from];
+      const b = scale.domain?.[to];
+      if (scale.time && typeof a === "number" && typeof b === "number") return timeRangeLabel(a, b, timeUnit(scale.time), this.locale);
+      return from === to ? String(a) : `${String(a)}–${String(b)}`;
+    }
+    if (scale.type === "time") return timeRangeLabel(from, to, timeUnit(scale.unit), this.locale);
+    return numberRangeLabel(from, to, scale.format, this.locale);
+  }
+
+  // A range as the server hears it: a time as its ISO text, a number as itself.
+  private rangeSent([from, to]: [number, number]): { from: string | number; to: string | number } {
+    const scale = this.config.scales?.x;
+    if (scale?.type === "band") {
+      const unit = timeUnit(scale.time);
+      const value = (i: number) => {
+        const v = scale.domain?.[i];
+        return typeof v === "number" ? sentValue(v, true, unit) : String(v);
+      };
+      return { from: value(from), to: value(to) };
+    }
+    const time = scale?.type === "time";
+    const unit = timeUnit(scale?.unit);
+    return { from: sentValue(from, time, unit), to: sentValue(to, time, unit) };
+  }
+
+  /** The x position, zoomed: a domain of its own, or a window of a band's categories. */
+  private xPosition(xs: Scale, range: [number, number], spacing: number, padding: number): Position {
+    const zoom = this.zoom;
+    if (!zoom || !this.brushMode()) return position(xs, range, spacing, padding);
+    if (xs.type === "band") return windowBand(zoom, range, padding);
+    let [from, to] = zoom;
+    // One unit of a time: as wide as the unit, not a point.
+    if (from === to) to = from + 1;
+    return position({ ...xs, domain: [from, to], nice: false }, range, spacing, padding);
+  }
+
+  // Commits the range being chosen: the chart zooms to it, or sends it.
+  private commitBrush(): void {
+    const drag = this.drag;
+    this.drag = null;
+    const range = drag ? this.brushRange(drag.from, drag.to) : null;
+    const mode = this.brushMode();
+    if (!range || !mode) return this.renderBrush();
+    this.brushed = true;
+    if (mode === "zoom") {
+      this.zoom = range;
+      this.shareGroup();
+      this.render(true);
+      this.live.textContent = `Zoomed to ${this.rangeText(range)}.`;
+      return;
+    }
+    this.chosen = range;
+    this.shareGroup();
+    this.renderBrush();
+    const group = this.el.dataset.fudeGroup;
+    const detail = { id: group ?? this.id, ...this.rangeSent(range) };
+    this.el.dispatchEvent(new CustomEvent("fude:brush", { detail, bubbles: true }));
+    this.transport?.push("fude:brush", detail);
+    this.live.textContent = `Chose ${this.rangeText(range)}.`;
+  }
+
+  /** Clears the zoom and the chosen range; `share`, for the panels of the same chart too. */
+  private clearBrush(share: boolean): void {
+    const zoomed = this.zoom !== null;
+    if (!zoomed && !this.chosen && !this.drag) return;
+    this.zoom = null;
+    this.chosen = null;
+    this.drag = null;
+    if (share) this.shareGroup();
+    if (zoomed) this.render(true);
+    else this.renderBrush();
+  }
+
+  // The panels of small multiples brush together: they share the x scale.
+  private shareGroup(): void {
+    const group = this.el.dataset.fudeGroup;
+    if (!group) return;
+    const message: GroupMessage = { group, from: this, zoom: this.zoom, chosen: this.chosen };
+    document.dispatchEvent(new CustomEvent<GroupMessage>(GROUP_EVENT, { detail: message }));
+  }
+
+  private followGroup({ group, from, zoom, chosen }: GroupMessage): void {
+    if (from === this || group !== this.el.dataset.fudeGroup) return;
+    const rezoom = JSON.stringify(zoom) !== JSON.stringify(this.zoom);
+    this.brushed = false;
+    this.zoom = zoom;
+    this.chosen = chosen;
+    if (rezoom) this.render(true);
+    else this.renderBrush();
+  }
+
+  // The brush on the plot: the range being chosen, with its words above
+  // it, or the one chosen, as a band under the marks; and the button that
+  // clears a zoom or a range.
+  private renderBrush(): void {
+    const layout = this.layout;
+    const g = this.grid.querySelector(".fude-brush");
+    const label = this.brushLabel;
+    const mode = this.brushMode();
+    this.stage.classList.toggle("fude-brushable", mode !== null);
+    this.brushButton.hidden = !(this.zoom || this.chosen) || (!!this.el.dataset.fudeGroup && !this.brushed);
+    this.brushButton.textContent = this.zoom ? "Reset zoom" : "Clear range";
+    // What the brush holds, for a page (and its tests) to read.
+    if (this.zoom) this.stage.dataset.fudeZoom = this.rangeText(this.zoom);
+    else delete this.stage.dataset.fudeZoom;
+    if (this.chosen) this.stage.dataset.fudeBrush = this.rangeText(this.chosen);
+    else delete this.stage.dataset.fudeBrush;
+    if (!g || !layout || !layout.x) return;
+    g.replaceChildren();
+    label.classList.remove("fude-brush-label-on");
+    const drag = this.drag;
+    const range = drag && Math.abs(drag.to - drag.from) > 4 ? this.brushRange(drag.from, drag.to) : this.chosen;
+    if (!range) return;
+    const x = layout.x;
+    const at = (v: number, end: boolean) => (x.kind === "band" ? x.at(v) + (end ? x.bandwidth : 0) : x.at(v));
+    const x0 = Math.max(layout.left, Math.min(at(range[0], false), at(range[1], true)));
+    const x1 = Math.min(layout.right, Math.max(at(range[0], false), at(range[1], true)));
+    const band = document.createElementNS(SVG, "rect");
+    band.setAttribute("x", String(Math.min(x0, x1 - 1)));
+    band.setAttribute("y", String(layout.top));
+    band.setAttribute("width", String(Math.max(2, x1 - x0)));
+    band.setAttribute("height", String(Math.max(1, layout.bottom - layout.top)));
+    band.setAttribute("fill", this.theme.series[0]!);
+    band.setAttribute("fill-opacity", drag ? "0.16" : "0.1");
+    g.append(band);
+    if (!drag) return;
+    label.textContent = this.rangeText(range);
+    label.classList.add("fude-brush-label-on");
+    const width = label.offsetWidth;
+    const left = Math.max(0, Math.min(layout.width - width, (x0 + x1) / 2 - width / 2));
+    label.style.transform = `translate(${Math.round(left)}px, ${Math.round(Math.max(0, layout.top - 4))}px)`;
   }
 
   // -- Linked hover (#14) ----------------------------------------------------

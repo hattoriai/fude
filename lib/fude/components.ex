@@ -196,7 +196,8 @@ defmodule Fude.Components do
 
   # Small multiples: one legend for all, then a panel for each value, each
   # a chart of its own on the shared scales; each panel in the chart's
-  # link, so that hovering one shows the place on all.
+  # link, so that hovering one shows the place on all, and in its group,
+  # so that a brush on one zooms them all, or sends the chart's range.
   defp panels(assigns) do
     facet = assigns.wire["facet"]
     base = Map.drop(assigns.wire, ["facet", "title", "subtitle", "caption", "source", "frame"])
@@ -245,6 +246,7 @@ defmodule Fude.Components do
         phx-hook="Fude"
         data-fude={panel.config}
         data-fude-link={@link}
+        data-fude-group={@id}
       >
         <div class="fude-panel-title">{panel.title}</div>
         <div

@@ -30,3 +30,17 @@ export async function tooltip(page: Page, id: string): Promise<string> {
   await expect(tip).toBeVisible();
   return (await tip.textContent()) ?? "";
 }
+
+/** Drags across a chart's stage, at half its height, from one share of its width to another. */
+export async function dragAcross(page: Page, id: string, from: number, to: number): Promise<void> {
+  const target = stage(page, id).first();
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  if (!box) throw new Error(`no stage for ${id}`);
+  const y = box.y + box.height * 0.5;
+  await page.mouse.move(box.x + box.width * from, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * ((from + to) / 2), y, { steps: 4 });
+  await page.mouse.move(box.x + box.width * to, y, { steps: 4 });
+  await page.mouse.up();
+}

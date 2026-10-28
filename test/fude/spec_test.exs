@@ -278,6 +278,27 @@ defmodule Fude.SpecTest do
       assert Enum.find(errors, &(&1.path == ["connect"]))
     end
 
+    test "takes back a brush, and refuses another" do
+      chart = Fude.line(x: :day, y: :visits, brush: :select)
+      assert %{"brush" => "select"} = Spec.dump(chart)
+
+      assert {:ok, ^chart} =
+               chart |> Spec.dump() |> JSON.encode!() |> JSON.decode!() |> Spec.load()
+
+      refute Map.has_key?(Spec.dump(Fude.line(x: :day, y: :visits)), "brush")
+
+      assert {:error, [%{path: ["brush"], message: message}]} =
+               Spec.load(%{
+                 "fude" => 1,
+                 "kind" => "line",
+                 "x" => "day",
+                 "y" => "visits",
+                 "brush" => "pan"
+               })
+
+      assert message =~ ~s|must be "zoom", "select" or false|
+    end
+
     test "names a missing channel" do
       assert {:error, [%{path: ["y"], message: "is missing: a bar chart needs it"}]} =
                Spec.load(%{"fude" => 1, "kind" => "bar", "x" => "region"})

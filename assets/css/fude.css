@@ -390,6 +390,62 @@
   touch-action: pan-y;
 }
 
+/* A chart with a brush: a drag across the plot chooses a range. */
+.fude-stage.fude-brushable {
+  cursor: crosshair;
+}
+
+/* The range being chosen, above it, while dragging. */
+.fude-brush-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--fude-tooltip-border);
+  border-radius: var(--fude-radius);
+  background: var(--fude-tooltip-background);
+  color: var(--fude-tooltip-text);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.fude-brush-label-on {
+  opacity: 1;
+}
+
+/* Back from a zoom, or clear a chosen range: at the plot's top right. */
+.fude-brush-reset {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 3;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--fude-border);
+  border-radius: var(--fude-radius);
+  background: var(--fude-surface);
+  color: var(--fude-secondary);
+  font: inherit;
+  font-size: 0.75em;
+  cursor: pointer;
+}
+
+.fude-brush-reset:hover {
+  color: var(--fude-text);
+}
+
+.fude-brush-reset:focus-visible {
+  outline: none;
+  box-shadow: var(--fude-focus-ring);
+}
+
+.fude-brush-reset[hidden] {
+  display: none;
+}
+
 /* A mark a click selects (a chart with `select`). */
 .fude-stage.fude-selectable {
   cursor: pointer;

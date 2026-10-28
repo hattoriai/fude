@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openPage, pointAt, stage, tooltip } from "./support";
+import { dragAcross, openPage, pointAt, stage, tooltip } from "./support";
 
 test.describe("the gallery", () => {
   test("draws every chart with no error", async ({ page }) => {
@@ -214,6 +214,82 @@ test.describe("the gallery", () => {
     const december = await stage(page, "revenue-lines").getAttribute("data-fude-linked");
     await page.keyboard.press("ArrowLeft");
     await expect(stage(page, "revenue-lines")).not.toHaveAttribute("data-fude-linked", december!);
+  });
+
+  test("a brush zooms the chart to the range dragged across it; the button, a double click and Escape go back", async ({ page }) => {
+    await openPage(page);
+    const visits = stage(page, "visits");
+    const ticks = await page.locator("#visits svg.fude-axes:not(.fude-grid) text").allTextContents();
+    await dragAcross(page, "visits", 0.35, 0.6);
+    // Days, snapped to whole days: "28 Jul – 21 Aug 2026", by the browser's ICU.
+    await expect(visits).toHaveAttribute("data-fude-zoom", /Jul.*Aug 2026/);
+    await expect.poll(() => page.locator("#visits svg.fude-axes:not(.fude-grid) text").allTextContents()).not.toEqual(ticks);
+    const reset = page.locator("#visits .fude-brush-reset");
+    await expect(reset).toHaveText("Reset zoom");
+    await reset.click();
+    await expect(visits).not.toHaveAttribute("data-fude-zoom", /.*/);
+    await expect(reset).toBeHidden();
+
+    await dragAcross(page, "visits", 0.3, 0.5);
+    await expect(visits).toHaveAttribute("data-fude-zoom", /.+/);
+    await visits.dblclick();
+    await expect(visits).not.toHaveAttribute("data-fude-zoom", /.*/);
+
+    await dragAcross(page, "visits", 0.3, 0.5);
+    await expect(visits).toHaveAttribute("data-fude-zoom", /.+/);
+    await visits.focus();
+    await page.keyboard.press("Escape");
+    await expect(visits).not.toHaveAttribute("data-fude-zoom", /.*/);
+  });
+
+  test("a brush that selects sends the server its range, in whole months, and keeps it shaded", async ({ page }) => {
+    await openPage(page);
+    await dragAcross(page, "revenue-area", 0.5, 0.75);
+    await expect(page.locator("#brushed")).toHaveText(/^\{"revenue-area", \{~D\[\d{4}-\d{2}-01\], ~D\[\d{4}-\d{2}-01\]\}\}$/);
+    await expect(stage(page, "revenue-area")).toHaveAttribute("data-fude-brush", /2026/);
+    await expect(page.locator("#revenue-area .fude-brush-reset")).toHaveText("Clear range");
+    // A drag is not a click on a mark.
+    await expect(page.locator("#selected")).toHaveText("");
+  });
+
+  test("Shift and the arrows choose a range from the keyboard; Enter sends it", async ({ page }) => {
+    await openPage(page);
+    await stage(page, "revenue-area").focus();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#brushed")).toHaveText('{"revenue-area", {~D[2025-01-01], ~D[2025-03-01]}}');
+  });
+
+  test("on a touch screen, a swipe does not brush; a long press, then a drag, does", async ({ page }) => {
+    await openPage(page);
+    const touch = (hold: number) =>
+      page.evaluate(async (hold) => {
+        const stage = document.querySelector<HTMLElement>("#visits .fude-stage")!;
+        stage.scrollIntoView();
+        const r = stage.getBoundingClientRect();
+        const y = r.top + r.height / 2;
+        const send = (type: string, x: number) =>
+          stage.dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: "touch", clientX: x, clientY: y, button: 0, bubbles: true }));
+        send("pointerdown", r.left + r.width * 0.3);
+        await new Promise((done) => setTimeout(done, hold));
+        for (let i = 1; i <= 6; i++) send("pointermove", r.left + r.width * (0.3 + i * 0.05));
+        send("pointerup", r.left + r.width * 0.6);
+        await new Promise((done) => setTimeout(done, 50));
+        return stage.dataset.fudeZoom ?? null;
+      }, hold);
+    expect(await touch(50)).toBeNull();
+    expect(await touch(600)).toMatch(/Aug 2026/);
+  });
+
+  test("a brush on a panel of small multiples zooms them all, with one button", async ({ page }) => {
+    await openPage(page);
+    await dragAcross(page, "regions-multiples-0", 0.4, 0.8);
+    for (const panel of [0, 1, 2, 3]) await expect(stage(page, `regions-multiples-${panel}`)).toHaveAttribute("data-fude-zoom", /2026/);
+    await expect(page.locator("#regions-multiples .fude-brush-reset:visible")).toHaveCount(1);
+    await stage(page, "regions-multiples-2").dblclick();
+    for (const panel of [0, 1, 2, 3]) await expect(stage(page, `regions-multiples-${panel}`)).not.toHaveAttribute("data-fude-zoom", /.*/);
   });
 
   test("a sparkline writes its last value at the end of its line", async ({ page }) => {

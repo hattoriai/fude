@@ -97,8 +97,10 @@ if Code.ensure_loaded?(Issho.Tool) do
       dumbbell) and "labels" (each point's value). A text layer with "y"
       and "text" and no "x" is a column at the right of the plot, beside
       each category. A tooltip's list may end with what it adds:
-      {"change", "share", "rank", "history"}, each true or false. A chart may have "animate" (false, or
-      {"duration": ms}) and "frame" (a label for a sequence of renders).
+      {"change", "share", "rank", "history"}, each true or false. A chart
+      may have "animate" (false, or {"duration": ms}), "frame" (a label for
+      a sequence of renders) and "brush" ("zoom" or "select": what
+      dragging across the x axis does).
       """,
       annotations: [destructive: true]
 

@@ -10,7 +10,9 @@ use a mouse can do.
   the data: along the x of a line or an area (Up and Down move between
   its series), from mark to mark on the others. Home and End go to the
   ends, Escape leaves. Each step shows its tooltip and a live region says
-  it ("May 2026. Online: €75,912").
+  it ("May 2026. Online: €75,912"). On a chart with a `brush`, Shift and
+  the arrows choose a range from where the keyboard is, Enter zooms to it
+  or sends it, and Escape goes back.
 * **A table.** Under each chart, a toggle opens a table of its data, as
   the chart draws it (summed, in bins). It is on the page before the
   hook mounts, and with JavaScript off. With `table={:swap}`, a **Data**

@@ -70,6 +70,8 @@ export interface Config {
   animate?: false | { duration: number } | null;
   /** The label of a frame of a sequence of renders (a race of bars), large in a corner. */
   frame?: string | null;
+  /** What a drag across the x axis does (#13): zoom in place, or select a range for the server. */
+  brush?: "zoom" | "select" | null;
 }
 
 export interface Annotation {

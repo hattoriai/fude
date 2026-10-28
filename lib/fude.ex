@@ -26,6 +26,9 @@ defmodule Fude do
     * `:height` - the height of the plot in pixels.
     * `:data` - the name of the chart's data in its spec, `"data"` when
       not given (see `Fude.Spec`).
+    * `:brush` - what dragging across the x axis does: `:zoom` (the chart
+      zooms to the range in place), `:select` (the range goes to the
+      server, see `Fude.Live.brush_range/1`) or `false` (the default).
 
   A chart is plain data: `Fude.Spec.dump/1` gives a map to save, and
   `Fude.Spec.load/1` takes it back.
