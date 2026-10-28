@@ -163,9 +163,10 @@ test.describe("the gallery", () => {
     await openPage(page);
     const svg = page.locator("#throughput svg.fude-axes:not(.fude-grid)");
     // Each point's value, in its format and suffix: the greatest above, the least below.
-    const high = (await svg.locator("text", { hasText: /^618\.6\sMB\/s$/ }).boundingBox())!;
-    const low = (await svg.locator("text", { hasText: /^25\.6\sMB\/s$/ }).boundingBox())!;
-    expect(low.y).toBeGreaterThan(high.y + 20);
+    // By their places in the plot (WebKit's boxes of SVG text are not theirs).
+    const high = Number(await svg.locator("text", { hasText: /^618\.6\sMB\/s$/ }).getAttribute("y"));
+    const low = Number(await svg.locator("text", { hasText: /^25\.6\sMB\/s$/ }).getAttribute("y"));
+    expect(low).toBeGreaterThan(high + 20);
     // The ticks of the log scale are round: decimal bytes.
     await expect(svg.locator("text", { hasText: /^1\sGB\/s$/ })).toHaveCount(1);
     // The column of text: its title, and one value for each category.
