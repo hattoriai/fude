@@ -61,6 +61,30 @@ defmodule Fude.ComponentsTest do
     assert LazyHTML.query(LazyHTML.from_fragment(html), "[data-fude-selected]") |> Enum.empty?()
   end
 
+  test "link names the charts that show a hover together; none leaves it out" do
+    assigns = %{chart: Fude.bar(@sales, x: :region, y: :revenue)}
+
+    html = rendered_to_string(~H|<.chart id="revenue" chart={@chart} link="regions" />|)
+    doc = LazyHTML.from_fragment(html)
+    assert Enum.count(LazyHTML.query(doc, ~s|figure#revenue[data-fude-link="regions"]|)) == 1
+
+    html = rendered_to_string(~H|<.chart id="revenue" chart={@chart} />|)
+    assert LazyHTML.query(LazyHTML.from_fragment(html), "[data-fude-link]") |> Enum.empty?()
+  end
+
+  test "each panel of small multiples is in the chart's link" do
+    rows = for r <- ["A", "B"], m <- 1..3, do: %{r: r, m: m, v: m * 2}
+    assigns = %{chart: rows |> Fude.line(x: :m, y: :v) |> Fude.facet(:r)}
+
+    html = rendered_to_string(~H|<.chart id="by-r" chart={@chart} link="months" />|)
+    doc = LazyHTML.from_fragment(html)
+
+    assert Enum.count(
+             LazyHTML.query(doc, ~s|.fude-panel[phx-hook="Fude"][data-fude-link="months"]|)
+           ) ==
+             2
+  end
+
   test "the data table keeps its open as the LiveView renders it again" do
     assigns = %{chart: Fude.bar(@sales, x: :region, y: :revenue)}
     html = rendered_to_string(~H|<.chart id="revenue" chart={@chart} />|)

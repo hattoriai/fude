@@ -83,6 +83,11 @@ defmodule Fude.Components do
     doc:
       "the marks that stand out, the others faded: values by channel, as `select` sends them (`%{\"x\" => \"North\"}`). A mark stands out when each value is its own. None, or no mark that has them, fades nothing"
 
+  attr :link, :string,
+    default: nil,
+    doc:
+      "a name that charts of the same x share: hovering a place of one (or moving to it with the keyboard) shows it on every chart of the same `link`, each with its crosshair and values, or its bars there; the tooltip only on the hovered chart. A time matches within the coarser of the two axes' units (a day is its month on a chart of months), a category by its name"
+
   attr :class, :any, default: nil, doc: "classes for the chart's element"
   attr :rest, :global
 
@@ -101,6 +106,7 @@ defmodule Fude.Components do
       data-issho-doc={@issho}
       data-fude-select={@select}
       data-fude-selected={@selected && @selected != %{} && JSON.encode!(@selected)}
+      data-fude-link={@link}
       aria-labelledby={@wire["title"] && "#{@id}-title"}
       phx-mounted={@swap && JS.ignore_attributes(["data-fude-data"])}
       {@rest}
@@ -138,7 +144,14 @@ defmodule Fude.Components do
           <.data_table heads={@heads} rows={@rows} />
         </div>
       </div>
-      <.panels :if={@errors == [] and @wire["facet"]} id={@id} wire={@wire} locale={@locale} height={@fixed_height} />
+      <.panels
+        :if={@errors == [] and @wire["facet"]}
+        id={@id}
+        wire={@wire}
+        locale={@locale}
+        height={@fixed_height}
+        link={@link}
+      />
       <%!-- Open is the person's: a render of the LiveView (its data, or the page
            around it) keeps it as they left it. --%>
       <details
@@ -179,9 +192,11 @@ defmodule Fude.Components do
   attr :wire, :map, required: true
   attr :locale, :string, default: nil
   attr :height, :integer, default: nil
+  attr :link, :string, default: nil
 
   # Small multiples: one legend for all, then a panel for each value, each
-  # a chart of its own on the shared scales.
+  # a chart of its own on the shared scales; each panel in the chart's
+  # link, so that hovering one shows the place on all.
   defp panels(assigns) do
     facet = assigns.wire["facet"]
     base = Map.drop(assigns.wire, ["facet", "title", "subtitle", "caption", "source", "frame"])
@@ -223,7 +238,14 @@ defmodule Fude.Components do
       </span>
     </div>
     <div class="fude-panels" style={@columns && "--fude-columns: #{@columns}"}>
-      <div :for={panel <- @panels} id={panel.id} class="fude-panel" phx-hook="Fude" data-fude={panel.config}>
+      <div
+        :for={panel <- @panels}
+        id={panel.id}
+        class="fude-panel"
+        phx-hook="Fude"
+        data-fude={panel.config}
+        data-fude-link={@link}
+      >
         <div class="fude-panel-title">{panel.title}</div>
         <div
           id={"#{panel.id}-plot"}

@@ -10,6 +10,7 @@ import { draw, easeOut, tween, type Datum, type DotShape, type Paint, type PathP
 import { loadMap, type LoadedMap } from "./maps";
 import { png, save, svgDocument, SvgContext } from "./export";
 import { categorical, dataValue, datumOf, fraction, matches, same, type Datum as PlaceDatum, type Place } from "./places";
+import { matching, publish, subscribe, type LinkMessage, type LinkValue } from "./link";
 import type { Config, Layer, Scale } from "./wire";
 
 export interface Transport {
@@ -28,6 +29,15 @@ interface Layout {
   /** The right axis: the y of the layers on it. */
   yRight?: Position;
   labels: { text: string; y: number; at: number; color: string }[];
+}
+
+// A linked chart's place shown here: the crosshair's x (lines, areas), and
+// the marks at it (bars).
+interface Linked {
+  cross: { k: string; px: number } | null;
+  keys: Set<string>;
+  /** The other marks, which fade; never a line or an area. */
+  faded: Set<string>;
 }
 
 type Hover =
@@ -60,6 +70,9 @@ export class Chart {
   private leaving: Shape[] = [];
   private frame = 0;
   private hover: Hover | null = null;
+  // Where a linked chart's hover is shown here (#14): the crosshair's x, or
+  // the marks at it, with no tooltip.
+  private linked: Linked | null = null;
   private highlight: number | null = null;
   private hidden = new Set<number>();
   private cursor = -1;
@@ -94,6 +107,7 @@ export class Chart {
     this.render(true);
     this.observe();
     this.share();
+    this.cleanups.push(subscribe((message) => this.follow(message)));
   }
 
   /** Takes the server's new render: draws again, moving the marks. */
@@ -113,6 +127,7 @@ export class Chart {
     this.config = JSON.parse(raw) as Config;
     this.locale = this.config.locale ?? undefined;
     this.hover = null;
+    this.linked = null;
     this.hideTip();
     if (this.plot) this.render(true);
   }
@@ -511,6 +526,7 @@ export class Chart {
 
   private paintOptions(): Paint {
     const hover = this.hover;
+    const linked = this.linked;
     const highlight = this.highlight;
     const chosen = this.selectedMarks();
     // How many marks stand out, for a page (and its tests) to read.
@@ -523,6 +539,7 @@ export class Chart {
       focus: (key, series) => {
         if (highlight !== null) return series === highlight ? 1 : 0.2;
         if (hover && hover.kind === "mark") return key === hover.key ? 1 : 0.55;
+        if (!hover && linked?.faded.has(key)) return 0.55;
         if (chosen && chosen.faded.has(key)) return 0.3;
         return 1;
       },
@@ -1848,6 +1865,83 @@ export class Chart {
     this.live.textContent = this.tipText();
   }
 
+  // -- Linked hover (#14) ----------------------------------------------------
+
+  /** Sends the x of the chart's own hover to the charts of its link: null when it leaves. */
+  private shareLink(hover: Hover | null): void {
+    const link = this.el.dataset.fudeLink;
+    if (!link) return;
+    publish({ link, from: this, at: hover ? this.linkValueOf(hover) : null });
+  }
+
+  // The x of a hover, in the data's terms: a crosshair's, or a mark's (not
+  // a horizontal bar's, whose x is its amount).
+  private linkValueOf(hover: Hover): LinkValue | null {
+    const layers = this.config.layers ?? [];
+    if (hover.kind === "mark") {
+      const layer = layers[hover.datum.layer];
+      if (!layer || layer.horizontal) return null;
+      return this.linkValue(layer, hover.datum.row);
+    }
+    for (const shape of this.shapes) {
+      if (shape.type !== "line" && shape.type !== "area") continue;
+      const point = shape.points.find((p) => p.k === hover.k);
+      const layer = layers[shape.layer];
+      if (point && layer) return this.linkValue(layer, point.row);
+    }
+    return null;
+  }
+
+  // A row's x as a link sends it: a time with its axis's unit, else its
+  // category's name or its number.
+  private linkValue(layer: Layer, row: number): LinkValue | null {
+    const scale = this.scalesOf(layer).x;
+    const raw = layer.columns.x?.[row];
+    if (!scale || raw === null || raw === undefined) return null;
+    const plain = categorical(scale) ? scale.domain?.[raw] : raw;
+    if (plain === null || plain === undefined) return null;
+    if ((scale.type === "time" || scale.time) && typeof plain === "number") return { time: plain, unit: scale.time ?? scale.unit ?? null };
+    return { value: typeof plain === "number" ? plain : String(plain) };
+  }
+
+  // Shows the place another chart of the link is at: a crosshair at the
+  // same x, or the marks there (a bar), with no tooltip; nothing when the
+  // chart does not have it, or when the pointer left.
+  private follow({ link, from, at }: LinkMessage): void {
+    if (from === this || !this.layout || link !== this.el.dataset.fudeLink) return;
+    let next: Linked | null = null;
+    if (at) {
+      const layers = this.config.layers ?? [];
+      let cross: Linked["cross"] = null;
+      if (this.crosshair()) {
+        const stops: { k: string; px: number; at: LinkValue | null }[] = [];
+        for (const shape of this.shapes) {
+          if (shape.type !== "line" && shape.type !== "area") continue;
+          const layer = layers[shape.layer];
+          for (const point of shape.points) if (layer) stops.push({ k: point.k, px: point.x, at: this.linkValue(layer, point.row) });
+        }
+        const found = matching(at, stops.map((stop) => stop.at));
+        if (found.length) cross = { k: stops[found[0]!]!.k, px: stops[found[0]!]!.px };
+      }
+      const marks = this.marks().filter((shape) => "datum" in shape && shape.datum);
+      const values = marks.map((shape) => {
+        const datum = (shape as { datum: Datum }).datum;
+        const layer = layers[datum.layer];
+        return layer && !layer.horizontal ? this.linkValue(layer, datum.row) : null;
+      });
+      const keys = new Set(matching(at, values).map((i) => marks[i]!.key));
+      const faded = new Set(keys.size ? marks.map((shape) => shape.key).filter((key) => !keys.has(key)) : []);
+      if (cross || keys.size) next = { cross, keys, faded };
+    }
+    if (this.hover || (next === null && this.linked === null)) return;
+    this.linked = next;
+    // What the link shows here, for a page (and its tests) to read.
+    if (next) this.stage.dataset.fudeLinked = next.cross ? next.cross.k : String(next.keys.size);
+    else delete this.stage.dataset.fudeLinked;
+    this.repaint();
+    this.renderCross();
+  }
+
   private move(cursor: number, count: number, key: string): number {
     if (key === "Home") return 0;
     if (key === "End") return count - 1;
@@ -1859,6 +1953,13 @@ export class Chart {
   private setHover(hover: Hover | null): void {
     const same = JSON.stringify(hover) === JSON.stringify(this.hover);
     this.hover = hover;
+    // The chart's own hover takes the place of a linked one, and goes to
+    // the charts of its link.
+    if (hover && this.linked) {
+      this.linked = null;
+      delete this.stage.dataset.fudeLinked;
+    }
+    if (!same) this.shareLink(hover);
     this.stage.classList.toggle("fude-selectable", Boolean(hover && this.selectEvent()));
     if (!hover && this.highlight !== null && document.activeElement !== this.stage) this.highlight = null;
     if (!same) this.repaint();
@@ -1867,19 +1968,40 @@ export class Chart {
     else this.hideTip();
   }
 
-  // The crosshair: a hairline at the x, and a dot on each line there.
+  // The crosshair: a hairline at the x, and a dot on each line there. A
+  // linked chart's (#14) has each line's value by its dot instead of a
+  // tooltip, which only the hovered chart shows.
   private renderCross(): void {
     const cross = this.svg.querySelector(".fude-cross");
     if (!cross || !this.layout) return;
     cross.replaceChildren();
+    const at = this.crossAt();
+    if (!at) return;
+    line(cross, Math.round(at.px) + 0.5, this.layout.top, Math.round(at.px) + 0.5, this.layout.bottom, this.theme.muted);
+    if (this.hover) return;
+    const layers = this.config.layers ?? [];
+    for (const shape of this.shapes) {
+      if (shape.type !== "line" && shape.type !== "area") continue;
+      const point = shape.points.find((p) => p.k === at.k);
+      const layer = layers[shape.layer];
+      if (!point || point.y === null || !layer) continue;
+      // Its own value, as the tooltip has it: not the top of its stack.
+      const value = layer.columns.y?.[point.row];
+      const right = point.x + 60 < this.layout.right;
+      text(cross, this.valueText(value, this.scalesOf(layer).y), point.x + (right ? 8 : -8), point.y - 8, { anchor: right ? "start" : "end", baseline: "alphabetic", fill: this.theme.text, halo: this.theme.surface, tabular: true });
+    }
+  }
+
+  // Where the crosshair is: the chart's own hover, or a linked chart's.
+  private crossAt(): { k: string; px: number } | null {
     const hover = this.hover;
-    if (!hover || hover.kind !== "x") return;
-    line(cross, Math.round(hover.px) + 0.5, this.layout.top, Math.round(hover.px) + 0.5, this.layout.bottom, this.theme.muted);
+    if (hover) return hover.kind === "x" ? hover : null;
+    return this.linked?.cross ?? null;
   }
 
   private paintHover(ctx: CanvasRenderingContext2D): void {
-    const hover = this.hover;
-    if (!hover || hover.kind !== "x") return;
+    const hover = this.crossAt();
+    if (!hover) return;
     for (const shape of this.shapes) {
       if (shape.type !== "line" && shape.type !== "area") continue;
       const point = shape.points.find((p) => p.k === hover.k);
