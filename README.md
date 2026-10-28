@@ -18,7 +18,8 @@ updates as the story calls for them.
 ![A line chart of monthly revenue by channel: Online highlighted in blue over the other channels in gray, a shaded holiday period, and a callout on the record month](media/revenue-lines.png)
 
 Fude includes bar, line, area, scatter, pie, donut, histogram, heatmap,
-waterfall, funnel and map charts, as well as sparklines and single-value
+waterfall, funnel, timeline, box plot, candlestick, treemap, radar,
+radial bar and map charts, as well as sparklines and single-value
 indicators. Charts have tooltips, keyboard navigation, screen reader
 descriptions and a data table. They can be themed, exported, and composed
 in layers or small multiples.

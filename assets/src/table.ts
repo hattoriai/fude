@@ -18,16 +18,23 @@ export function tableOf(config: Config): Table {
   const layer = config.layers?.[0];
   const scales = config.scales ?? {};
   if (!layer) return { heads: [], rows: [] };
+  // The columns a kind names (a box plot's quartiles, a timeline's start
+  // and end), with their heads; else the channels', by their titles.
+  const named = Array.isArray(layer.options?.table) ? (layer.options.table as [string, string, string | null][]) : null;
   const columns = (
-    [
-      ["x", "x"],
-      ["y", "y"],
-      ["color", "color"],
-      ["size", "size"],
-      ["value", null],
-    ] as [string, string | null][]
+    named
+      ? named.map(([name, , scale]) => [name, scale] as [string, string | null])
+      : ([
+          ["x", "x"],
+          ["y", "y"],
+          ["color", "color"],
+          ["size", "size"],
+          ["value", null],
+        ] as [string, string | null][])
   ).filter(([name]) => layer.columns[name] !== undefined);
-  const heads = columns.map(([name, scale]) => (name === "value" ? "Value" : (scales[scale!]?.title ?? name)));
+  const heads = named
+    ? named.filter(([name]) => layer.columns[name] !== undefined).map(([, head]) => head)
+    : columns.map(([name, scale]) => (name === "value" ? "Value" : (scales[scale!]?.title ?? name)));
   const rows: (string | null)[][] = [];
   for (let row = 0; row < Math.min(layer.n, MAX); row++) {
     rows.push(columns.map(([name, scale]) => cell(layer.columns[name]![row], scale ? scales[scale] : undefined)));

@@ -9,6 +9,25 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Six kinds of chart:
+  - `Fude.timeline/2`: a bar for each task from its start (`x`) to its
+    end (`x2`), on an axis of times or numbers; its tooltip gives the
+    span and how many days.
+  - `Fude.boxplot/2`: the server works out each category's quartiles,
+    median and whiskers (Tukey's 1.5 boxes) from the rows; the values
+    beyond them are points (`outliers: false` leaves them out).
+  - `Fude.candlestick/2`: `open`, `high`, `low` and `close` for each `x`,
+    green when it closed higher and red when lower.
+  - `Fude.treemap/2`: squarified tiles as large as their `value`, laid out
+    in the browser; a `color` keeps its tiles together.
+  - `Fude.radar/2`: a spoke for each category, a shape for each series.
+  - `Fude.radial_bar/2`: a ring for each category, its arc its value of
+    `max`.
+
+  Each has its tooltip, keyboard navigation, data table (a box plot's five
+  numbers and count, a timeline's start and end, a candle's four prices)
+  and a place in the gallery of `mix dev`.
+
 - A chart's long columns are sent packed (`Fude.Wire`): a time series'
   days as steps of a day from the first, numbers of a few decimals as
   whole steps; the browser unpacks them. A column is packed only when

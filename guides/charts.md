@@ -56,6 +56,12 @@ words (`placed_on` is "Placed on"), unless the channel has one.
 | `sparkline` | `x`, `y` | `curve`, `area`, `points` (`:last`, `:extremes`), `value` |
 | `choropleth` | `region`, `color`, `tooltip` | `map` |
 | `bubble_map` | `region`, `size`, `color`, `tooltip` | `map` |
+| `timeline` | `y` (the tasks), `x` (a start), `x2` (an end), `color`, `tooltip` | |
+| `boxplot` | `x`, `y` (the numbers of each category) | `outliers` |
+| `candlestick` | `x`, `open`, `high`, `low`, `close`, `tooltip` | |
+| `treemap` | `name`, `value`, `color`, `tooltip` | `labels` |
+| `radar` | `x` (the spokes), `y`, `color`, `tooltip` | |
+| `radial_bar` | `x`, `y` | `max`, `labels` |
 | `rule` | `x` or `y` | `label`, `dashed` |
 | `text` | `x`, `y`, `text` (with no `x`: a column beside `y`) | |
 | `number` | `value`, `spark` | `label`, `align` |
@@ -192,6 +198,64 @@ A sparkline's `area: true` fills under its line, fading to nothing;
 highest; `value: true` writes its last value at the end of its line, in
 `y`'s format. With no `height`, a sparkline fills the height of its box
 (a card), and is 48 pixels high in a box with none.
+
+## Timelines, box plots and candlesticks
+
+A timeline draws a bar for each task from its start to its end, on an axis
+of times (or of numbers: laps, minutes). Its tooltip gives the span and
+how many days it is; its table, each task with its start and its end.
+
+```elixir
+Fude.timeline(plan, y: :task, x: :start, x2: :finish, color: :team)
+```
+
+A box plot takes the rows as they are, and the server works out each
+category's numbers: its quartiles and median (interpolated, as R's and
+NumPy's default), its whiskers to the furthest values within 1.5 times
+the box (Tukey's), and the values beyond them, drawn as points
+(`outliers: false` leaves them out). The tooltip and the table give the
+five numbers and the count.
+
+```elixir
+Fude.boxplot(orders, x: :region, y: [field: :days, title: "Days to deliver"])
+```
+
+A candlestick has a candle for each `x`: a body from its open to its
+close, green when it closed higher and red when lower
+(`--fude-increase`, `--fude-decrease`), and a wick from its low to its
+high. Days are in time order; a day without its four prices is left out.
+
+```elixir
+Fude.candlestick(prices, x: :day, open: :open, high: :high, low: :low,
+  close: [field: :close, format: {:currency, "EUR"}])
+```
+
+## Treemaps, radars and radial bars
+
+A treemap's tiles are as large as their values, laid out in the browser
+at the plot's size, each as near to square as it can be. A `color` keeps
+its tiles together, with a legend; with none, the tiles are of one hue,
+lighter as they get smaller. The tiles that have room are named, with
+their values under them; the tooltip gives each tile's share.
+
+```elixir
+Fude.treemap(cities, name: :city, value: [field: :people, format: :compact], color: :country)
+```
+
+A radar has a spoke for each category of `x`, from zero at the center,
+and a shape for each `color`. Radial bars draw a ring for each category,
+its arc as long as its value of `max` (100 unless given, or the largest
+value when it is over 100), named with its value at its start.
+
+```elixir
+Fude.radar(scores, x: :measure, y: :score, color: :product)
+Fude.radial_bar(goals, x: :channel, y: [field: :done, suffix: "%"])
+```
+
+Both are harder to read than bars: a radar's shape changes with the
+order of its spokes, and an outer ring looks larger than an inner ring of
+the same value. Use them for a few series and few categories, with their
+values written; bars compare more exactly.
 
 ## Points joined in each category
 

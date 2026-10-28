@@ -8,6 +8,7 @@ import { compactFormatter, formatTime, formatter, labelFormatter, parseFormat, t
 import { position, windowBand, type Position } from "./scale";
 import { numberRangeLabel, ordered, sentValue, snapBins, snapNumbers, snapTimes, timeRangeLabel, timeUnit } from "./brush";
 import { draw, easeOut, tween, type ArcShape, type Datum, type DotShape, type Paint, type RectShape, type PathPoint, type PathShape, type Shape } from "./shapes";
+import { squarifyGroups } from "./treemap";
 import { loadMap, type LoadedMap } from "./maps";
 import { png, save, svgDocument, SvgContext } from "./export";
 import { categorical, dataValue, datumOf, fraction, matches, same, type Datum as PlaceDatum, type Place } from "./places";
@@ -1179,9 +1180,177 @@ export class Chart {
         case "rule":
           this.rules(layer, index, layout, shapes);
           break;
+        case "box":
+          this.boxes(layer, index, layout, shapes);
+          break;
+        case "tile":
+          this.tiles(layer, index, layout, shapes);
+          break;
+        case "radar":
+          this.radar(layer, index, layout, shapes);
+          break;
+        case "radial":
+          this.radials(layer, index, layout, shapes);
+          break;
       }
     });
     return shapes;
+  }
+
+  // The boxes of a box plot, or the candles of a candlestick chart: a body
+  // and a whisker at each category; a candle's color is its direction's.
+  private boxes(layer: Layer, index: number, layout: Layout, shapes: Shape[]): void {
+    const x = layout.x;
+    const y = layout.y;
+    if (!x || !y) return;
+    const scales = this.scalesOf(layer);
+    const c = layer.columns;
+    const w = Math.max(1, Math.min(x.bandwidth * 0.62, this.theme.barMax * 1.2));
+    for (let i = 0; i < layer.n; i++) {
+      const [xv, lo, b0, b1, hi] = [c.x?.[i], c.lo?.[i], c.b0?.[i], c.b1?.[i], c.hi?.[i]];
+      if (xv == null || lo == null || b0 == null || b1 == null || hi == null) continue;
+      const mid = c.mid?.[i];
+      const series = c.color?.[i] ?? null;
+      const color = c.color ? this.color(series) : this.color(null);
+      shapes.push({
+        type: "box",
+        key: `${index}:${this.keyOf(scales.x, xv)}`,
+        x: x.at(xv) + x.bandwidth / 2,
+        w,
+        lo: y.at(lo),
+        b0: y.at(b0),
+        mid: mid == null ? null : y.at(mid),
+        b1: y.at(b1),
+        hi: y.at(hi),
+        color,
+        // A box's whiskers in the text's quiet color; a candle's wick in its own.
+        ink: mid == null ? color : this.theme.secondary,
+        datum: { layer: index, row: i, series },
+      });
+    }
+  }
+
+  // The tiles of a treemap, laid out at the plot's size: those of a color
+  // together; with no color, one hue, lighter as the tiles get smaller.
+  private tiles(layer: Layer, index: number, layout: Layout, shapes: Shape[]): void {
+    const c = layer.columns;
+    const values = ((c.value ?? []) as (number | null)[]).map((v) => v ?? 0);
+    const groups = (c.color ?? values.map(() => null)) as (number | null)[];
+    const box = { x: layout.left, y: layout.top, w: layout.right - layout.left, h: layout.bottom - layout.top };
+    const tiles = squarifyGroups(values, c.color ? groups : values.map(() => 0), box);
+    const gap = this.theme.gap;
+    const scales = this.config.scales ?? {};
+    const sequential = scales.color?.type === "sequential";
+    tiles.forEach((tile, i) => {
+      const series = c.color?.[i] ?? null;
+      if (series !== null && !sequential && this.hidden.has(series)) return;
+      const color = c.color ? this.colorOf(layer, i) : mix(this.color(null), this.theme.surface, layer.n > 1 ? (0.55 * i) / (layer.n - 1) : 0);
+      const [w, h] = [Math.max(0, tile.w - gap), Math.max(0, tile.h - gap)];
+      const [x, y] = [tile.x + gap / 2, tile.y + gap / 2];
+      shapes.push({
+        type: "rect",
+        key: `${index}:${this.keyOf(scales.name, c.name?.[i])}`,
+        x,
+        y,
+        w,
+        h,
+        color,
+        round: "none",
+        from: { x: x + w / 2, y: y + h / 2, w: 0, h: 0 },
+        datum: { layer: index, row: i, series: sequential ? null : series },
+      });
+    });
+  }
+
+  // A radar's frame: its center, its radius (room left around it for the
+  // spokes' names), the angle of each spoke from the top, and its value
+  // axis along a spoke.
+  private radarFrame(layer: Layer, layout: Layout): { cx: number; cy: number; r: number; angles: number[]; axis: Position } | null {
+    const scales = this.scalesOf(layer);
+    const xs = scales.x;
+    const ys = scales.y;
+    if (!xs || !ys) return null;
+    const names = (xs.domain ?? []).map((value, i) => this.bandLabel(xs, value, i));
+    const widest = Math.max(0, ...names.map((name) => this.measure(name)));
+    const r = Math.max(30, Math.min((layout.right - layout.left) / 2 - widest - 14, (layout.bottom - layout.top) / 2 - 22));
+    const n = Math.max(1, names.length);
+    const angles = names.map((_, i) => -Math.PI / 2 + (i / n) * Math.PI * 2);
+    return { cx: (layout.left + layout.right) / 2, cy: (layout.top + layout.bottom) / 2, r, angles, axis: position(ys, [0, r], 30) };
+  }
+
+  // A radar: for each series, a shape through its values on the spokes,
+  // and a point at each value.
+  private radar(layer: Layer, index: number, layout: Layout, shapes: Shape[]): void {
+    const frame = this.radarFrame(layer, layout);
+    if (!frame) return;
+    const { cx, cy, angles, axis } = frame;
+    const c = layer.columns;
+    const scales = this.scalesOf(layer);
+    const series = new Map<number | null, number[]>();
+    for (let i = 0; i < layer.n; i++) {
+      const s = c.color?.[i] ?? null;
+      if (s !== null && this.hidden.has(s)) continue;
+      if (c.x?.[i] == null || c.y?.[i] == null) continue;
+      if (!series.has(s)) series.set(s, []);
+      series.get(s)!.push(i);
+    }
+    const dots: DotShape[] = [];
+    for (const [s, rows] of series) {
+      rows.sort((a, b) => c.x![a]! - c.x![b]!);
+      const color = this.color(s);
+      const points = rows.map((i) => {
+        const a = angles[c.x![i]!] ?? 0;
+        const r = Math.max(0, axis.at(c.y![i]!));
+        const point = { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r };
+        dots.push({ type: "dot", key: `${index}:${this.keyOf(scales.x, c.x![i])}|${this.keyOf(scales.color, s)}`, ...point, r: 3.5, color, ring: true, datum: { layer: index, row: i, series: s } });
+        return point;
+      });
+      shapes.push({ type: "poly", key: `${index}:shape|${this.keyOf(scales.color, s)}`, cx, cy, points, color, series: s });
+    }
+    shapes.push(...dots);
+  }
+
+  // Radial bars: a ring for each category, from the outside in, its arc
+  // its value's share of the max, clockwise from the top.
+  private radials(layer: Layer, index: number, layout: Layout, shapes: Shape[]): void {
+    const ring = this.radialFrame(layer, layout);
+    if (!ring) return;
+    const c = layer.columns;
+    const scales = this.scalesOf(layer);
+    for (let i = 0; i < layer.n; i++) {
+      const xv = c.x?.[i];
+      if (xv == null) continue;
+      const { r0, r1 } = ring.at(xv);
+      shapes.push({
+        type: "arc",
+        key: `${index}:${this.keyOf(scales.x, xv)}`,
+        cx: ring.cx,
+        cy: ring.cy,
+        r0,
+        r1,
+        a0: 0,
+        a1: c.a1?.[i] ?? 0,
+        color: this.color(xv),
+        datum: { layer: index, row: i, series: xv },
+      });
+    }
+  }
+
+  // Where the rings of radial bars are: around the center, the first
+  // category outside, with a hole in the middle.
+  private radialFrame(layer: Layer, layout: Layout): { cx: number; cy: number; at: (xv: number) => { r0: number; r1: number } } | null {
+    const xs = this.scalesOf(layer).x;
+    const n = xs?.domain?.length ?? 0;
+    if (!n) return null;
+    const outer = Math.max(20, Math.min(layout.right - layout.left, layout.bottom - layout.top) / 2 - 4);
+    const inner = outer * 0.28;
+    const step = (outer - inner) / n;
+    const thickness = Math.min(step * 0.72, 28);
+    return {
+      cx: (layout.left + layout.right) / 2,
+      cy: (layout.top + layout.bottom) / 2,
+      at: (xv) => ({ r0: outer - step * xv - thickness, r1: outer - step * xv }),
+    };
   }
 
   /** The color of an axis's title: its layers' when they have no color channel, else the secondary text's. */
@@ -1266,7 +1435,7 @@ export class Chart {
       let p1 = val.at(v1);
       const positive = v1 >= v0;
       // The surface gap between stacked segments: at the inner end.
-      if (layer.stack && layer.stack !== "waterfall" && layer.stack !== "center" && v0 !== 0) {
+      if (layer.stack && layer.stack !== "waterfall" && layer.stack !== "center" && layer.stack !== "range" && v0 !== 0) {
         if (horizontal) p0 += positive ? gap : -gap;
         else p0 += positive ? -gap : gap;
       }
@@ -1274,15 +1443,17 @@ export class Chart {
       const end = outer.get(k);
       const isOuter = !layer.stack || !end || (positive ? v1 >= end.max : v1 <= end.min);
       const round =
-        layer.stack === "center" ? "all" : !isOuter ? "none" : horizontal ? (positive ? "right" : "left") : positive ? "top" : "bottom";
+        layer.stack === "center" || layer.stack === "range" ? "all" : !isOuter ? "none" : horizontal ? (positive ? "right" : "left") : positive ? "top" : "bottom";
       const key = `${index}:${this.keyOf(catScale, catCol[i])}|${this.keyOf(scales.color, series)}`;
       const datum = { layer: index, row: i, series };
       let color = this.colorOf(layer, i);
       // A funnel in steps: each stage lighter than the one before.
       if (layer.options.step === true && !colors && layer.n > 1) color = mix(color, this.theme.surface, (0.62 * i) / (layer.n - 1));
+      // A bar of a range (a timeline's) grows from its start, not from zero.
+      const grow = layer.stack === "range" ? Math.min(p0, p1) : base;
       if (horizontal) {
         const x = Math.min(p0, p1);
-        shapes.push({ type: "rect", key, x, y: lo, w: Math.abs(p1 - p0), h: thickness, color, round, from: { x: base, y: lo, w: 0, h: thickness }, datum });
+        shapes.push({ type: "rect", key, x, y: lo, w: Math.abs(p1 - p0), h: thickness, color, round, from: { x: grow, y: lo, w: 0, h: thickness }, datum });
       } else {
         const y = Math.min(p0, p1);
         shapes.push({ type: "rect", key, x: lo, y, w: thickness, h: Math.abs(p1 - p0), color, round, from: { x: lo, y: base, w: thickness, h: 0 }, datum });
@@ -1390,7 +1561,7 @@ export class Chart {
       const yv = c.y?.[i];
       if (xv == null || yv == null) continue;
       const sv = c.size?.[i];
-      const r = sv == null || s1 === s0 ? 4 : 3 + Math.sqrt(Math.max(0, (sv - s0) / (s1 - s0))) * 17;
+      const r = layer.options.outliers === true ? 2.5 : sv == null || s1 === s0 ? 4 : 3 + Math.sqrt(Math.max(0, (sv - s0) / (s1 - s0))) * 17;
       const px = x.kind === "band" ? x.at(xv) + x.bandwidth / 2 : x.at(xv);
       const py = y.kind === "band" ? y.at(yv) + y.bandwidth / 2 : y.at(yv);
       dots.push({ type: "dot", key: `${index}:${i}`, x: px, y: py, r, color: this.colorOf(layer, i), ring, datum: { layer: index, row: i, series } });
@@ -1620,6 +1791,7 @@ export class Chart {
     }
 
     this.renderSliceLabels(svg);
+    this.renderFrames(svg, grid);
     if (!axes) return;
 
     // The frame of a sequence of renders (a race of bars): its label, large,
@@ -1873,6 +2045,88 @@ export class Chart {
     const cross = document.createElementNS(SVG, "g");
     cross.setAttribute("class", "fude-cross");
     svg.append(cross);
+  }
+
+  // The words and grids of the kinds that draw their own frame: a radar's
+  // rings and spokes, the names of radial bars' rings, a treemap's tiles.
+  private renderFrames(svg: SVGSVGElement, grid: SVGSVGElement): void {
+    const layout = this.layout;
+    if (!layout) return;
+    const theme = this.theme;
+    (this.config.layers ?? []).forEach((layer, index) => {
+      if (layer.mark === "radar") {
+        const frame = this.radarFrame(layer, layout);
+        const xs = this.scalesOf(layer).x;
+        const ys = this.scalesOf(layer).y;
+        if (!frame || !xs || !ys) return;
+        const { cx, cy, angles, axis } = frame;
+        const ring = (r: number) => angles.map((a) => `${cx + Math.cos(a) * r},${cy + Math.sin(a) * r}`).join(" ");
+        const format = this.valueTickFormat(ys, axis);
+        axis.ticks.forEach((tick, i) => {
+          const r = axis.at(tick);
+          if (r <= 0) return;
+          const polygon = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+          polygon.setAttribute("points", ring(r));
+          polygon.setAttribute("fill", "none");
+          polygon.setAttribute("stroke", theme.grid);
+          grid.append(polygon);
+          text(svg, format(tick, i, axis.ticks), cx + 4, cy - r, { anchor: "start", baseline: "middle", fill: theme.muted, tabular: true, size: 11 });
+        });
+        const outer = axis.at(axis.ticks[axis.ticks.length - 1] ?? 0) || frame.r;
+        angles.forEach((a, i) => {
+          line(grid, cx, cy, cx + Math.cos(a) * outer, cy + Math.sin(a) * outer, theme.grid);
+          const cos = Math.cos(a);
+          const anchor = Math.abs(cos) < 0.2 ? "middle" : cos > 0 ? "start" : "end";
+          const x = cx + cos * (outer + 8);
+          const y = cy + Math.sin(a) * (outer + 8) + (Math.abs(cos) < 0.2 ? Math.sign(Math.sin(a)) * 6 : 0);
+          text(svg, this.bandLabel(xs, xs.domain?.[i], i), x, y, { anchor, baseline: "middle", fill: theme.secondary, key: `x:${xs.domain?.[i]}` });
+        });
+      } else if (layer.mark === "radial") {
+        const frame = this.radialFrame(layer, layout);
+        const xs = this.scalesOf(layer).x;
+        const ys = this.scalesOf(layer).y;
+        if (!frame || !xs) return;
+        const write = labelFormatter(ys?.format, (layer.columns.y ?? []) as number[], this.locale);
+        (xs.domain ?? []).forEach((value, xv) => {
+          const { r0, r1 } = frame.at(xv);
+          // The ring's track: the whole circle, faint, under its arc.
+          const track = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          track.setAttribute("cx", String(frame.cx));
+          track.setAttribute("cy", String(frame.cy));
+          track.setAttribute("r", String((r0 + r1) / 2));
+          track.setAttribute("fill", "none");
+          track.setAttribute("stroke", theme.grid);
+          track.setAttribute("stroke-width", String(r1 - r0));
+          grid.append(track);
+          if (this.labelMode(layer) === "none") return;
+          const row = (layer.columns.x ?? []).indexOf(xv);
+          const v = row >= 0 ? layer.columns.y?.[row] : null;
+          const words = v == null ? this.bandLabel(xs, value, xv) : `${this.bandLabel(xs, value, xv)} ${write(v)}`;
+          text(svg, words, frame.cx - 6, frame.cy - (r0 + r1) / 2, { anchor: "end", baseline: "middle", fill: theme.secondary, tabular: true, key: `x:${value}` });
+        });
+      } else if (layer.mark === "tile") {
+        if (this.labelMode(layer) === "none") return;
+        const scales = this.config.scales ?? {};
+        const c = layer.columns;
+        const values = (c.value ?? []) as number[];
+        const write = labelFormatter(layer.options.format as string | undefined, values, this.locale);
+        for (const shape of this.shapes) {
+          if (shape.type !== "rect" || shape.datum.layer !== index) continue;
+          const row = shape.datum.row;
+          const name = this.valueText(c.name?.[row], scales.name);
+          const value = write(values[row] ?? 0);
+          const fill = onColor(shape.color);
+          // A tile's name, and its value under it, where they fit; `labels: true` writes the name of every tile that has room for a line.
+          const room = (words: string) => this.measure(words) + 12 <= shape.w;
+          if (shape.h >= 38 && room(name) && room(value)) {
+            text(svg, name, shape.x + 6, shape.y + 14, { anchor: "start", baseline: "middle", fill, key: `v:${shape.key}` });
+            text(svg, value, shape.x + 6, shape.y + 30, { anchor: "start", baseline: "middle", fill, tabular: true, weight: 600, key: `v:${shape.key}:value` });
+          } else if (shape.h >= 20 && room(name)) {
+            text(svg, name, shape.x + 6, shape.y + 12, { anchor: "start", baseline: "middle", fill, key: `v:${shape.key}` });
+          }
+        }
+      }
+    });
   }
 
   // The labels of pies and donuts, and a donut's total in its hole.
@@ -2141,7 +2395,7 @@ export class Chart {
 
   private marks(): Shape[] {
     return this.shapes
-      .filter((shape) => shape.type === "rect" || shape.type === "dot" || shape.type === "arc" || (shape.type === "region" && shape.datum !== null))
+      .filter((shape) => shape.type === "rect" || shape.type === "dot" || shape.type === "arc" || shape.type === "box" || (shape.type === "region" && shape.datum !== null))
       .filter((shape) => !shape.key.endsWith(":end"))
       .filter((shape) => !this.zoom || shape.type === "region" || this.inPlot(this.anchor(shape).px));
   }
@@ -2186,6 +2440,17 @@ export class Chart {
       if (shape.type === "rect") {
         const slack = 3;
         if (px >= shape.x - slack && px <= shape.x + shape.w + slack && py >= shape.y - slack && py <= shape.y + shape.h + slack) return shape;
+      } else if (shape.type === "box") {
+        // The box or candle nearest across, within a few pixels of it: a
+        // thin candle is as easy to point at as a wide box.
+        const d = Math.abs(shape.x - px) - shape.w / 2;
+        const top = Math.min(shape.hi, shape.lo) - 12;
+        const bottom = Math.max(shape.hi, shape.lo) + 12;
+        if (d <= 0 && py >= top && py <= bottom) return shape;
+        if (d < 6 && d < bestDistance) {
+          bestDistance = d;
+          best = shape;
+        }
       } else if (shape.type === "dot") {
         const d = Math.hypot(shape.x - px, shape.y - py) - shape.r;
         if (d < bestDistance) {
@@ -2218,6 +2483,8 @@ export class Chart {
         return { px: shape.center[0], py: shape.center[1] };
       case "rect":
         return { px: shape.x + shape.w / 2, py: shape.y };
+      case "box":
+        return { px: shape.x, py: Math.min(shape.hi, shape.lo) };
       case "dot":
         return { px: shape.x, py: shape.y - shape.r };
       case "arc": {
@@ -2290,6 +2557,8 @@ export class Chart {
     switch (shape.type) {
       case "rect":
         return new DOMRect(stage.left + shape.x, stage.top + shape.y, shape.w, shape.h);
+      case "box":
+        return new DOMRect(stage.left + shape.x - shape.w / 2, stage.top + Math.min(shape.hi, shape.lo), shape.w, Math.abs(shape.lo - shape.hi));
       case "dot":
         return new DOMRect(stage.left + shape.x - shape.r, stage.top + shape.y - shape.r, shape.r * 2, shape.r * 2);
       case "arc":
@@ -2889,7 +3158,7 @@ export class Chart {
   // rank among its series, and, on a hovered mark, its series' history.
   private extras(layer: Layer, row: number, hovered: boolean, color: string | null): TipRow[] {
     const marks = this.marksOf(layer);
-    if (!marks || layer.options.funnel === true || layer.stack === "waterfall") return [];
+    if (!marks || layer.options.funnel === true || layer.stack === "waterfall" || layer.stack === "range") return [];
     const tips = layer.tips ?? {};
     const stacked = layer.stack === "zero" || layer.stack === "normalize";
     const { cat, val, group, catScale } = marks;
@@ -3019,6 +3288,8 @@ export class Chart {
         ];
         // A waterfall's step: its change, and the total after it.
         if (layer.stack === "waterfall" && c.y1) rows.push({ value: this.valueText(c.y1[row], valueScale), name: "Total", color: null });
+        // A timeline's bar: from its start to its end, and how long.
+        if (layer.stack === "range") return { title, rows: this.rangeRows(layer, row, color, series) };
         if (layer.options.funnel === true && c.share && row > 0) rows.push({ value: formatter("percent", this.locale)(c.share[row] ?? 0), name: "of the first", color: null });
         return { title, rows };
       }
@@ -3036,6 +3307,52 @@ export class Chart {
         if (c.color) rows.push({ value: this.valueText(c.color[row], scales.color), name: scales.color?.title ?? "", color });
         return { title: this.names.get(hover.key) ?? this.valueText(c.region?.[row], scales.region), rows };
       }
+      case "box": {
+        const ys = ls.y;
+        const title = this.valueText(c.x?.[row], ls.x);
+        const value = (column: string) => this.valueText(c[column]?.[row], ys);
+        // A candle: its four prices; a box: its median, its quartiles and its whiskers.
+        if (c.mid?.[row] == null) {
+          const names = (layer.options.table as string[][] | undefined) ?? [];
+          const name = (column: string, fallback: string) => names.find((head) => head[0] === column)?.[1] ?? fallback;
+          return {
+            title,
+            rows: [
+              { value: value("b0"), name: name("b0", "Open"), color: null },
+              { value: value("hi"), name: name("hi", "High"), color: null },
+              { value: value("lo"), name: name("lo", "Low"), color: null },
+              { value: value("b1"), name: name("b1", "Close"), color, at: { layer: li, row } },
+            ],
+          };
+        }
+        const rows: TipRow[] = [
+          { value: value("mid"), name: "Median", color, at: { layer: li, row } },
+          { value: `${value("b0")}–${value("b1")}`, name: "Middle half", color: null },
+          { value: `${value("lo")}–${value("hi")}`, name: "Whiskers", color: null },
+        ];
+        if (c.n?.[row] != null) rows.push({ value: formatter(null, this.locale)(c.n[row]!), name: "Count", color: null });
+        return { title, rows };
+      }
+      case "tile": {
+        const values = (c.value ?? []) as (number | null)[];
+        const total = values.reduce<number>((sum, v) => sum + (v ?? 0), 0);
+        const v = values[row] ?? 0;
+        const write = formatter(layer.options.format as string | undefined, this.locale);
+        const rows: TipRow[] = [{ value: `${write(v)} · ${formatter("percent", this.locale)(total ? v / total : 0)}`, name: "", color }];
+        if (c.color && scales.color) rows.push({ value: this.valueText(c.color[row], scales.color), name: scales.color.title ?? "", color: null });
+        return { title: this.valueText(c.name?.[row], scales.name), rows };
+      }
+      case "radial": {
+        const ys = ls.y;
+        const max = ys?.domain?.[1] as number | undefined;
+        const v = c.y?.[row];
+        const of = max !== undefined && v != null && max !== 100 ? ` of ${this.valueText(max, ys)}` : "";
+        return { title: this.valueText(c.x?.[row], ls.x), rows: [{ value: `${this.valueText(v, ys)}${of}`, name: ys?.title ?? "", color }] };
+      }
+      case "radar": {
+        const title = c.color && scales.color?.type === "ordinal" ? this.valueText(series, scales.color) : "";
+        return { title, rows: [{ value: this.valueText(c.y?.[row], ls.y), name: this.valueText(c.x?.[row], ls.x), color }] };
+      }
       case "rect":
         return {
           title: `${this.valueText(c.x?.[row], scales.x)} · ${this.valueText(c.y?.[row], ls.y)}`,
@@ -3052,6 +3369,23 @@ export class Chart {
         return { title, rows };
       }
     }
+  }
+
+  // A bar of a timeline in its tooltip: its span ("3 – 17 Mar 2026"), its
+  // series, and how long it is.
+  private rangeRows(layer: Layer, row: number, color: string, series: number | null): TipRow[] {
+    const c = layer.columns;
+    const scale = this.scalesOf(layer).x;
+    const from = (layer.horizontal ? c.x0 : c.y0)?.[row];
+    const to = (layer.horizontal ? c.x1 : c.y1)?.[row];
+    if (from == null || to == null || !scale) return [];
+    const name = series === null ? "" : this.valueText(series, this.config.scales?.color);
+    if (scale.type !== "time") return [{ value: numberRangeLabel(from, to, scale.format, this.locale), name, color, at: { layer: this.config.layers!.indexOf(layer), row } }];
+    const unit = timeUnit(scale.unit);
+    const rows: TipRow[] = [{ value: timeRangeLabel(from, to, unit, this.locale), name, color, at: { layer: this.config.layers!.indexOf(layer), row } }];
+    const days = (to - from) / 86_400_000;
+    if (days >= 1) rows.push({ value: `${formatter(null, this.locale)(Math.round(days * 10) / 10)} ${days === 1 ? "day" : "days"}`, name: "", color: null, sub: true });
+    return rows;
   }
 
   private tipText(): string {

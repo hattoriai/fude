@@ -394,6 +394,55 @@ test.describe("the gallery", () => {
   });
 });
 
+test.describe("the kinds: timeline, box plot, candlestick, treemap, radar, radial bars", () => {
+  test("a timeline's bar gives its span and how long it is", async ({ page }) => {
+    await openPage(page);
+    await pointAt(page, "plan", 0.45, 0.5);
+    const tip = await tooltip(page, "plan");
+    expect(tip).toContain("Web app");
+    // Some versions of ICU put thin spaces around the dash of a range.
+    expect(tip).toMatch(/28 Mar\s–\s29 Apr 2026/);
+    expect(tip).toContain("32 days");
+  });
+
+  test("a box gives its median, its middle half, its whiskers and its count; the keyboard reads each", async ({ page }) => {
+    await openPage(page);
+    await stage(page, "deliveries").focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator("#deliveries .fude-live")).toContainText("North. Median: 3.75");
+    await pointAt(page, "deliveries", 0.68, 0.72);
+    const tip = await tooltip(page, "deliveries");
+    expect(tip).toMatch(/^West/);
+    expect(tip).toContain("Median");
+    expect(tip).toContain("Whiskers");
+  });
+
+  test("a thin candle is easy to point at, and gives its four prices", async ({ page }) => {
+    await openPage(page);
+    await pointAt(page, "prices", 0.5, 0.35);
+    const tip = await tooltip(page, "prices");
+    for (const word of ["Open", "High", "Low", "Close", "€"]) expect(tip).toContain(word);
+  });
+
+  test("a treemap names its largest tiles, and a tile gives its share", async ({ page }) => {
+    await openPage(page);
+    await expect(page.locator("#cities svg text", { hasText: /^Madrid$/ })).toHaveCount(1);
+    await expect(page.locator("#cities svg text", { hasText: /^3\.3M$|^3\.3m$/ })).toHaveCount(1);
+    await pointAt(page, "cities", 0.1, 0.3);
+    expect(await tooltip(page, "cities")).toMatch(/Madrid.*%/);
+  });
+
+  test("a radar names its spokes; a ring of radial bars its category and value", async ({ page }) => {
+    await openPage(page);
+    for (const spoke of ["Speed", "Size", "Kinds", "Interaction", "Accessibility", "Export"]) {
+      await expect(page.locator("#scores svg text", { hasText: new RegExp(`^${spoke}$`) })).toHaveCount(1);
+    }
+    await expect(page.locator("#goals svg text", { hasText: /^Online 86%$/ })).toHaveCount(1);
+    await pointAt(page, "goals", 0.5, 0.06);
+    expect(await tooltip(page, "goals")).toContain("Online");
+  });
+});
+
 test.describe("the newsroom", () => {
   test("draws every kind as a newsroom would publish it, with no error", async ({ page }) => {
     const errors: string[] = [];

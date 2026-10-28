@@ -2,7 +2,7 @@
 // domains, and each layer's mark with its columns. A category is its
 // index in its scale's domain; a time is milliseconds since 1970 (UTC).
 
-export type MarkType = "bar" | "line" | "area" | "point" | "arc" | "rect" | "rule" | "text" | "region" | "bubble";
+export type MarkType = "bar" | "line" | "area" | "point" | "arc" | "rect" | "rule" | "text" | "region" | "bubble" | "box" | "tile" | "radar" | "radial";
 
 export interface Scale {
   type: "band" | "point" | "linear" | "log" | "sqrt" | "time" | "ordinal" | "sequential";
@@ -32,7 +32,8 @@ export interface Layer {
   /** "right" for a layer on the right axis, of the scale "yRight". */
   axis?: "right" | null;
   horizontal: boolean;
-  stack: "zero" | "normalize" | "center" | "waterfall" | null;
+  /** How bars stack: "range" for bars that float from a start to an end (a timeline's). */
+  stack: "zero" | "normalize" | "center" | "waterfall" | "range" | null;
   options: Record<string, unknown>;
   /** The fields of the tooltip beyond the channels: a value for each row; a time in milliseconds, with its unit ("" for a time of a day). */
   tooltip: { title: string | null; format: string | null; time?: string | null; values?: (number | string | boolean | null)[] }[];
