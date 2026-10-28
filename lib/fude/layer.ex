@@ -34,6 +34,7 @@ defmodule Fude.Layer do
           | :treemap
           | :radar
           | :radial_bar
+          | :parliament
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -56,7 +57,7 @@ defmodule Fude.Layer do
     bar: %{
       channels: [:x, :y, :color, :opacity, :tooltip, :detail],
       needs: [:x, :y],
-      options: [horizontal: :boolean, labels: :boolean]
+      options: [horizontal: :boolean, labels: {:in, [true, false, :series]}]
     },
     line: %{
       channels: [:x, :y, :color, :opacity, :tooltip, :detail],
@@ -95,7 +96,7 @@ defmodule Fude.Layer do
     },
     heatmap: %{channels: [:x, :y, :color, :tooltip], needs: [:x, :y], options: [labels: :boolean]},
     rule: %{channels: [:x, :y, :color], needs: [], options: [label: :string, dashed: :boolean]},
-    text: %{channels: [:x, :y, :text, :color], needs: [:text], options: []},
+    text: %{channels: [:x, :y, :text, :color], needs: [:text], options: [change: :boolean]},
     sparkline: %{
       channels: [:x, :y],
       needs: [:x, :y],
@@ -137,7 +138,7 @@ defmodule Fude.Layer do
       options: [label: :string, min: :number, max: :number, target: :number, align: @align]
     },
     choropleth: %{
-      channels: [:region, :color, :tooltip],
+      channels: [:region, :color, :shade, :tooltip],
       needs: [:region, :color],
       options: [map: :string]
     },
@@ -167,6 +168,11 @@ defmodule Fude.Layer do
       channels: [:x, :y, :tooltip],
       needs: [:x, :y],
       options: [max: :number, labels: :boolean]
+    },
+    parliament: %{
+      channels: [:color, :value, :tooltip],
+      needs: [:color, :value],
+      options: [majority: :whole]
     }
   }
 
@@ -272,6 +278,7 @@ defmodule Fude.Layer do
   def check_option(:number, value), do: is_number(value)
   def check_option(:count, value), do: is_integer(value) and value > 0 and value <= 500
   def check_option(:ratio, value), do: is_number(value) and value >= 0 and value < 1
+  def check_option(:whole, value), do: is_integer(value) and value > 0
   def check_option({:in, values}, value), do: value in values
 
   defp option!(kind, key, check, value) do
@@ -289,6 +296,7 @@ defmodule Fude.Layer do
   def describe(:number), do: "a number"
   def describe(:count), do: "a whole number from 1 to 500"
   def describe(:ratio), do: "a number from 0 up to 1"
+  def describe(:whole), do: "a whole number above 0"
   def describe({:in, values}), do: "one of " <> Enum.map_join(values, ", ", &inspect/1)
 
   defp unknown(kind, key, spec) do

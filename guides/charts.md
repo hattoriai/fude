@@ -43,7 +43,7 @@ words (`placed_on` is "Placed on"), unless the channel has one.
 
 | Kind | Channels | Options |
 | --- | --- | --- |
-| `bar` | `x`, `y`, `color`, `tooltip` | `horizontal`, `labels` |
+| `bar` | `x`, `y`, `color`, `tooltip` | `horizontal`, `labels` (`true`, `false`, `:series`) |
 | `line` | `x`, `y`, `color`, `tooltip` | `curve` (`:linear`, `:monotone`, `:step`), `points` |
 | `area` | `x`, `y`, `color`, `tooltip` | `curve` |
 | `scatter` | `x`, `y`, `color`, `size`, `tooltip` | `connect`, `labels` |
@@ -54,7 +54,7 @@ words (`placed_on` is "Placed on"), unless the channel has one.
 | `waterfall` | `x`, `y`, `tooltip` | `start` (a first total), `total` (the name of the end) |
 | `funnel` | `x` (the stages), `y`, `color`, `tooltip` | `step`, `labels` (`:outside`, `:inside`, `false`) |
 | `sparkline` | `x`, `y` | `curve`, `area`, `points` (`:last`, `:extremes`), `value` |
-| `choropleth` | `region`, `color`, `tooltip` | `map` |
+| `choropleth` | `region`, `color`, `shade`, `tooltip` | `map` |
 | `bubble_map` | `region`, `size`, `color`, `tooltip` | `map` |
 | `timeline` | `y` (the tasks), `x` (a start), `x2` (an end), `color`, `tooltip` | |
 | `boxplot` | `x`, `y` (the numbers of each category) | `outliers` |
@@ -62,8 +62,9 @@ words (`placed_on` is "Placed on"), unless the channel has one.
 | `treemap` | `name`, `value`, `color`, `tooltip` | `labels` |
 | `radar` | `x` (the spokes), `y`, `color`, `tooltip` | |
 | `radial_bar` | `x`, `y` | `max`, `labels` |
+| `parliament` | `color` (the parties), `value` (their seats), `tooltip` | `majority` |
 | `rule` | `x` or `y` | `label`, `dashed` |
-| `text` | `x`, `y`, `text` (with no `x`: a column beside `y`) | |
+| `text` | `x`, `y`, `text` (with no `x`: a column beside `y`) | `change` |
 | `number` | `value`, `spark` | `label`, `align` |
 | `trend` | `value`, `compare`, `spark` | `label`, `align` |
 | `gauge` | `value` | `label`, `min`, `max`, `target`, `align` |
@@ -256,6 +257,25 @@ Both are harder to read than bars: a radar's shape changes with the
 order of its spokes, and an outer ring looks larger than an inner ring of
 the same value. Use them for a few series and few categories, with their
 values written; bars compare more exactly.
+
+## Parliaments
+
+A parliament has a dot for each seat, in rows of half circles, and each
+party's seats are a wedge of the chamber: the parties in their order
+from left to right (the color's `sort`, or the data's), as they sit.
+`majority` draws a line across the chamber where a majority is reached,
+with its words; the total is in the middle. The tooltip gives a party's
+seats, its share, and how far it is from a majority; the keyboard goes
+from party to party.
+
+```elixir
+Fude.parliament(results, color: [field: :party, sort: ~w(Left Social Liberals Alliance Forward!)],
+  value: :seats, majority: 116)
+```
+
+The rows are as few as hold the seats, so that the dots are as large as
+they can be, and the seats are shared among the rows by their lengths, as
+Wikipedia's parliament diagrams have them.
 
 ## Points joined in each category
 

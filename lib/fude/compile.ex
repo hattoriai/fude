@@ -187,7 +187,7 @@ defmodule Fude.Compile do
 
   # The kinds that draw their own frame (a pie, a map, a radar's spokes),
   # with no axes.
-  @unframed [:pie, :donut, :choropleth, :bubble_map, :treemap, :radar, :radial_bar]
+  @unframed [:pie, :donut, :choropleth, :bubble_map, :treemap, :radar, :radial_bar, :parliament]
 
   defp arcs?(chart), do: Enum.all?(chart.layers, &(&1.kind in @unframed))
 
@@ -467,7 +467,8 @@ defmodule Fude.Compile do
            :bubble_map,
            :treemap,
            :radar,
-           :radial_bar
+           :radial_bar,
+           :parliament
          ],
          do: :sum
 
@@ -590,9 +591,9 @@ defmodule Fude.Compile do
   defp done(fun, values) when fun in [:median, :distinct], do: aggregate(fun, values)
   defp done(_fun, acc), do: acc
 
-  defp value_channels(kind) when kind in [:pie, :donut, :treemap], do: [:value]
+  defp value_channels(kind) when kind in [:pie, :donut, :treemap, :parliament], do: [:value]
   defp value_channels(:heatmap), do: [:color]
-  defp value_channels(:choropleth), do: [:color]
+  defp value_channels(:choropleth), do: [:color, :shade]
   defp value_channels(:bubble_map), do: [:size, :color]
   defp value_channels(_kind), do: [:y]
 
@@ -936,6 +937,32 @@ defmodule Fude.Compile do
     }
   end
 
+  # A parliament: each party's seats, a whole number, in the parties'
+  # order (the color's sort, or the data's); the browser lays out the
+  # chamber. The description says the seats and the majority.
+  defp marks(:parliament, layer, %{rows: rows}, data) do
+    %{color: color, value: value} = layer.channels
+
+    rows =
+      for row <- rows,
+          is_number(row[:value]) and row[:value] > 0 and not is_nil(row[:color]),
+          do: %{row | value: round(row.value)}
+
+    total = rows |> Enum.map(& &1.value) |> Enum.sum()
+    majority = layer.options[:majority]
+
+    %{
+      mark: "seats",
+      layer: layer,
+      rows: rows,
+      channels: %{},
+      scales: put_color(%{}, color, data, rows),
+      options:
+        %{majority: majority, total: total, format: format(value)}
+        |> Map.reject(fn {_key, v} -> is_nil(v) end)
+    }
+  end
+
   # A treemap: a tile for each name, as large as its value. The browser
   # lays the tiles out at the plot's size; a color keeps its tiles together.
   defp marks(:treemap, layer, %{rows: rows}, data) do
@@ -1036,7 +1063,10 @@ defmodule Fude.Compile do
     # Bars over time are in time order, as their axis is.
     rows = if x_type(x, data) == :time, do: Enum.sort_by(rows, &sort_key(&1[:x])), else: rows
 
-    stack = stack_mode(y, color, kind)
+    # A color of the bars' own categories (each party its color) colors
+    # each bar: no stack of one segment, and no legend of what the axis names.
+    own = own_colors?(x, color)
+    stack = if own, do: false, else: stack_mode(y, color, kind)
     {rows, y_extent} = stack(rows, :x, stack, series(rows, color))
 
     {rows, x_scale} =
@@ -1057,6 +1087,7 @@ defmodule Fude.Compile do
     y_scale = number(y, data, y_extent, zero: true, stack: stack)
     scales = %{position(:x, horizontal) => x_scale, position(:y, horizontal) => y_scale}
     scales = put_color(scales, color, data, rows)
+    scales = if own, do: update_in(scales, ["color"], &Map.put(&1, "legend", false)), else: scales
 
     %{
       mark: "bar",
@@ -1218,6 +1249,22 @@ defmodule Fude.Compile do
 
     scales = put_color(scales, layer.channels[:color], data, rows)
 
+    # A shade of the color by a number (a party's color, darker as its lead
+    # is larger).
+    scales =
+      case layer.channels[:shade] do
+        nil ->
+          scales
+
+        shade ->
+          Map.put(scales, "shade", %{
+            "type" => "linear",
+            "domain" => extent(rows, :shade) |> pair(),
+            "title" => Channel.title(shade),
+            "format" => format(shade)
+          })
+      end
+
     scales =
       case layer.channels[:size] do
         nil ->
@@ -1281,7 +1328,12 @@ defmodule Fude.Compile do
       channels: %{x: :x, y: :y},
       scales: scales,
       options:
-        %{column: column?, format: format(text), title: if(column?, do: Channel.title(text))}
+        %{
+          column: column?,
+          format: format(text),
+          title: if(column?, do: Channel.title(text)),
+          change: layer.options[:change]
+        }
         |> Map.reject(fn {_key, value} -> value in [nil, false] end)
     }
   end
@@ -1552,6 +1604,16 @@ defmodule Fude.Compile do
     Enum.sort_by(values, &Map.get(totals, &1, 0), order)
   end
 
+  # Whether a color is of the same field as the categories: a color for each bar.
+  defp own_colors?(%Channel{field: field, aggregate: nil, bin: nil}, %Channel{
+         field: field,
+         aggregate: nil
+       })
+       when is_binary(field),
+       do: true
+
+  defp own_colors?(_x, _color), do: false
+
   # A funnel colored by its stages has no legend: its axis names them.
   defp stage_legend(%{"color" => color} = scales, %{
          x: %Channel{field: field},
@@ -1691,7 +1753,7 @@ defmodule Fude.Compile do
 
     columns =
       ([:x, :x2, :y, :y0, :y1, :color, :size, :value, :a0, :a1, :text, :region, :share] ++
-         [:lo, :b0, :mid, :b1, :hi, :n, :name])
+         [:lo, :b0, :mid, :b1, :hi, :n, :name, :shade])
       |> Enum.filter(&(&1 in present))
       |> Map.new(fn name ->
         target = column_name(name, swap)
@@ -1830,7 +1892,15 @@ defmodule Fude.Compile do
 
   defp table_columns(layer, scales) do
     columns =
-      [{"x", "x"}, {"y", "y"}, {"color", "color"}, {"size", "size"}, {"value", nil}]
+      [
+        {"x", "x"},
+        {"y", "y"},
+        {"region", "region"},
+        {"color", "color"},
+        {"shade", "shade"},
+        {"size", "size"},
+        {"value", nil}
+      ]
       |> Enum.filter(fn {name, _scale} -> Map.has_key?(layer["columns"], name) end)
 
     heads =
@@ -1873,13 +1943,14 @@ defmodule Fude.Compile do
 
   # What a screen reader says of a chart that has no description of its
   # own: the kind, what is on each axis, and the extremes.
-  defp describe(chart, _layers, scales) do
+  defp describe(chart, layers, scales) do
     kind = Chart.kind(chart)
 
     words =
       [
         chart.title,
         "#{article(kind)} #{kind_name(kind)}",
+        seat_words(layers, scales),
         axis_words("x", scales["x"]),
         axis_words("y", scales["y"]),
         region_words(scales["region"]),
@@ -1890,6 +1961,21 @@ defmodule Fude.Compile do
 
     Enum.join(words, ". ") <> "."
   end
+
+  # A parliament's seats: the total, the majority, and each party's.
+  defp seat_words([%{"mark" => "seats", "options" => options, "columns" => columns} | _], scales) do
+    names = get_in(scales, ["color", "domain"]) || []
+
+    parties =
+      Enum.zip_with(columns["color"] || [], columns["value"] || [], fn c, v ->
+        "#{Enum.at(names, c)} #{v}"
+      end)
+
+    majority = if options["majority"], do: ", #{options["majority"]} for a majority", else: ""
+    "#{options["total"]} seats#{majority}: " <> Enum.join(parties, ", ")
+  end
+
+  defp seat_words(_layers, _scales), do: nil
 
   defp article(kind) when kind in [:area, :histogram], do: "An"
   defp article(_kind), do: "A"
@@ -1914,6 +2000,7 @@ defmodule Fude.Compile do
   defp kind_name(:treemap), do: "treemap"
   defp kind_name(:radar), do: "radar chart"
   defp kind_name(:radial_bar), do: "radial bar chart"
+  defp kind_name(:parliament), do: "parliament chart"
   defp kind_name(kind), do: "#{kind} chart"
 
   defp axis_words(_name, nil), do: nil

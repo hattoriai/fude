@@ -8,7 +8,7 @@
 //   node scripts/maps.mjs maps
 import { readFileSync, writeFileSync } from "node:fs";
 import { feature } from "topojson-client";
-import { geoEqualEarth, geoIdentity, geoPath } from "d3-geo";
+import { geoArea, geoEqualEarth, geoIdentity, geoPath } from "d3-geo";
 import countries from "i18n-iso-countries";
 
 const out = process.argv[2];
@@ -50,7 +50,23 @@ function center(f, path) {
   return [Math.round(x * 10) / 10, Math.round(y * 10) / 10];
 }
 
-function build({ name, about, features, projection, width, height, codes, aliases, outline }) {
+// Each polygon wound as d3 draws it, clockwise. Much GeoJSON winds its
+// rings the other way (as RFC 7946 has it), which d3 reads as the whole
+// globe but the region: drawn, a square over the map. A polygon larger than
+// a hemisphere is turned round. (Projected data, through geoIdentity, has
+// no sphere: it is left as it is.)
+function rewind(feature) {
+  const g = feature.geometry;
+  if (!g || (g.type !== "Polygon" && g.type !== "MultiPolygon")) return feature;
+  const polygons = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+  for (const polygon of polygons) {
+    if (geoArea({ type: "Polygon", coordinates: polygon }) > 2 * Math.PI) for (const ring of polygon) ring.reverse();
+  }
+  return feature;
+}
+
+function build({ name, about, features, projection, width, height, codes, aliases, outline, projected = false }) {
+  if (!projected) features.forEach(rewind);
   const ctx = writer(10, 0.35);
   const path = geoPath(projection, ctx);
   const measure = geoPath(projection);
@@ -105,7 +121,7 @@ function build({ name, about, features, projection, width, height, codes, aliase
   build({
     name: "us-states",
     about: "States of the U.S. Census Bureau (1:10m, public domain), via us-atlas; Albers USA projection, with Alaska and Hawaii.",
-    features, projection: geoIdentity(), width: 975, height: 610,
+    features, projection: geoIdentity(), projected: true, width: 975, height: 610,
     codes: (f) => [usps[f.id], f.id, `US-${usps[f.id]}`].filter(Boolean),
     aliases: null,
   });

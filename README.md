@@ -19,7 +19,7 @@ updates as the story calls for them.
 
 Fude includes bar, line, area, scatter, pie, donut, histogram, heatmap,
 waterfall, funnel, timeline, box plot, candlestick, treemap, radar,
-radial bar and map charts, as well as sparklines and single-value
+radial bar, parliament and map charts, as well as sparklines and single-value
 indicators. Charts have tooltips, keyboard navigation, screen reader
 descriptions and a data table. They can be themed, exported, and composed
 in layers or small multiples.
