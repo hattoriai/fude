@@ -175,6 +175,47 @@ test.describe("the gallery", () => {
     await expect(svg.locator("text", { hasText: "24.2×" })).toHaveCount(1);
   });
 
+  test("charts of a link show the hovered month together, the tooltip only on the hovered one", async ({ page }) => {
+    await openPage(page);
+    // A month of 2026, which every chart of months has.
+    await pointAt(page, "revenue-lines", 0.8, 0.5);
+    await tooltip(page, "revenue-lines");
+    const month = await stage(page, "orders-revenue").getAttribute("data-fude-linked");
+    expect(month).toMatch(/^\d+$/);
+    await expect(page.locator("#orders-revenue .fude-cross line")).toHaveCount(1);
+    await expect(page.locator("#orders-revenue .fude-cross text").first()).toBeVisible();
+    await expect(page.locator("#orders-revenue .fude-tooltip.fude-tooltip-on")).toHaveCount(0);
+    // The bar of that month.
+    await expect(stage(page, "orders-months")).toHaveAttribute("data-fude-linked", "1");
+
+    // A month of 2025: the charts of 2026 do not have it, and show nothing.
+    await pointAt(page, "revenue-lines", 0.12, 0.5);
+    await expect(stage(page, "orders-revenue")).not.toHaveAttribute("data-fude-linked", /.*/);
+    await expect(stage(page, "orders-months")).not.toHaveAttribute("data-fude-linked", /.*/);
+
+    // Leaving clears them all.
+    await pointAt(page, "revenue-lines", 0.8, 0.5);
+    await expect(stage(page, "orders-months")).toHaveAttribute("data-fude-linked", "1");
+    await page.mouse.move(2, 2);
+    await expect(stage(page, "orders-months")).not.toHaveAttribute("data-fude-linked", /.*/);
+    await expect(page.locator("#orders-revenue .fude-cross line")).toHaveCount(0);
+  });
+
+  test("a bar of a link shows its month on the lines, and the keyboard moves it", async ({ page }) => {
+    await openPage(page);
+    await pointAt(page, "orders-months", 0.5, 0.8);
+    await expect(stage(page, "revenue-lines")).toHaveAttribute("data-fude-linked", /^\d+$/);
+
+    await page.mouse.move(2, 2);
+    await stage(page, "orders-revenue").focus();
+    await page.keyboard.press("End");
+    // December 2026: the last bar.
+    await expect(stage(page, "orders-months")).toHaveAttribute("data-fude-linked", "1");
+    const december = await stage(page, "revenue-lines").getAttribute("data-fude-linked");
+    await page.keyboard.press("ArrowLeft");
+    await expect(stage(page, "revenue-lines")).not.toHaveAttribute("data-fude-linked", december!);
+  });
+
   test("a sparkline writes its last value at the end of its line", async ({ page }) => {
     await openPage(page);
     // Compact, as y's format says: "4.3K" or "4.3k", by the browser's ICU.

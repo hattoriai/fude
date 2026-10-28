@@ -9,6 +9,13 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Linked hover (#14): `<.chart link="months">`. Charts of the same `link`
+  show the place hovered on one (or moved to with the keyboard) together:
+  a crosshair with each line's value, or the bars there brought forward,
+  with the tooltip only on the hovered chart. Times match within the
+  coarser of the two axes' units, categories by their names. In the
+  browser only. See the Live guide, "Linked hover".
+
 - Dumbbells: `connect: true` on a scatter or a bubble joins the points of
   each category with a line under them (a before and an after, two
   parsers on a benchmark), across a category on `y` or on `x`. See the

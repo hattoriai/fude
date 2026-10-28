@@ -94,6 +94,33 @@ North's bars, of every series). With no selection, or none of its marks
 in the data, no mark fades. The chart draws it again in place, with no
 move, when only the selection changes.
 
+## Linked hover
+
+Charts of the same months on a dashboard (revenue, orders, refunds) can
+show the same place together. Give them the same `link`:
+
+```heex
+<.chart id="revenue" chart={@revenue} link="months" />
+<.chart id="orders" chart={@orders} link="months" />
+```
+
+Hovering March on one, or moving to it with the keyboard, shows March on
+every chart of the link: a line or an area chart draws its crosshair
+there, with each line's value by its dot, and a bar chart brings that
+month's bars forward. The tooltip shows only on the hovered chart, so
+that the page is not covered in tooltips. Leaving clears them all.
+
+The charts match by the value, not by where it is on the screen: a time
+within the coarser of the two axes' units (a day in March is March on a
+chart of months; March is its first day on a chart of days), a category
+by its name, a number by itself. A chart that does not have the value
+shows nothing. The panels of small multiples with a `link` are in it too.
+
+Linking is in the browser only, with no event to the server, so it is as
+fast as the hover. A chart that follows another says what it shows in
+its stage's `data-fude-linked` (the crosshair's x, or how many marks),
+for a page and its tests to read.
+
 ## Export
 
 `<.chart export>` has buttons that save the chart as SVG, or as PNG at

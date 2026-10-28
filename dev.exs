@@ -411,6 +411,7 @@ defmodule FudeDev.GalleryLive do
     <div class="grid">
       <.chart
         id="revenue-lines"
+        link="months"
         export
         select="select"
         locale={@locale}
@@ -482,6 +483,7 @@ defmodule FudeDev.GalleryLive do
       />
       <.chart
         id="orders-revenue"
+        link="months"
         locale={@locale}
         chart={Fude.layers(Data.orders_and_revenue(), [
           Fude.bar(x: :month, y: [field: :orders, title: "Orders"]),
@@ -489,7 +491,15 @@ defmodule FudeDev.GalleryLive do
         ], title: "Revenue grows faster than orders", subtitle: "Orders on the left axis, revenue on the right")}
       />
       <.chart
+        id="orders-months"
+        locale={@locale}
+        link="months"
+        chart={Fude.bar(Data.orders_and_revenue(), x: :month, y: [field: :orders, title: "Orders"],
+          title: "Orders by month", subtitle: "Linked: hover a month on any chart of months")}
+      />
+      <.chart
         id="revenue-area"
+        link="months"
         locale={@locale}
         chart={Fude.area(monthly(@shuffled), x: :month, y: [field: :revenue, format: :compact, title: "Revenue"], color: :channel, tooltip: [change: true],
           title: "Revenue, stacked")}
