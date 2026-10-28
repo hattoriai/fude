@@ -75,7 +75,7 @@ defmodule Fude do
     gauge:
       "One number on an arc from `min` to `max` (0 and 100 when not given), with a `target`.",
     choropleth:
-      "A map of regions colored by `color`: each `region` an ISO code (`\"PRT\"`, `\"PT\"`), a number code or a name; `map` is `\"world\"` (the default) or `\"us-states\"`.",
+      "A map of regions colored by `color`: each `region` an ISO code (`\"PRT\"`, `\"PT\"`), a number code or a name; `map` is `\"world\"` (the default) or `\"us-states\"`. A `shade` (a number) makes each region's color lighter as it is less: a party's color, by its lead.",
     bubble_map: "A map with a circle at each `region`, sized by `size`.",
     timeline:
       "A timeline: a bar for each `y` (a task) from its `x` (a start) to its `x2` (an end), on an axis of times or numbers, colored by `color`.",
@@ -88,7 +88,9 @@ defmodule Fude do
     radar:
       "A radar: a spoke for each category of `x`, a value of `y` along each, a shape for each `color`.",
     radial_bar:
-      "Radial bars: a ring for each category of `x`, its arc as long as its `y` of `max` (100 unless given, or the largest value above it)."
+      "Radial bars: a ring for each category of `x`, its arc as long as its `y` of `max` (100 unless given, or the largest value above it).",
+    parliament:
+      "A parliament: a dot for each seat in rows of half circles, each party (`color`) a wedge of its `value` seats, in the order of the parties from left to right; `majority` marks the seats a majority needs."
   ]
 
   for {kind, doc} <- @kinds do

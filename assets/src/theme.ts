@@ -91,6 +91,9 @@ export function readTheme(el: Element): Theme {
       increase: get("--fude-increase", "#1baf7a"),
       decrease: get("--fude-decrease", "#e34948"),
       total: get("--fude-total", "#5e5c58"),
+      // A change up or down, as the tooltip and a column of changes write it.
+      up: get("--fude-up", "#006300"),
+      down: get("--fude-down", "#c62828"),
     },
     series,
     sequential,

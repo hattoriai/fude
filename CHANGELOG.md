@@ -9,6 +9,21 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `Fude.parliament/2`: a dot for each seat in rows of half circles, each
+  party a wedge in its order from left to right; `majority` draws where a
+  majority is reached; the tooltip gives a party's seats, share and how
+  far it is from a majority, and the keyboard goes party by party.
+- `labels: :series` on stacked bars writes each segment's series name in
+  it, where it fits.
+- `change: true` on a text column writes changes with their signs, in
+  `--fude-up` and `--fude-down`.
+- An annotation `:line` with an `x` and a category of `y` (or the other
+  way round) crosses that category's band only: a majority on one bar.
+- A choropleth's `shade`: each region's color lighter as a number is less
+  (a party's color by its lead), with a ramp in the legend.
+- A map's `outline` (the frames of its insets, a globe's edge) is drawn.
+- `mix dev` has an election page.
+
 - Six kinds of chart:
   - `Fude.timeline/2`: a bar for each task from its start (`x`) to its
     end (`x2`), on an axis of times or numbers; its tooltip gives the
@@ -101,6 +116,23 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   of a log scale are round (10 MB, 100 MB, 1 GB). `:bytes` takes `digits`.
 
 ### Fixed
+
+- Several text columns stood on one another; they stand side by side, in
+  the order of their layers.
+- Bars colored by their own categories were stacks of one segment: each
+  value was written twice (inside and at the end), and a legend repeated
+  the axis. They are bars, each value once, with no legend.
+- A stack of 100% wrote each raw value as a percent ("8,300%") at each
+  segment's end, and totals of "100%" and "180%". Each segment has its
+  share inside it, where it fits.
+- A bubble map of many small regions (municipalities, counties) was one
+  mass of circles: its circles now cover about an eighth of the map, at
+  most an eighteenth of the stage as before.
+- A map's warning of regions not on it came at every render, and said
+  "1 regions"; it comes once, and says "1 region".
+- A map's data table had no column of its regions.
+- `assets/scripts/maps.mjs` turns round polygons wound the other way (as
+  much GeoJSON has them), which drew each region as a square over the map.
 
 - Labels drew only on bars: `labels` on a pie, a donut, a heatmap, a
   line or an area did nothing (#10).

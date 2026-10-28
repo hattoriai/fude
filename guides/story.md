@@ -25,9 +25,13 @@ true` labels every mark that can be, `labels: false` none.
 * **Bars** have their values at their ends, all of them or none; compact
   ("€210K") where the full values do not fit. A **stack** has its total
   at its end, and each segment's value inside it where it fits, in the
-  color that reads on it. **Horizontal bars** with their values leave out
-  their value axis. Bars under a line (two measures) are labelled only
-  when asked.
+  color that reads on it; `labels: :series` writes the series' name in
+  each segment instead ("Social", "Alliance"). A **stack of 100%** has
+  each segment's share inside it, and no totals. Bars colored by their own
+  categories (`color: :party` on `x: :party`) are bars, not stacks: each
+  has its value once, and no legend repeats the axis. **Horizontal bars**
+  with their values leave out their value axis. Bars under a line (two
+  measures) are labelled only when asked.
 * **Pies and donuts** name each slice with its share, inside it where
   they fit, else outside with a short line; a donut has its total in its
   hole.
@@ -36,7 +40,10 @@ true` labels every mark that can be, `labels: false` none.
 * **Points** of a scatter or a bubble have their values with `labels:
   true`.
 * A text layer with no `x` writes a column beside the categories of `y`,
-  under its title: a ratio or a count beside each row.
+  under its title: a ratio or a count beside each row. Several columns
+  stand side by side, in the order of their layers; `change: true`
+  writes a column of changes with their signs, "+25" in `--fude-up` and
+  "−36" in `--fude-down`, "–" for none.
 * Names of categories wrap onto two lines, or stagger, before any is
   left out.
 * With no format, labels are compact from 100,000, as single values are.
@@ -90,6 +97,9 @@ chart
   its top.
 * `:line` - a dashed line across the chart, its words at its start or
   its end, where they cover the least of the data. A rule's label too.
+  With an `x` and a category of `y` (or the other way round), it crosses
+  that category's band only: `x: 116 / 230, y: "Seats"` marks the
+  majority on the bar of seats, not on the bar of votes.
 
 Notes are part of the spec, a date as its text.
 

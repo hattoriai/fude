@@ -9,6 +9,7 @@ import { position, windowBand, type Position } from "./scale";
 import { numberRangeLabel, ordered, sentValue, snapBins, snapNumbers, snapTimes, timeRangeLabel, timeUnit } from "./brush";
 import { draw, easeOut, tween, type ArcShape, type Datum, type DotShape, type Paint, type RectShape, type PathPoint, type PathShape, type Shape } from "./shapes";
 import { squarifyGroups } from "./treemap";
+import { chamber, type Chamber } from "./parliament";
 import { loadMap, type LoadedMap } from "./maps";
 import { png, save, svgDocument, SvgContext } from "./export";
 import { categorical, dataValue, datumOf, fraction, matches, same, type Datum as PlaceDatum, type Place } from "./places";
@@ -511,6 +512,7 @@ export class Chart {
     this.hintMultiples();
     this.stage.setAttribute("aria-label", config.description ?? config.title ?? "Chart");
     this.renderLegend();
+    this.renderShadeRamp();
     const width = this.stage.clientWidth;
     const height = this.stage.clientHeight;
     if (width === 0 || height === 0) return;
@@ -659,7 +661,7 @@ export class Chart {
       radius: this.theme.radius,
       focus: (key, series) => {
         if (highlight !== null) return series === highlight ? 1 : 0.2;
-        if (hover && hover.kind === "mark") return key === hover.key ? 1 : 0.55;
+        if (hover && hover.kind === "mark") return key === hover.key || key.startsWith(`${hover.key}:`) ? 1 : 0.55;
         if (!hover && linked?.faded.has(key)) return 0.55;
         if (chosen && chosen.faded.has(key)) return 0.3;
         return 1;
@@ -702,15 +704,11 @@ export class Chart {
     }
     if (axes && this.valueAxisDropped()) bottom = height - 6;
 
-    // A column of text at the right of the plot (a text layer with no x)
-    // takes a margin as wide as its widest words or its title, and its
-    // title a line above the plot.
-    for (const layer of this.config.layers ?? []) {
-      if (layer.mark !== "text" || layer.options.column !== true) continue;
-      const title = typeof layer.options.title === "string" ? layer.options.title : "";
-      right -= Math.max(this.measure(title), ...this.textWords(layer).map((w) => this.measure(w.text, 15))) + 16;
-      if (axes && title && top < pad + 20) top = pad + 20;
-    }
+    // Columns of text at the right of the plot (text layers with no x)
+    // take a margin as wide as theirs, and their titles a line above the plot.
+    const columns = this.textColumns(width);
+    if (columns.length) right = Math.min(...columns.map((column) => column.edge - column.width)) - 16;
+    if (axes && columns.some((column) => column.title) && top < pad + 20) top = pad + 20;
 
     // A funnel has no value axis; its labels outside the bars take the right.
     const funnel = (this.config.layers ?? []).find((layer) => layer.options.funnel === true);
@@ -780,16 +778,41 @@ export class Chart {
     return layout;
   }
 
-  // The words of a text layer: each row's text, a number in its format.
-  private textWords(layer: Layer): { row: number; text: string }[] {
+  // The words of a text layer: each row's text, a number in its format. A
+  // column of changes (`change: true`) writes a number's sign: "+25",
+  // "−36", "–" for none, in the color of up or down.
+  private textWords(layer: Layer): { row: number; text: string; tone?: "up" | "down" }[] {
     const format = formatter(layer.options.format as string | undefined, this.locale);
     const values = (layer.columns.text ?? []) as unknown[];
-    const words: { row: number; text: string }[] = [];
+    const change = layer.options.change === true;
+    const words: { row: number; text: string; tone?: "up" | "down" }[] = [];
     values.forEach((value, row) => {
       if (value === null || value === undefined || value === "") return;
-      words.push({ row, text: typeof value === "number" ? format(value) : String(value) });
+      if (typeof value !== "number") words.push({ row, text: String(value) });
+      else if (!change) words.push({ row, text: format(value) });
+      else if (value === 0) words.push({ row, text: "–" });
+      else words.push({ row, text: `${value > 0 ? "+" : "−"}${format(Math.abs(value))}`, tone: value > 0 ? "up" : "down" });
     });
     return words;
+  }
+
+  // The columns of text at the right of the plot, in the order of their
+  // layers from left to right: each as wide as its widest words or its
+  // title, and where its right edge is.
+  private textColumns(width: number): { index: number; width: number; edge: number; title: string }[] {
+    const columns = (this.config.layers ?? [])
+      .map((layer, index) => ({ layer, index }))
+      .filter(({ layer }) => layer.mark === "text" && layer.options.column === true)
+      .map(({ layer, index }) => {
+        const title = typeof layer.options.title === "string" ? layer.options.title : "";
+        return { index, title, width: Math.max(this.measure(title), ...this.textWords(layer).map((w) => this.measure(w.text, 15))), edge: 0 };
+      });
+    let edge = width - 8;
+    for (let i = columns.length - 1; i >= 0; i--) {
+      columns[i]!.edge = edge;
+      edge -= columns[i]!.width + 16;
+    }
+    return columns;
   }
 
   // -- Labels on the marks ---------------------------------------------------
@@ -864,6 +887,28 @@ export class Chart {
     const step = cat && cat.count > 1 ? Math.abs(cat.at(1) - cat.at(0)) : (cat?.bandwidth ?? 40);
     const out: { text: string; x: number; y: number; anchor: "start" | "middle" | "end"; inside?: string; key: string }[] = [];
     const ends: typeof out = [];
+    // A segment's words inside it, where they fit: its series' name
+    // (`labels: :series`), or its value, or its share of a stack of 100%.
+    const names = layer.options.labels === "series";
+    const inside = (rect: RectShape, text: string) => {
+      const width = this.measure(text);
+      const fits = horizontal ? width + 8 <= rect.w && rect.h >= 14 : width + 6 <= rect.w && rect.h >= 18;
+      if (fits) out.push({ text, x: rect.x + rect.w / 2, y: rect.y + rect.h / 2, anchor: "middle", inside: onColor(rect.color), key: `v:${rect.key}` });
+    };
+    const seriesName = (rect: RectShape) => this.valueText(rect.datum.series, this.config.scales?.color);
+
+    // A stack of 100%: each segment's share (or name) inside it, and no
+    // ends, which would all be 100%.
+    if (layer.stack === "normalize") {
+      const v0 = (horizontal ? c.x0 : c.y0) ?? [];
+      const v1 = (horizontal ? c.x1 : c.y1) ?? [];
+      const percent = labelFormatter("percent", rects.map((r) => (v1[r.datum.row] ?? 0) - (v0[r.datum.row] ?? 0)), this.locale);
+      for (const rect of rects) {
+        const share = (v1[rect.datum.row] ?? 0) - (v0[rect.datum.row] ?? 0);
+        if (share > 0) inside(rect, names ? seriesName(rect) : percent(share));
+      }
+      return out;
+    }
 
     if (this.stacksTotals(layer)) {
       const totals = this.totals(cats, values);
@@ -887,15 +932,11 @@ export class Chart {
           ends.push({ text, x: group[0]!.x + group[0]!.w / 2, y: total >= 0 ? end - 6 : end + 14, anchor: "middle", key });
         }
       }
-      // Each segment's value inside it, where it fits.
+      // Each segment's value (or its series' name) inside it, where it fits.
       const inner = labelFormatter(scale?.format, values, this.locale);
       for (const rect of rects) {
         const v = values[rect.datum.row];
-        if (v == null) continue;
-        const text = inner(v);
-        const width = this.measure(text);
-        const fits = horizontal ? width + 8 <= rect.w && rect.h >= 14 : width + 6 <= rect.w && rect.h >= 18;
-        if (fits) out.push({ text, x: rect.x + rect.w / 2, y: rect.y + rect.h / 2, anchor: "middle", inside: onColor(rect.color), key: `v:${rect.key}` });
+        if (v != null) inside(rect, names ? seriesName(rect) : inner(v));
       }
     } else {
       const write = labelFormatter(scale?.format, values, this.locale);
@@ -1192,9 +1233,59 @@ export class Chart {
         case "radial":
           this.radials(layer, index, layout, shapes);
           break;
+        case "seats":
+          this.seats(layer, index, layout, shapes);
+          break;
       }
     });
     return shapes;
+  }
+
+  // A chamber's frame: its seats, laid out once for its total, and where
+  // its floor's middle is and how large it is on the stage.
+  private seatFrame(layer: Layer, layout: Layout): { chamber: Chamber; cx: number; cy: number; size: number; total: number } | null {
+    const values = ((layer.columns.value ?? []) as (number | null)[]).map((v) => Math.max(0, Math.round(v ?? 0)));
+    const total = values.reduce((a, b) => a + b, 0);
+    if (!total) return null;
+    const room = chamber(total);
+    const w = layout.right - layout.left;
+    // A line of words above the chamber for its majority.
+    const words = typeof layer.options.majority === "number" ? 20 : 0;
+    const h = layout.bottom - layout.top - words;
+    // The chamber's height is its radius, the top dots' half above it and
+    // the floor's half below; its width, two radii and two halves of a dot.
+    const r = room.radius;
+    const size = Math.max(20, Math.min(w / (2 * (1 + r)), h / (1 + 2 * r)) - 2);
+    return { chamber: room, cx: (layout.left + layout.right) / 2, cy: layout.top + words + (h - size * (1 + 2 * r)) / 2 + size * (1 + r), size, total };
+  }
+
+  // A parliament: a dot for each seat, each party's seats a wedge of the
+  // chamber, in the order of the parties from left to right.
+  private seats(layer: Layer, index: number, layout: Layout, shapes: Shape[]): void {
+    const frame = this.seatFrame(layer, layout);
+    if (!frame) return;
+    const { chamber: room, cx, cy, size } = frame;
+    const c = layer.columns;
+    const scales = this.config.scales ?? {};
+    let seat = 0;
+    for (let i = 0; i < layer.n; i++) {
+      const count = Math.max(0, Math.round(c.value?.[i] ?? 0));
+      const series = c.color?.[i] ?? null;
+      for (let k = 0; k < count; k++, seat++) {
+        const at = room.seats[seat];
+        if (!at || (series !== null && this.hidden.has(series))) continue;
+        shapes.push({
+          type: "dot",
+          key: `${index}:seat:${this.keyOf(scales.color, series)}:${k}`,
+          x: cx + at.x * size,
+          y: cy - at.y * size,
+          r: Math.max(1, room.radius * size),
+          color: this.color(series),
+          ring: false,
+          datum: { layer: index, row: i, series },
+        });
+      }
+    }
   }
 
   // The boxes of a box plot, or the candles of a candlestick chart: a body
@@ -1390,7 +1481,12 @@ export class Chart {
     const v1Col = horizontal ? c.x1 : c.y1;
     const binned = !horizontal && !!c.x2;
     const colors = c.color;
-    const groups = colors && !layer.stack && cat.kind === "band" ? (scales.color?.domain ?? []).length : 1;
+    // Bars side by side in each band: as many as the series, where a band
+    // has more than one (a color of the bars' own categories has one each).
+    const series = new Map<number | null | undefined, Set<number | null | undefined>>();
+    if (colors) for (let i = 0; i < layer.n; i++) (series.get(catCol[i]) ?? series.set(catCol[i], new Set()).get(catCol[i])!).add(colors[i]);
+    const grouped = [...series.values()].some((set) => set.size > 1);
+    const groups = colors && grouped && !layer.stack && cat.kind === "band" ? (scales.color?.domain ?? []).length : 1;
     const zero = Math.max(Math.min(0, val.domain[1]), val.domain[0]);
     const base = val.at(zero);
     const gap = this.theme.gap;
@@ -1681,7 +1777,13 @@ export class Chart {
       if (region === undefined) unmatched.push(value);
       else rows.set(region, i);
     }
-    if (unmatched.length) console.warn(`Fude: ${unmatched.length} regions of chart ${this.id} are not on the map ${map.name}:`, unmatched.slice(0, 20));
+    // Said once for the same regions, not again at each render.
+    const missing = JSON.stringify(unmatched.slice(0, 20));
+    if (unmatched.length && missing !== this.unmatched) {
+      console.warn(`Fude: ${unmatched.length} ${unmatched.length === 1 ? "region" : "regions"} of chart ${this.id} ${unmatched.length === 1 ? "is" : "are"} not on the map ${map.name}:`, unmatched.slice(0, 20));
+    }
+    this.unmatched = missing;
+    this.mapPlace = { k, tx, ty };
 
     const bubble = layer.mark === "bubble";
     map.regions.forEach((region, r) => {
@@ -1697,7 +1799,7 @@ export class Chart {
         tx,
         ty,
         center,
-        color: row === undefined ? this.theme.empty : this.colorOf(layer, row),
+        color: row === undefined ? this.theme.empty : c.shade ? this.shaded(this.colorOf(layer, row), c.shade[row]) : this.colorOf(layer, row),
         name: region.name,
         datum: row === undefined ? null : { layer: index, row, series: c.color?.[row] ?? null },
       });
@@ -1705,7 +1807,15 @@ export class Chart {
     if (!bubble) return;
 
     const [, max] = (this.config.scales?.size?.domain as [number, number] | null) ?? [0, 1];
-    const largest = Math.max(6, Math.min(layout.width, layout.height) / 18);
+    // The largest circle: so that all the circles together cover about an
+    // eighth of the map, as a cartographer sizes them. A few large values
+    // (the most populous countries) keep large circles; many alike (a
+    // country's municipalities) each get a small one, and are not one mass
+    // of circles. At most an eighteenth of the stage, as before.
+    const sum = [...rows.values()].reduce((total, row) => total + Math.max(0, c.size?.[row] ?? 0) / (max || 1), 0);
+    const area = map.width * map.height * k * k;
+    const covering = sum > 0 ? Math.sqrt((0.12 * area) / (Math.PI * sum)) : Infinity;
+    const largest = Math.max(4, Math.min(Math.min(layout.width, layout.height) / 18, covering));
     const circles = [...rows.entries()].sort(([, a], [, b]) => (c.size?.[b] ?? 0) - (c.size?.[a] ?? 0));
     for (const [r, row] of circles) {
       const region = map.regions[r]!;
@@ -2010,11 +2120,12 @@ export class Chart {
       const center = (pos: Position | undefined, v: number | null | undefined) =>
         pos && v != null ? pos.at(v) + (pos.kind === "band" ? pos.bandwidth / 2 : 0) : null;
       if (layer.options.column === true) {
-        const edge = layout.width - 8;
+        const edge = this.textColumns(layout.width).find((column) => column.index === index)?.edge ?? layout.width - 8;
         if (typeof layer.options.title === "string") text(svg, layer.options.title, edge, layout.top - 12, { anchor: "end", baseline: "alphabetic", fill: theme.muted });
-        for (const { row, text: content } of words) {
+        for (const { row, text: content, tone } of words) {
           const py = center(ly, layer.columns.y?.[row]);
-          if (py !== null) text(svg, content, edge, py, { anchor: "end", baseline: "middle", fill: theme.text, tabular: true, size: 15, key: `t:${index}:${this.keyOf(ls.y, layer.columns.y?.[row])}` });
+          const fill = tone ? theme.roles[tone]! : theme.text;
+          if (py !== null) text(svg, content, edge, py, { anchor: "end", baseline: "middle", fill, tabular: true, size: 15, key: `t:${index}:${this.keyOf(ls.y, layer.columns.y?.[row])}` });
         }
         return;
       }
@@ -2053,6 +2164,18 @@ export class Chart {
     const layout = this.layout;
     if (!layout) return;
     const theme = this.theme;
+    // A map's outline: a sphere's edge, or the frames of its insets.
+    const outline = this.geo?.map.outline;
+    if (outline && this.mapPlace && (this.config.layers ?? []).some((layer) => layer.mark === "region" || layer.mark === "bubble")) {
+      const { k, tx, ty } = this.mapPlace;
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", outline);
+      path.setAttribute("transform", `translate(${tx} ${ty}) scale(${k})`);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", theme.grid);
+      path.setAttribute("vector-effect", "non-scaling-stroke");
+      grid.append(path);
+    }
     (this.config.layers ?? []).forEach((layer, index) => {
       if (layer.mark === "radar") {
         const frame = this.radarFrame(layer, layout);
@@ -2081,6 +2204,28 @@ export class Chart {
           const y = cy + Math.sin(a) * (outer + 8) + (Math.abs(cos) < 0.2 ? Math.sign(Math.sin(a)) * 6 : 0);
           text(svg, this.bandLabel(xs, xs.domain?.[i], i), x, y, { anchor, baseline: "middle", fill: theme.secondary, key: `x:${xs.domain?.[i]}` });
         });
+      } else if (layer.mark === "seats") {
+        const frame = this.seatFrame(layer, layout);
+        if (!frame) return;
+        const { chamber: room, cx, cy, size, total } = frame;
+        const hole = size * 0.4 - room.radius * size;
+        const big = Math.max(14, Math.min(34, hole * 0.45));
+        if (hole > 30) {
+          text(svg, formatter(null, this.locale)(total), cx, cy - big * 0.55, { anchor: "middle", baseline: "alphabetic", fill: theme.text, tabular: true, size: big, weight: 600, key: `v:${index}:total` });
+          text(svg, "seats", cx, cy - 2, { anchor: "middle", baseline: "alphabetic", fill: theme.muted, key: `v:${index}:seats` });
+        }
+        // The majority: a line between the seat that reaches it and the one before, across the chamber.
+        const majority = layer.options.majority;
+        if (typeof majority === "number" && majority > 0 && majority <= total) {
+          const a = room.seats[majority - 1]!.angle;
+          const b = room.seats[majority]?.angle ?? a;
+          const angle = (a + b) / 2;
+          const r0 = size * 0.4 - room.radius * size * 2;
+          const r1 = size + room.radius * size * 2;
+          dashed(svg, cx + Math.cos(angle) * r0, cy - Math.sin(angle) * r0, cx + Math.cos(angle) * r1, cy - Math.sin(angle) * r1, theme.secondary);
+          const words = `${formatter(null, this.locale)(majority)} for a majority`;
+          text(svg, words, cx + Math.cos(angle) * (r1 + 4), cy - Math.sin(angle) * (r1 + 4) - 4, { anchor: "middle", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface, key: `v:${index}:majority` });
+        }
       } else if (layer.mark === "radial") {
         const frame = this.radialFrame(layer, layout);
         const xs = this.scalesOf(layer).x;
@@ -2225,6 +2370,20 @@ export class Chart {
       if (note.type === "line") {
         const px = center(x, note.x);
         const py = center(y, note.y);
+        // With a category too, the line crosses its band only (a majority on
+        // the bar of seats), its words above the band.
+        if (px !== null && py !== null && y?.kind === "band" && x?.kind !== "band") {
+          const top = y.at(note.y!) - 4;
+          dashed(this.svg, px, top, px, top + y.bandwidth + 8, theme.secondary);
+          if (note.text) text(this.svg, note.text, px, top - 4, { anchor: "middle", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface });
+          continue;
+        }
+        if (px !== null && py !== null && x?.kind === "band" && y?.kind !== "band") {
+          const left = x.at(note.x!) - 4;
+          dashed(this.svg, left, py, left + x.bandwidth + 8, py, theme.secondary);
+          if (note.text) text(this.svg, note.text, left + x.bandwidth + 12, py, { anchor: "start", baseline: "middle", fill: theme.secondary, halo: theme.surface });
+          continue;
+        }
         if (py !== null && note.x === null) {
           dashed(this.svg, layout.left, py, layout.right, py, theme.secondary);
           if (note.text) this.acrossLabel(note.text, py, layout);
@@ -2393,10 +2552,13 @@ export class Chart {
     return [...seen.entries()].map(([k, px]) => ({ k, px })).sort((a, b) => a.px - b.px);
   }
 
-  private marks(): Shape[] {
+  // The marks to hover and to reach by keyboard. A parliament's party is
+  // one mark to the keyboard (its first seat), every seat to the pointer.
+  private marks(everySeat = false): Shape[] {
     return this.shapes
       .filter((shape) => shape.type === "rect" || shape.type === "dot" || shape.type === "arc" || shape.type === "box" || (shape.type === "region" && shape.datum !== null))
       .filter((shape) => !shape.key.endsWith(":end"))
+      .filter((shape) => everySeat || !shape.key.includes(":seat:") || shape.key.endsWith(":0"))
       .filter((shape) => !this.zoom || shape.type === "region" || this.inPlot(this.anchor(shape).px));
   }
 
@@ -2421,15 +2583,15 @@ export class Chart {
       return this.setHover({ kind: "x", k: best.k, px: best.px });
     }
     const hit = this.hit(px, py);
-    this.cursor = hit ? this.marks().indexOf(hit) : -1;
-    this.setHover(hit && "datum" in hit && hit.datum ? { kind: "mark", key: hit.key, datum: hit.datum, ...this.anchor(hit) } : null);
+    this.cursor = hit ? this.marks().findIndex((mark) => hoverKey(mark.key) === hoverKey(hit.key)) : -1;
+    this.setHover(hit && "datum" in hit && hit.datum ? { kind: "mark", key: hoverKey(hit.key), datum: hit.datum, ...this.anchor(hit) } : null);
   }
 
   private hit(px: number, py: number): Shape | null {
     let best: Shape | null = null;
     let bestDistance = 24;
     // Circles over regions: the circles first, the smallest on top.
-    const marks = this.marks();
+    const marks = this.marks(true);
     const ordered = marks.some((shape) => shape.type === "region") ? [...marks].reverse() : marks;
     for (const shape of ordered) {
       if (shape.type === "region") {
@@ -2471,6 +2633,10 @@ export class Chart {
   }
 
   private hitContext: CanvasRenderingContext2D | null = null;
+  // The regions of the data not on the map, as last warned of.
+  private unmatched = "";
+  // Where the map is on the stage: its scale and offset.
+  private mapPlace: { k: number; tx: number; ty: number } | null = null;
 
   private inRegion(shape: Extract<Shape, { type: "region" }>, px: number, py: number): boolean {
     this.hitContext ??= document.createElement("canvas").getContext("2d");
@@ -2697,7 +2863,7 @@ export class Chart {
       if (!marks.length) return;
       this.cursor = this.move(this.cursor, marks.length, event.key);
       const mark = marks[this.cursor]!;
-      if ("datum" in mark && mark.datum) this.setHover({ kind: "mark", key: mark.key, datum: mark.datum, ...this.anchor(mark) });
+      if ("datum" in mark && mark.datum) this.setHover({ kind: "mark", key: hoverKey(mark.key), datum: mark.datum, ...this.anchor(mark) });
     }
     this.live.textContent = this.tipText();
     // Shift and the arrows: a range from where the keyboard was.
@@ -3305,6 +3471,7 @@ export class Chart {
         const rows: TipRow[] = [];
         if (c.size) rows.push({ value: this.valueText(c.size[row], scales.size), name: scales.size?.title ?? "", color: null });
         if (c.color) rows.push({ value: this.valueText(c.color[row], scales.color), name: scales.color?.title ?? "", color });
+        if (c.shade) rows.push({ value: this.valueText(c.shade[row], scales.shade), name: scales.shade?.title ?? "", color: null });
         return { title: this.names.get(hover.key) ?? this.valueText(c.region?.[row], scales.region), rows };
       }
       case "box": {
@@ -3341,6 +3508,16 @@ export class Chart {
         const rows: TipRow[] = [{ value: `${write(v)} · ${formatter("percent", this.locale)(total ? v / total : 0)}`, name: "", color }];
         if (c.color && scales.color) rows.push({ value: this.valueText(c.color[row], scales.color), name: scales.color.title ?? "", color: null });
         return { title: this.valueText(c.name?.[row], scales.name), rows };
+      }
+      case "seats": {
+        const values = (c.value ?? []) as (number | null)[];
+        const total = values.reduce<number>((sum, v) => sum + Math.max(0, Math.round(v ?? 0)), 0);
+        const v = Math.round(values[row] ?? 0);
+        const rows: TipRow[] = [{ value: `${formatter(null, this.locale)(v)} ${v === 1 ? "seat" : "seats"} · ${formatter("percent", this.locale)(total ? v / total : 0)}`, name: "", color }];
+        const majority = layer.options.majority;
+        if (typeof majority === "number" && v < majority) rows.push({ value: `${formatter(null, this.locale)(majority - v)} short of a majority`, name: "", color: null, sub: true });
+        if (typeof majority === "number" && v >= majority) rows.push({ value: "A majority", name: "", color: null, sub: true });
+        return { title: this.valueText(series, scales.color), rows };
       }
       case "radial": {
         const ys = ls.y;
@@ -3440,7 +3617,7 @@ export class Chart {
 
   // The legend of a sequential color: its ramp, from its lowest value to
   // its highest.
-  private renderRamp(scale: Scale): void {
+  private renderRamp(scale: Scale, color: (value: number) => string = (value) => this.sequential(value)): void {
     const legend = this.legend;
     const [d0, d1] = (scale.domain as [number, number] | null) ?? [0, 1];
     const format = formatter(scale.format, this.locale);
@@ -3448,10 +3625,27 @@ export class Chart {
     const ramp = div("fude-ramp");
     if (scale.title) ramp.append(div("fude-ramp-title", scale.title));
     const bar = div("fude-ramp-bar");
-    const stops = [0, 0.25, 0.5, 0.75, 1].map((t) => this.sequential(d0 + (d1 - d0) * t));
+    const stops = [0, 0.25, 0.5, 0.75, 1].map((t) => color(d0 + (d1 - d0) * t));
     bar.style.background = `linear-gradient(to right, ${stops.join(", ")})`;
     ramp.append(div("fude-ramp-end", format(d0)), bar, div("fude-ramp-end", format(d1)));
     legend.append(ramp);
+  }
+
+  // A map shaded by a number (a lead, in points) beside its colors (a
+  // party): the ramp of the shade, in the text's color, after the legend.
+  private renderShadeRamp(): void {
+    const shade = this.config.scales?.shade;
+    if (!shade || this.config.legend === false) return;
+    this.renderRamp(shade, (value) => this.shaded(this.theme.text, value));
+  }
+
+  // A color lighter as its shade is less: at the least of the shade's
+  // domain, a quarter of the color on the surface; at the most, all of it.
+  private shaded(color: string, value: number | null | undefined): string {
+    const [d0, d1] = (this.config.scales?.shade?.domain as [number, number] | null) ?? [0, 1];
+    if (value === null || value === undefined) return color;
+    const t = d1 === d0 ? 1 : Math.min(1, Math.max(0, (value - d0) / (d1 - d0)));
+    return mix(color, this.theme.surface, 0.75 * (1 - t));
   }
 
   // Hides a series, or shows it again; one is always shown.
@@ -3648,6 +3842,11 @@ function tipHistory({ values, at, color }: { values: number[]; at: number; color
   dot.setAttribute("fill", color);
   svg.append(path, dot);
   return svg;
+}
+
+/** The key a mark is hovered by: a parliament's seat, by its party's. */
+function hoverKey(key: string): string {
+  return key.includes(":seat:") ? key.replace(/:\d+$/, "") : key;
 }
 
 function div(className: string, text?: string): HTMLDivElement {

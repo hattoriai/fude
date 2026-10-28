@@ -53,3 +53,17 @@ test("a kind that names its columns: a timeline's task, start and end, as the se
   // A named column the layer does not have (no color) is left out.
   assert.deepEqual(tableOf(config), { heads: ["Task", "Start", "Finish"], rows: [["Design", "2026-03-02", "2026-03-09"]] });
 });
+
+test("a map's table names each region, with its color and its shade", () => {
+  const config: Config = {
+    ...base,
+    kind: "choropleth",
+    scales: {
+      region: { type: "ordinal", domain: ["CA", "TX"], title: "State" },
+      color: { type: "ordinal", domain: ["Social", "Forward!"], title: "Leader" },
+      shade: { type: "linear", domain: [3.1, 12.5], title: "Lead" },
+    },
+    layers: [{ mark: "region", n: 2, columns: { region: [0, 1], color: [0, 1], shade: [12.5, 3.1] }, horizontal: false, stack: null, options: {}, tooltip: [] }],
+  };
+  assert.deepEqual(tableOf(config), { heads: ["State", "Leader", "Lead"], rows: [["CA", "Social", "12.5"], ["TX", "Forward!", "3.1"]] });
+});

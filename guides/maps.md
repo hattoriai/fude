@@ -9,6 +9,16 @@ Fude.choropleth(users, region: :country, color: :users, title: "Where the users 
 Fude.bubble_map(stores, region: :state, size: :stores, map: "us-states")
 ```
 
+A choropleth's `shade` makes each region's color lighter as a number is
+less: each region in the color of the party that leads it, darker as its
+lead is larger. The legend has the colors and a ramp of the shade; the
+tooltip, both.
+
+```elixir
+Fude.choropleth(leads, region: :state, color: :leader, shade: [field: :lead, title: "Lead, points"],
+  map: "us-states")
+```
+
 ## The maps
 
 | Map | Regions | Codes |
@@ -41,6 +51,17 @@ registerMap("us-states", "/fude/maps/us-states.json")
 
 A map of your own is a JSON file of the same shape (see
 `assets/scripts/maps.mjs`, which makes Fude's from TopoJSON):
-`{"fude_map": 1, "name", "width", "height", "regions": [{"id", "codes",
-"name", "names", "path", "center"}]}`, with each region's `path` as SVG
-path data in the map's units.
+`{"fude_map": 1, "name", "width", "height", "outline", "regions": [{"id",
+"codes", "name", "names", "path", "center"}]}`, with each region's `path`
+as SVG path data in the map's units. `outline`, when there is one, is
+drawn as a hairline in the grid's color: the frames of a map's insets
+(islands moved beside the mainland), or a globe's edge.
+
+GeoJSON often winds its polygons the other way round from d3 (as RFC 7946
+has it), which d3 reads as the whole globe but the region: each region
+would be a square over the map. The script turns round any polygon larger
+than a hemisphere before it projects it.
+
+A bubble map sizes its largest circle by how far apart the regions are,
+so that a map of many small regions (municipalities, counties) keeps its
+circles apart.

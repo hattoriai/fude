@@ -330,6 +330,104 @@ defmodule FudeDev.Data do
     Enum.zip_with(@channels ++ ["Direct"], [86, 64, 47, 91], &%{channel: &1, done: &2})
   end
 
+  # A made-up election: each party's seats and votes, and their changes.
+  def election do
+    [
+      {"Social", 83, 29.4, 25, 5.6},
+      {"Forward!", 73, 27.9, 13, 4.2},
+      {"Alliance", 55, 21.6, -36, -11.6},
+      {"Liberals", 10, 6.1, 1, 0.5},
+      {"Greens", 5, 3.7, -1, -0.5},
+      {"Unity", 3, 2.8, 0, -0.2},
+      {"Left", 1, 1.8, 0, -0.3}
+    ]
+    |> Enum.map(fn {party, seats, votes, seat_change, vote_change} ->
+      %{
+        party: party,
+        seats: seats,
+        votes: votes,
+        seat_change: seat_change,
+        vote_change: vote_change
+      }
+    end)
+  end
+
+  def parties, do: Enum.map(election(), & &1.party)
+
+  def party_colors,
+    do: ["#e8679c", "#1f1f4f", "#ef8c2e", "#45aee6", "#2f8a3e", "#c0261c", "#8f1a14"]
+
+  # Seats and votes as shares, for the two bars of the split.
+  def election_split do
+    for row <- election(),
+        {measure, value} <- [{"Seats", row.seats}, {"Votes", row.votes}],
+        do: %{measure: measure, party: row.party, value: value}
+  end
+
+  # The party that leads each state, and by how many points.
+  def state_leads do
+    for {state, i} <-
+          Enum.with_index(
+            ~w(AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY)
+          ) do
+      leader = Enum.at(["Social", "Forward!", "Alliance"], rem(:erlang.phash2({:lead, state}), 3))
+      %{state: state, leader: leader, lead: Float.round(1 + noise({:margin, i}) * 39, 1)}
+    end
+  end
+
+  # People in each country, in millions.
+  def populations do
+    for {country, people} <- [
+          {"CHN", 1410},
+          {"IND", 1428},
+          {"USA", 335},
+          {"IDN", 277},
+          {"PAK", 240},
+          {"NGA", 223},
+          {"BRA", 216},
+          {"BGD", 173},
+          {"RUS", 144},
+          {"MEX", 128},
+          {"JPN", 124},
+          {"ETH", 126},
+          {"PHL", 117},
+          {"EGY", 112},
+          {"DEU", 84},
+          {"TUR", 85},
+          {"FRA", 68},
+          {"GBR", 67},
+          {"ITA", 59},
+          {"ESP", 48},
+          {"POL", 37},
+          {"NLD", 18},
+          {"BEL", 12},
+          {"PRT", 10},
+          {"CZE", 11},
+          {"GRC", 10},
+          {"SWE", 10},
+          {"HUN", 10},
+          {"AUT", 9},
+          {"CHE", 9},
+          {"DNK", 6},
+          {"FIN", 6},
+          {"NOR", 5},
+          {"IRL", 5},
+          {"HRV", 4},
+          {"SVK", 5},
+          {"SVN", 2},
+          {"LTU", 3},
+          {"LVA", 2},
+          {"EST", 1},
+          {"LUX", 1},
+          {"ROU", 19},
+          {"BGR", 6},
+          {"SRB", 7},
+          {"UKR", 37},
+          {"BLR", 9}
+        ],
+        do: %{country: country, people: people}
+  end
+
   def states do
     states =
       ~w(CA TX FL NY PA IL OH GA NC MI NJ VA WA AZ MA TN IN MO MD WI CO MN SC AL LA KY OR OK CT UT IA NV)
@@ -440,7 +538,7 @@ defmodule FudeDev.Layouts do
       <body>
         <main>
           <nav>
-            <a href="/">Gallery</a><a href="/newsroom">Newsroom</a><a href="/live">Live</a><a href="?theme=sumi">Sumi</a><a href="?dark=1">Dark</a><a href="?theme=sumi&dark=1">Sumi, dark</a><a href="?locale=de-DE">de-DE</a>
+            <a href="/">Gallery</a><a href="/newsroom">Newsroom</a><a href="/election">Election</a><a href="/live">Live</a><a href="?theme=sumi">Sumi</a><a href="?dark=1">Dark</a><a href="?theme=sumi&dark=1">Sumi, dark</a><a href="?locale=de-DE">de-DE</a>
           </nav>
           <nav aria-label="Sumi's themes">
             Sumi: <a :for={{id, name, _, _, _, _, _} <- @themes} href={"?sumi=#{id}"} aria-current={@look == id && "page"}>{name}</a>
@@ -772,6 +870,75 @@ defmodule FudeDev.LiveLive do
   end
 end
 
+defmodule FudeDev.ElectionLive do
+  @moduledoc """
+  An election, as a newsroom shows it on the night: the parties' seats and
+  votes with their changes, the seats and votes as two shares with the
+  majority, the chamber, and maps of who leads where.
+  """
+
+  use Phoenix.LiveView
+
+  import Fude.Components
+
+  alias FudeDev.Data
+
+  def mount(params, _session, socket) do
+    {:ok, assign(socket, locale: params["locale"] || "en-GB")}
+  end
+
+  def render(assigns) do
+    ~H"""
+    <div class="grid">
+      <.chart
+        id="results"
+        locale={@locale}
+        chart={
+          Fude.layers(Data.election(), [
+            Fude.bar(x: [field: :party, sort: Data.parties()], y: [field: :seats, title: "Seats"],
+              color: [field: :party, scheme: Data.party_colors(), sort: Data.parties()], horizontal: true),
+            Fude.text(y: :party, text: [field: :seat_change, format: :number, title: "±"], change: true),
+            Fude.text(y: :party, text: [field: :votes, format: :number, suffix: "%", title: "Votes"]),
+            Fude.text(y: :party, text: [field: :vote_change, format: :number, title: "±"], change: true)
+          ])
+          |> Fude.title("Social largest party", subtitle: "83 seats, 33 short of the 116 for a majority")
+        }
+      />
+      <.chart
+        id="split"
+        locale={@locale}
+        chart={
+          Fude.bar(Data.election_split(), x: :measure, y: [field: :value, stack: :normalize],
+            color: [field: :party, scheme: Data.party_colors(), sort: Data.parties()], horizontal: true, labels: :series,
+            title: "Seats and votes", subtitle: "Each party's share")
+          |> Fude.annotate(:line, x: 116 / 230, y: "Seats", text: "116 for a majority")
+        }
+      />
+      <.chart
+        id="chamber"
+        locale={@locale}
+        chart={Fude.parliament(Data.election(), color: [field: :party, scheme: Data.party_colors(), sort: Data.parties()], value: :seats, majority: 116,
+          title: "Seats", subtitle: "230 seats, 116 for a majority")}
+      />
+      <.chart
+        id="leads"
+        locale={@locale}
+        chart={Fude.choropleth(Data.state_leads(), region: :state, map: "us-states",
+          color: [field: :leader, title: "Leader", scheme: Data.party_colors(), sort: Data.parties()],
+          shade: [field: :lead, title: "Lead, points"],
+          title: "Who leads where", subtitle: "Each state in its leader's color, fainter as the lead is smaller")}
+      />
+      <.chart
+        id="bubbles"
+        locale={@locale}
+        chart={Fude.bubble_map(Data.populations(), region: :country, size: [field: :people, title: "People, millions"],
+          title: "Where the people are", subtitle: "Europe's many small countries, each with its circle")}
+      />
+    </div>
+    """
+  end
+end
+
 defmodule FudeDev.NewsroomLive do
   @moduledoc """
   Each kind of chart as a graphics desk would publish it (#10): a title
@@ -943,6 +1110,7 @@ defmodule FudeDev.Router do
     live("/", FudeDev.GalleryLive)
     live("/live", FudeDev.LiveLive)
     live("/newsroom", FudeDev.NewsroomLive)
+    live("/election", FudeDev.ElectionLive)
   end
 end
 

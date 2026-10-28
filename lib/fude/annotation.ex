@@ -16,6 +16,9 @@ defmodule Fude.Annotation do
     * `:band` - a shaded range of `x` or of `y` (`{from, to}`), with words
       at its top.
     * `:line` - a line across the chart at an `x` or a `y`, with words.
+      With both, and one of them a category, the line crosses that
+      category's band only: `x: 116, y: "Seats"` marks a majority on the
+      bar of seats, not on the bar of votes.
   """
 
   @type type :: :label | :band | :line

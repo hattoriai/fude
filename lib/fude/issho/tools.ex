@@ -86,7 +86,7 @@ if Code.ensure_loaded?(Issho.Tool) do
       "label", "x": "North", "y": 136000, "text": "Best quarter"}]}. The
       kinds: bar, line, area, scatter, bubble, pie, donut, histogram,
       heatmap, waterfall, funnel, timeline, boxplot, candlestick, treemap,
-      radar, radial_bar, sparkline, choropleth, bubble_map, rule, text,
+      radar, radial_bar, parliament, sparkline, choropleth, bubble_map, rule, text,
       number, trend, gauge, progress. A channel is a field's name, or
       {"field", "aggregate" (count, sum, mean, median, min, max, distinct),
       "time" (year, quarter, month, week, day, hour, minute), "bin",

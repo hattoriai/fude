@@ -27,7 +27,9 @@ export function tableOf(config: Config): Table {
       : ([
           ["x", "x"],
           ["y", "y"],
+          ["region", "region"],
           ["color", "color"],
+          ["shade", "shade"],
           ["size", "size"],
           ["value", null],
         ] as [string, string | null][])
