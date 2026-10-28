@@ -6,7 +6,7 @@
 import { alpha, mix, ramp, readTheme, rgb, type Theme } from "./theme";
 import { formatTime, formatter, parseFormat, tickFormatter, timeTickFormatter } from "./format";
 import { position, type Position } from "./scale";
-import { draw, easeOut, tween, type Datum, type Paint, type PathPoint, type PathShape, type Shape } from "./shapes";
+import { draw, easeOut, tween, type Datum, type DotShape, type Paint, type PathPoint, type PathShape, type Shape } from "./shapes";
 import { loadMap, type LoadedMap } from "./maps";
 import { png, save, svgDocument, SvgContext } from "./export";
 import { categorical, dataValue, datumOf, fraction, matches, same, type Datum as PlaceDatum, type Place } from "./places";
@@ -364,13 +364,14 @@ export class Chart {
       const value = parseFloat(data.value);
       if (!Number.isFinite(value)) continue;
       // With no format, exact under 100,000 and compact from there.
-      const { name, digits } = parseFormat(data.dataset.format);
+      const { name, digits, suffix } = parseFormat(data.dataset.format);
       if (name === "percent-change") {
         const text = formatter("percent", this.locale, digits ?? 1)(Math.abs(value));
         data.textContent = `${value >= 0 ? "▲" : "▼"} ${text}`;
       } else {
         const auto = name || (Math.abs(value) >= 100000 ? "compact" : null);
-        data.textContent = formatter(digits === undefined ? auto : `${auto ?? ""}:${digits}`, this.locale)(value);
+        const format = (digits === undefined ? (auto ?? "") : `${auto ?? ""}:${digits}`) + (suffix ? `|${suffix}` : "");
+        data.textContent = formatter(format || null, this.locale)(value);
       }
       if (data.classList.contains("fude-value")) data.style.setProperty("--fude-chars", String(data.textContent.length));
     }
@@ -562,6 +563,16 @@ export class Chart {
       right -= widest + 8;
     }
 
+    // A column of text at the right of the plot (a text layer with no x)
+    // takes a margin as wide as its widest words or its title, and its
+    // title a line above the plot.
+    for (const layer of this.config.layers ?? []) {
+      if (layer.mark !== "text" || layer.options.column !== true) continue;
+      const title = typeof layer.options.title === "string" ? layer.options.title : "";
+      right -= Math.max(this.measure(title), ...this.textWords(layer).map((w) => this.measure(w.text, 15))) + 16;
+      if (axes && title && top < pad + 20) top = pad + 20;
+    }
+
     // A funnel has no value axis; its labels outside the bars take the right.
     const funnel = (this.config.layers ?? []).find((layer) => layer.options.funnel === true);
     if (funnel) {
@@ -628,6 +639,18 @@ export class Chart {
       layout.labels = this.placeLabels(labels, layout);
     }
     return layout;
+  }
+
+  // The words of a text layer: each row's text, a number in its format.
+  private textWords(layer: Layer): { row: number; text: string }[] {
+    const format = formatter(layer.options.format as string | undefined, this.locale);
+    const values = (layer.columns.text ?? []) as unknown[];
+    const words: { row: number; text: string }[] = [];
+    values.forEach((value, row) => {
+      if (value === null || value === undefined || value === "") return;
+      words.push({ row, text: typeof value === "number" ? format(value) : String(value) });
+    });
+    return words;
   }
 
   // A sparkline's last value, in its y format, when it writes it.
@@ -990,6 +1013,7 @@ export class Chart {
     const size = this.config.scales?.size;
     const [s0, s1] = (size?.domain as [number, number] | null) ?? [0, 1];
     const ring = layer.n <= 600;
+    const dots: DotShape[] = [];
     for (let i = 0; i < layer.n; i++) {
       const series = c.color?.[i] ?? null;
       if (series !== null && this.hidden.has(series) && this.config.scales?.color?.type !== "sequential") continue;
@@ -1000,8 +1024,43 @@ export class Chart {
       const r = sv == null || s1 === s0 ? 4 : 3 + Math.sqrt(Math.max(0, (sv - s0) / (s1 - s0))) * 17;
       const px = x.kind === "band" ? x.at(xv) + x.bandwidth / 2 : x.at(xv);
       const py = y.kind === "band" ? y.at(yv) + y.bandwidth / 2 : y.at(yv);
-      shapes.push({ type: "dot", key: `${index}:${i}`, x: px, y: py, r, color: this.colorOf(layer, i), ring, datum: { layer: index, row: i, series } });
+      dots.push({ type: "dot", key: `${index}:${i}`, x: px, y: py, r, color: this.colorOf(layer, i), ring, datum: { layer: index, row: i, series } });
     }
+    // The points of each category joined (`connect`): a line under them,
+    // across the category, from its least value to its greatest.
+    if (layer.options.connect === true) {
+      const scales = this.scalesOf(layer);
+      const across = y.kind === "band" ? "y" : "x";
+      for (const [category, group] of this.categories(layer, dots)) {
+        if (group.length < 2) continue;
+        const key = `${index}:connect:${this.keyOf(scales[across], category)}`;
+        const color = this.theme.baseline;
+        const width = this.theme.line;
+        if (across === "y") {
+          const xs = group.map((dot) => dot.x);
+          shapes.push({ type: "rule", key, x1: Math.min(...xs), y1: group[0]!.y, x2: Math.max(...xs), y2: group[0]!.y, color, dashed: false, width });
+        } else {
+          const ys = group.map((dot) => dot.y);
+          shapes.push({ type: "rule", key, x1: group[0]!.x, y1: Math.min(...ys), x2: group[0]!.x, y2: Math.max(...ys), color, dashed: false, width });
+        }
+      }
+    }
+    shapes.push(...dots);
+  }
+
+  // The points of a layer by their category: of y when it is a band, else
+  // of x. A layer with no category is one group.
+  private categories(layer: Layer, dots: DotShape[]): Map<number, DotShape[]> {
+    const scales = this.scalesOf(layer);
+    const column = scales.y?.type === "band" ? layer.columns.y : scales.x?.type === "band" ? layer.columns.x : null;
+    const groups = new Map<number, DotShape[]>();
+    for (const dot of dots) {
+      const category = column?.[dot.datum.row] ?? -1;
+      const group = groups.get(category);
+      if (group) group.push(dot);
+      else groups.set(category, [dot]);
+    }
+    return groups;
   }
 
   private arcs(layer: Layer, index: number, layout: Layout, shapes: Shape[]): void {
@@ -1303,6 +1362,62 @@ export class Chart {
         const key = `v:${shape.key}`;
         if (layer.horizontal) text(svg, value(v), shape.x + shape.w + 6, shape.y + shape.h / 2, { anchor: "start", baseline: "middle", fill: theme.secondary, halo: theme.surface, tabular: true, key });
         else text(svg, value(v), shape.x + shape.w / 2, shape.y - 6, { anchor: "middle", baseline: "alphabetic", fill: theme.secondary, halo: theme.surface, tabular: true, key });
+      }
+    });
+
+    // Value labels of points: the value that each point measures, above it;
+    // in a category of joined points, the least below its point and the
+    // greatest above, so that each stays off the line between them. A
+    // label that would cover one before it is left out: the tooltip has it.
+    const placed: [number, number, number, number][] = [];
+    (this.config.layers ?? []).forEach((layer, index) => {
+      if (layer.mark !== "point" || layer.options.labels !== true) return;
+      const ls = this.scalesOf(layer);
+      const measured = ls.y?.type === "band" ? "x" : "y";
+      const value = formatter(ls[measured]?.format, this.locale);
+      const dots = this.shapes.filter((shape) => shape.type === "dot" && shape.datum.layer === index) as DotShape[];
+      for (const group of this.categories(layer, dots).values()) {
+        const at = (dot: DotShape) => (measured === "x" ? dot.x : -dot.y);
+        const least = layer.options.connect === true && group.length > 1 ? group.reduce((a, b) => (at(b) < at(a) ? b : a)) : null;
+        for (const dot of group) {
+          const v = layer.columns[measured]?.[dot.datum.row];
+          if (v == null) continue;
+          const words = value(v);
+          const half = this.measure(words) / 2 + 3;
+          const px = Math.max(half, Math.min(layout.width - half, dot.x));
+          const py = dot === least ? dot.y + dot.r + 15 : dot.y - dot.r - 6;
+          const box: [number, number, number, number] = [px - half, py - FONT_SIZE, px + half, py + 3];
+          if (placed.some(([x0, y0, x1, y1]) => box[0] < x1 && box[2] > x0 && box[1] < y1 && box[3] > y0)) continue;
+          placed.push(box);
+          text(svg, words, px, py, { anchor: "middle", baseline: "alphabetic", fill: dot === least ? theme.muted : theme.secondary, halo: theme.surface, tabular: true, key: `v:${dot.key}` });
+        }
+      }
+    });
+
+    // Text layers: each value at its x and y, or, with no x, in a column at
+    // the right of the plot under its title, beside each category.
+    (this.config.layers ?? []).forEach((layer, index) => {
+      if (layer.mark !== "text") return;
+      const words = this.textWords(layer);
+      const ls = this.scalesOf(layer);
+      const lx = layout.x;
+      const ly = this.layoutOf(layer, layout).y;
+      const center = (pos: Position | undefined, v: number | null | undefined) =>
+        pos && v != null ? pos.at(v) + (pos.kind === "band" ? pos.bandwidth / 2 : 0) : null;
+      if (layer.options.column === true) {
+        const edge = layout.width - 8;
+        if (typeof layer.options.title === "string") text(svg, layer.options.title, edge, layout.top - 12, { anchor: "end", baseline: "alphabetic", fill: theme.muted });
+        for (const { row, text: content } of words) {
+          const py = center(ly, layer.columns.y?.[row]);
+          if (py !== null) text(svg, content, edge, py, { anchor: "end", baseline: "middle", fill: theme.text, tabular: true, size: 15, key: `t:${index}:${this.keyOf(ls.y, layer.columns.y?.[row])}` });
+        }
+        return;
+      }
+      for (const { row, text: content } of words) {
+        const px = center(lx, layer.columns.x?.[row]);
+        const py = center(ly, layer.columns.y?.[row]);
+        if (px === null || py === null) continue;
+        text(svg, content, px, py, { anchor: "middle", baseline: "middle", fill: theme.text, halo: theme.surface, tabular: true, key: `t:${index}:${row}` });
       }
     });
 

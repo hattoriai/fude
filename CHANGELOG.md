@@ -7,6 +7,30 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Dumbbells: `connect: true` on a scatter or a bubble joins the points of
+  each category with a line under them (a before and an after, two
+  parsers on a benchmark), across a category on `y` or on `x`. See the
+  Charts guide, "Points joined in each category".
+- `labels: true` on a scatter or a bubble writes each point's value by
+  it; with `connect`, the least of a category below its point and the
+  greatest above. A label that would cover another is left out.
+- A text layer with a category on `y` and no `x` is a column at the right
+  of the plot, under its title, beside each category: a speedup beside a
+  dumbbell, a count beside bars.
+- `suffix` on a channel: words after every value, on its axis, its labels
+  and its tooltip (`suffix: "×"`, `suffix: "/s"`), in specs as `"suffix"`.
+- The format `:decimal_bytes`: bytes in steps of 1,000, so that the ticks
+  of a log scale are round (10 MB, 100 MB, 1 GB). `:bytes` takes `digits`.
+
+### Fixed
+
+- A text layer drew nothing in the browser.
+- A log scale with a `domain` of its own widened it to whole powers of
+  ten; it keeps it now, as a linear scale does, with the powers of ten
+  inside it as its ticks.
+
 ## [0.8.0] - 2026-10-25
 
 ### Added

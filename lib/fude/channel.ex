@@ -34,14 +34,20 @@ defmodule Fude.Channel do
       `:descending`, `:x`, `:y`, `:"-x"` or `:"-y"` (by another channel,
       the minus for descending), or a list of the categories in order.
     * `:format` - how the browser writes the values: `:number`, `:integer`,
-      `:percent`, `:compact`, `{:currency, "EUR"}`, `:bytes`, or a unit
-      of a time for times.
+      `:percent`, `:compact`, `{:currency, "EUR"}`, `:bytes` (1 KB is
+      1,024 bytes), `:decimal_bytes` (1 KB is 1,000 bytes, as networks and
+      disks count them, so that the ticks of a log scale are round), or a
+      unit of a time for times.
     * `:digits` - how many decimals the values are written with, from 0 to
-      20, for `:number`, `:compact`, `:percent` and currencies:
+      20, for `:number`, `:compact`, `:percent`, bytes and currencies:
       `[field: :revenue, format: :number, digits: 0]` writes 6,893,914. Not
       given, `:number` keeps a value's decimals up to 2, `:compact` and
       `:percent` write up to 1, and a currency 2 under 1,000 and none from
       there. An axis's ticks take the decimals their step needs.
+    * `:suffix` - words written after every value, on the axis, in the
+      labels and in the tooltip: `[field: :speedup, suffix: "×"]` writes
+      24.2×, `[field: :rate, format: :decimal_bytes, suffix: "/s"]` writes
+      618.6 MB/s.
     * `:scheme` - the colors of a `color` channel, by name: sequential
       `:blue` (the default), `:green`, `:orange`, `:purple`, `:gray`,
       `:viridis`; diverging `:red_blue`, `:red_green` (around `:mid`);
@@ -77,6 +83,7 @@ defmodule Fude.Channel do
           sort: atom() | [term()] | nil,
           format: atom() | {atom(), String.t()} | nil,
           digits: non_neg_integer() | nil,
+          suffix: String.t() | nil,
           scheme: atom() | [String.t()] | nil,
           mid: number() | nil,
           title: String.t() | false | nil,
@@ -95,6 +102,7 @@ defmodule Fude.Channel do
     :sort,
     :format,
     :digits,
+    :suffix,
     :scheme,
     :mid,
     :title,
@@ -108,7 +116,15 @@ defmodule Fude.Channel do
   @time_units [:year, :quarter, :month, :week, :day, :hour, :minute]
   @types [:number, :time, :category, :ordinal]
   @sorts [:ascending, :descending, :x, :y, :"-x", :"-y"]
-  @formats [:number, :integer, :percent, :compact, :bytes, :duration | @time_units]
+  @formats [
+    :number,
+    :integer,
+    :percent,
+    :compact,
+    :bytes,
+    :decimal_bytes,
+    :duration | @time_units
+  ]
   @stacks [:zero, :normalize, :center]
   @scale_types [:linear, :log, :sqrt]
   @axes [:left, :right]
@@ -145,6 +161,10 @@ defmodule Fude.Channel do
     do:
       is_binary(color) and byte_size(color) <= 64 and
         color =~ ~r/^(#[0-9a-fA-F]{3,8}|[a-z]+\([0-9a-zA-Z.,%\s\/-]*\)|[a-z]+)$/
+
+  @doc false
+  # Words after a value: a short string, written as text.
+  def suffix?(suffix), do: is_binary(suffix) and suffix != "" and String.length(suffix) <= 16
 
   @doc false
   def colors?(list), do: is_list(list) and length(list) >= 2 and Enum.all?(list, &color?/1)
@@ -208,6 +228,12 @@ defmodule Fude.Channel do
   defp put(_name, channel, {:digits, digits}) when digits in 0..20,
     do: %{channel | digits: digits}
 
+  defp put(name, channel, {:suffix, suffix}) do
+    if suffix?(suffix),
+      do: %{channel | suffix: suffix},
+      else: raise(ArgumentError, bad_key(name, :suffix, suffix, expected(:suffix)))
+  end
+
   defp put(_name, channel, {:scheme, scheme}) when scheme in @schemes,
     do: %{channel | scheme: scheme}
 
@@ -264,6 +290,7 @@ defmodule Fude.Channel do
   defp expected(:stack), do: Enum.map_join(@stacks, ", ", &inspect/1) <> " or false"
   defp expected(:format), do: Enum.map_join(@formats, ", ", &inspect/1) <> " or {:currency, code}"
   defp expected(:digits), do: "a whole number from 0 to 20"
+  defp expected(:suffix), do: "a string of 1 to 16 characters"
 
   defp expected(:scheme),
     do: Enum.map_join(@schemes, ", ", &inspect/1) <> ", or a list of two colors or more"
@@ -275,8 +302,8 @@ defmodule Fude.Channel do
 
   defp expected(_key),
     do:
-      "one of :field, :type, :aggregate, :time, :bin, :sort, :format, :digits, :scheme, :mid, " <>
-        ":title, :scale, :stack, :value, :axis"
+      "one of :field, :type, :aggregate, :time, :bin, :sort, :format, :digits, :suffix, " <>
+        ":scheme, :mid, :title, :scale, :stack, :value, :axis"
 
   defp bad(name, value) do
     "Fude: #{inspect(name)} must be a field, {aggregate, field}, {unit, field}, {:bin, field}, " <>

@@ -28,8 +28,9 @@ The full form also takes `type` (`:number`, `:time`, `:category`,
 `:ordinal`), `sort` (`:ascending`, `:descending`, `:"-y"` by the other
 channel, or a list of the categories in order), `format` (`:number`,
 `:integer`, `:percent`, `:compact`, `{:currency, code}`, `:bytes`,
-`:duration`), `digits` (the decimals of a `:number`, `:compact`,
-`:percent` or currency, from 0 to 20), `scheme` and `mid` (the colors of
+`:decimal_bytes`, `:duration`), `digits` (the decimals of a `:number`,
+`:compact`, `:percent`, bytes or currency, from 0 to 20), `suffix` (words
+after every value: `"×"`, `"/s"`), `scheme` and `mid` (the colors of
 a `color` channel, see Colors), `scale` (`type: :log`, `domain: [0, 100]`, `zero: true`,
 `nice: false`), `stack` (`:zero`, `:normalize`, `:center`, `false`) and
 `axis` (`:right`, for a `y` on an axis of its own, see Layers).
@@ -45,8 +46,8 @@ words (`placed_on` is "Placed on"), unless the channel has one.
 | `bar` | `x`, `y`, `color`, `tooltip` | `horizontal`, `labels` |
 | `line` | `x`, `y`, `color`, `tooltip` | `curve` (`:linear`, `:monotone`, `:step`), `points` |
 | `area` | `x`, `y`, `color`, `tooltip` | `curve` |
-| `scatter` | `x`, `y`, `color`, `size`, `tooltip` | |
-| `bubble` | `x`, `y`, `size`, `color`, `tooltip` | |
+| `scatter` | `x`, `y`, `color`, `size`, `tooltip` | `connect`, `labels` |
+| `bubble` | `x`, `y`, `size`, `color`, `tooltip` | `connect`, `labels` |
 | `pie`, `donut` | `value`, `color`, `tooltip` | `inner` (the donut's hole) |
 | `histogram` | `x`, `color`, `tooltip` | `bins` |
 | `heatmap` | `x`, `y`, `color`, `tooltip` | |
@@ -56,7 +57,7 @@ words (`placed_on` is "Placed on"), unless the channel has one.
 | `choropleth` | `region`, `color`, `tooltip` | `map` |
 | `bubble_map` | `region`, `size`, `color`, `tooltip` | `map` |
 | `rule` | `x` or `y` | `label`, `dashed` |
-| `text` | `x`, `y`, `text` | |
+| `text` | `x`, `y`, `text` (with no `x`: a column beside `y`) | |
 | `number` | `value`, `spark` | `label`, `align` |
 | `trend` | `value`, `compare`, `spark` | `label`, `align` |
 | `gauge` | `value` | `label`, `min`, `max`, `target`, `align` |
@@ -191,6 +192,36 @@ A sparkline's `area: true` fills under its line, fading to nothing;
 highest; `value: true` writes its last value at the end of its line, in
 `y`'s format. With no `height`, a sparkline fills the height of its box
 (a card), and is 48 pixels high in a box with none.
+
+## Points joined in each category
+
+`connect: true` on a scatter or a bubble draws a line under the points of
+each category, from its least value to its greatest: a dumbbell, for a
+before and an after, or two of anything, on each row. The category is on
+`y` (the lines across) or on `x` (the lines up); a chart of two numbers
+has none to join, and says so. `labels: true` writes each point's value
+by it, the least of a category below its point and the greatest above,
+in the format of its axis:
+
+```elixir
+Fude.layers(runs, [
+  Fude.scatter(
+    x: [field: :rate, format: :decimal_bytes, suffix: "/s", scale: [type: :log]],
+    y: [field: :benchmark, title: false],
+    color: :parser,
+    connect: true,
+    labels: true
+  ),
+  Fude.text(y: :benchmark, text: [field: :speedup, digits: 1, suffix: "×"])
+], title: "Parsing throughput", subtitle: "Higher is better")
+```
+
+The rows are long: one for each point (a benchmark and a parser), each
+with its category. A text layer with a category on `y` and no `x` is a
+column at the right of the plot, under its title (the text's), with the
+first value of each category: the speedup beside each dumbbell, or a
+count beside a bar. `labels: true` on a scatter of many points leaves out
+the labels that would cover others; the tooltip has every value.
 
 ## Layers
 

@@ -101,7 +101,7 @@ function time(domain: [number, number] | null, range: [number, number], spacing:
 function continuous(scale: Scale, range: [number, number], spacing: number): Position {
   let [d0, d1] = (scale.domain as [number, number] | null) ?? [0, 1];
   const count = tickCount(Math.abs(range[1] - range[0]), spacing);
-  if (scale.type === "log" && d0 > 0 && d1 > 0) return log([d0, d1], range);
+  if (scale.type === "log" && d0 > 0 && d1 > 0) return log([d0, d1], range, scale.nice !== false || d0 === d1);
   if (scale.nice !== false) [d0, d1] = nice(d0, d1, count);
   else if (d0 === d1) [d0, d1] = nice(d0, d1, count);
   const kind = scale.type === "sqrt" ? "sqrt" : "linear";
@@ -121,12 +121,13 @@ function continuous(scale: Scale, range: [number, number], spacing: number): Pos
   };
 }
 
-function log([d0, d1]: [number, number], range: [number, number]): Position {
-  const l0 = Math.floor(Math.log10(d0));
-  const l1 = Math.ceil(Math.log10(d1));
+// A log scale: widened to whole powers of ten, or, not nice (a domain of
+// its own), as given, with the powers of ten inside it as its ticks.
+function log([d0, d1]: [number, number], range: [number, number], nice: boolean): Position {
+  const [l0, l1] = nice ? [Math.floor(Math.log10(d0)), Math.ceil(Math.log10(d1))] : [Math.log10(d0), Math.log10(d1)];
   const linear = map([l0, l1], range);
   const out: number[] = [];
-  for (let p = l0; p <= l1; p++) out.push(Math.pow(10, p));
+  for (let p = Math.ceil(l0 - 1e-9); p <= l1 + 1e-9; p++) out.push(Math.pow(10, p));
   return {
     kind: "log",
     at: (v) => linear.at(Math.log10(Math.max(v, Number.MIN_VALUE))),

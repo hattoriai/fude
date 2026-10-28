@@ -89,11 +89,15 @@ if Code.ensure_loaded?(Issho.Tool) do
       text, number, trend, gauge, progress. A channel is a field's name, or
       {"field", "aggregate" (count, sum, mean, median, min, max, distinct),
       "time" (year, quarter, month, week, day, hour, minute), "bin",
-      "format", "digits" (decimals, 0 to 20), "scheme" (a color's: blue, green,
-      orange, purple, gray, viridis, red_blue, red_green, categorical,
-      okabe_ito, or a list of colors), "mid", "title", "sort", "stack"}. A
-      tooltip's list may end with what it adds: {"change", "share", "rank",
-      "history"}, each true or false. A chart may have "animate" (false, or
+      "format", "digits" (decimals, 0 to 20), "suffix" (words after each
+      value: "×", "/s"), "scheme" (a color's: blue, green, orange, purple,
+      gray, viridis, red_blue, red_green, categorical, okabe_ito, or a list
+      of colors), "mid", "title", "sort", "stack"}. A scatter or a bubble
+      may have "connect" (a line between the points of each category: a
+      dumbbell) and "labels" (each point's value). A text layer with "y"
+      and "text" and no "x" is a column at the right of the plot, beside
+      each category. A tooltip's list may end with what it adds:
+      {"change", "share", "rank", "history"}, each true or false. A chart may have "animate" (false, or
       {"duration": ms}) and "frame" (a label for a sequence of renders).
       """,
       annotations: [destructive: true]

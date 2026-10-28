@@ -17,7 +17,10 @@ Fude.line(sales, x: {:month, :placed_on}, y: {:sum, :total}, color: :channel,
 * A line chart of four series or fewer labels each line at its end,
   with a dot, and moves labels apart that would touch, with a leader to
   their line. The legend stays above.
-* `labels: true` writes the value at the end of each bar.
+* `labels: true` writes the value at the end of each bar, and by each
+  point of a scatter or a bubble.
+* A text layer with no `x` writes a column beside the categories of `y`,
+  under its title: a ratio or a count beside each row.
 * Names of categories wrap onto two lines, or stagger, before any is
   left out.
 
