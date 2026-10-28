@@ -29,7 +29,7 @@ defmodule Fude.Test do
   def chart(view, id) do
     case attribute(view, id, "data-fude") do
       nil -> flunk("no chart with the id #{inspect(id)}")
-      json -> JSON.decode!(json)
+      json -> json |> JSON.decode!() |> Fude.Wire.unpack()
     end
   end
 

@@ -137,7 +137,7 @@ defmodule Fude.MixProject do
       groups_for_modules: [
         Charts: [Fude, Fude.Chart, Fude.Layer, Fude.Channel, Fude.Annotation, Fude.Components],
         Data: [Fude.Data, Fude.Query],
-        Live: [Fude.Live],
+        Live: [Fude.Live, Fude.Wire],
         Collaboration: [Fude.Issho, Fude.Issho.Place],
         Specs: [Fude.Spec],
         Export: [Fude.Export],

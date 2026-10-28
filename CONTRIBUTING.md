@@ -54,7 +54,8 @@ A pull request with an issue says so: `Fixes #123` or `Closes #123`.
 - **Tests.** A bug fix has a test that fails on `main` and passes with
   the fix. A feature has tests of what it does, and of its errors. A rule
   that both the browser and the server apply (ticks, bins, units of time)
-  is tested on both sides, in `test/fixtures/rules.json`. A change to
+  is tested on both sides, in `test/fixtures/rules.json` (and the packing
+  of columns in `test/fixtures/wire.json`). A change to
   `Fude.Query` passes on SQLite, PostgreSQL and MySQL.
 - **A change to the spec** keeps the specs saved before it loading: a
   migration in `Fude.Spec`, and a test of it.

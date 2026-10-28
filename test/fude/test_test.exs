@@ -50,4 +50,14 @@ defmodule Fude.TestTest do
       wire: %{"layers" => [%{"n" => 1}], "scales" => %{"x" => %{"domain" => ["West"]}}}
     })
   end
+
+  test "Fude.Live.append sends many rows packed, the same when unpacked", %{view: view} do
+    render_hook(view, "stream_days", %{})
+    assert_push_event(view, "fude:append", %{id: "revenue", wire: wire})
+
+    assert %{"step" => 86_400_000} = hd(wire["layers"])["columns"]["x"]
+    rows = for d <- 0..199, do: %{day: Date.add(~D[2026-01-01], d), revenue: d * 2}
+    {:ok, plain} = Fude.Compile.compile(Fude.line(rows, x: :day, y: :revenue))
+    assert Fude.Wire.unpack(wire)["layers"] == plain["layers"]
+  end
 end
