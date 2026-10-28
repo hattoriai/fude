@@ -28,6 +28,12 @@ defmodule Fude.Layer do
           | :gauge
           | :choropleth
           | :bubble_map
+          | :timeline
+          | :boxplot
+          | :candlestick
+          | :treemap
+          | :radar
+          | :radial_bar
 
   @type t :: %__MODULE__{
           id: String.t() | nil,
@@ -139,6 +145,28 @@ defmodule Fude.Layer do
       channels: [:region, :size, :color, :tooltip],
       needs: [:region, :size],
       options: [map: :string]
+    },
+    timeline: %{
+      channels: [:y, :x, :x2, :color, :tooltip],
+      needs: [:y, :x, :x2],
+      options: []
+    },
+    boxplot: %{channels: [:x, :y], needs: [:x, :y], options: [outliers: :boolean]},
+    candlestick: %{
+      channels: [:x, :open, :high, :low, :close, :tooltip],
+      needs: [:x, :open, :high, :low, :close],
+      options: []
+    },
+    treemap: %{
+      channels: [:name, :value, :color, :tooltip],
+      needs: [:name, :value],
+      options: [labels: :boolean]
+    },
+    radar: %{channels: [:x, :y, :color, :tooltip], needs: [:x, :y], options: [labels: :boolean]},
+    radial_bar: %{
+      channels: [:x, :y, :tooltip],
+      needs: [:x, :y],
+      options: [max: :number, labels: :boolean]
     }
   }
 

@@ -103,7 +103,39 @@ export interface RegionShape {
   datum: Datum | null;
 }
 
-export type Shape = RectShape | PathShape | DotShape | ArcShape | RuleShape | RegionShape;
+/**
+ * A box of a box plot or a candlestick, at x (its middle) and w wide: a
+ * body from b0 to b1 (a candle's open and close, a box's quartiles), a line
+ * across at mid (a median), a whisker or a wick from lo to hi. In pixels.
+ */
+export interface BoxShape {
+  type: "box";
+  key: string;
+  x: number;
+  w: number;
+  lo: number;
+  b0: number;
+  mid: number | null;
+  b1: number;
+  hi: number;
+  color: string;
+  /** The color of its whiskers and median: the text's on a box, its own on a candle. */
+  ink: string;
+  datum: Datum;
+}
+
+/** A closed shape through its points (a radar's series), filled faintly, its line in its color. */
+export interface PolyShape {
+  type: "poly";
+  key: string;
+  cx: number;
+  cy: number;
+  points: { x: number; y: number }[];
+  color: string;
+  series: number | null;
+}
+
+export type Shape = RectShape | PathShape | DotShape | ArcShape | RuleShape | RegionShape | BoxShape | PolyShape;
 
 // -- Tweening ---------------------------------------------------------------
 
@@ -164,6 +196,18 @@ export function tween(prev: Shape | undefined, next: Shape, t: number): Shape {
       const p = prev && prev.type === "rule" ? prev : next;
       return { ...next, x1: lerp(p.x1, next.x1, t), y1: lerp(p.y1, next.y1, t), x2: lerp(p.x2, next.x2, t), y2: lerp(p.y2, next.y2, t) };
     }
+    case "box": {
+      // A new box opens from the middle of its body.
+      const middle = (next.b0 + next.b1) / 2;
+      const p = prev && prev.type === "box" ? prev : { ...next, lo: middle, b0: middle, mid: next.mid === null ? null : middle, b1: middle, hi: middle };
+      const mid = next.mid === null ? null : lerp(p.mid ?? next.mid, next.mid, t);
+      return { ...next, x: lerp(p.x, next.x, t), w: lerp(p.w, next.w, t), lo: lerp(p.lo, next.lo, t), b0: lerp(p.b0, next.b0, t), mid, b1: lerp(p.b1, next.b1, t), hi: lerp(p.hi, next.hi, t) };
+    }
+    case "poly": {
+      // A new shape grows from the center; one of as many points moves to its new place.
+      const from = prev && prev.type === "poly" && prev.points.length === next.points.length ? prev.points : next.points.map(() => ({ x: next.cx, y: next.cy }));
+      return { ...next, points: next.points.map((point, i) => ({ x: lerp(from[i]!.x, point.x, t), y: lerp(from[i]!.y, point.y, t) })) };
+    }
   }
 }
 
@@ -192,7 +236,71 @@ export function draw(ctx: CanvasRenderingContext2D, shape: Shape, paint: Paint, 
       return drawRule(ctx, shape, opacity);
     case "region":
       return drawRegion(ctx, shape, paint, opacity);
+    case "box":
+      return drawBox(ctx, shape, paint, opacity);
+    case "poly":
+      return drawPoly(ctx, shape, paint, opacity);
   }
+}
+
+function drawBox(ctx: CanvasRenderingContext2D, s: BoxShape, paint: Paint, opacity: number): void {
+  if (s.w <= 0.1) return;
+  ctx.globalAlpha = opacity * paint.focus(s.key, s.datum.series);
+  const x = Math.round(s.x) + 0.5;
+  const top = Math.min(s.b0, s.b1);
+  const height = Math.max(1, Math.abs(s.b1 - s.b0));
+  // The whisker (a wick), behind the body.
+  ctx.strokeStyle = s.ink;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, s.hi);
+  ctx.lineTo(x, s.lo);
+  if (s.mid !== null) {
+    // A box's whiskers end in short caps.
+    const cap = s.w / 4;
+    ctx.moveTo(x - cap, Math.round(s.hi) + 0.5);
+    ctx.lineTo(x + cap, Math.round(s.hi) + 0.5);
+    ctx.moveTo(x - cap, Math.round(s.lo) + 0.5);
+    ctx.lineTo(x + cap, Math.round(s.lo) + 0.5);
+  }
+  ctx.stroke();
+  ctx.fillStyle = s.color;
+  const r = Math.min(paint.radius / 2, s.w / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(s.x - s.w / 2 + r, top);
+  ctx.arcTo(s.x + s.w / 2, top, s.x + s.w / 2, top + height, r);
+  ctx.arcTo(s.x + s.w / 2, top + height, s.x - s.w / 2, top + height, r);
+  ctx.arcTo(s.x - s.w / 2, top + height, s.x - s.w / 2, top, r);
+  ctx.arcTo(s.x - s.w / 2, top, s.x + s.w / 2, top, r);
+  ctx.closePath();
+  ctx.fill();
+  if (s.mid !== null) {
+    // The median across the body, in the surface's color so that it reads on any.
+    ctx.strokeStyle = paint.surface;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(s.x - s.w / 2, s.mid);
+    ctx.lineTo(s.x + s.w / 2, s.mid);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawPoly(ctx: CanvasRenderingContext2D, s: PolyShape, paint: Paint, opacity: number): void {
+  if (s.points.length < 2) return;
+  const focus = paint.focus(s.key, s.series);
+  ctx.beginPath();
+  s.points.forEach((point, i) => (i === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y)));
+  ctx.closePath();
+  ctx.globalAlpha = opacity * focus * 0.14;
+  ctx.fillStyle = s.color;
+  ctx.fill();
+  ctx.globalAlpha = opacity * focus;
+  ctx.strokeStyle = s.color;
+  ctx.lineWidth = 2;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+  ctx.globalAlpha = 1;
 }
 
 function drawRegion(ctx: CanvasRenderingContext2D, s: RegionShape, paint: Paint, opacity: number): void {

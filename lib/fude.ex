@@ -76,7 +76,19 @@ defmodule Fude do
       "One number on an arc from `min` to `max` (0 and 100 when not given), with a `target`.",
     choropleth:
       "A map of regions colored by `color`: each `region` an ISO code (`\"PRT\"`, `\"PT\"`), a number code or a name; `map` is `\"world\"` (the default) or `\"us-states\"`.",
-    bubble_map: "A map with a circle at each `region`, sized by `size`."
+    bubble_map: "A map with a circle at each `region`, sized by `size`.",
+    timeline:
+      "A timeline: a bar for each `y` (a task) from its `x` (a start) to its `x2` (an end), on an axis of times or numbers, colored by `color`.",
+    boxplot:
+      "A box plot: the numbers of `y` in each category of `x`, as their quartiles, median and whiskers (to the furthest value within 1.5 times the box), with the values beyond as points (`outliers: false` leaves them out). The server works them out from the rows.",
+    candlestick:
+      "A candlestick for each `x` (a day): its `open`, `high`, `low` and `close`; a body from open to close, green when it closed higher and red when lower, and a wick from low to high.",
+    treemap:
+      "A treemap: a tile for each `name`, its area its `value`, tiles of the same `color` together; the largest tiles named with their values.",
+    radar:
+      "A radar: a spoke for each category of `x`, a value of `y` along each, a shape for each `color`.",
+    radial_bar:
+      "Radial bars: a ring for each category of `x`, its arc as long as its `y` of `max` (100 unless given, or the largest value above it)."
   ]
 
   for {kind, doc} <- @kinds do

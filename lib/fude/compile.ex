@@ -185,8 +185,11 @@ defmodule Fude.Compile do
   defp wire_animate(false), do: false
   defp wire_animate(%{duration: ms}), do: %{"duration" => ms}
 
-  defp arcs?(chart),
-    do: Enum.all?(chart.layers, &(&1.kind in [:pie, :donut, :choropleth, :bubble_map]))
+  # The kinds that draw their own frame (a pie, a map, a radar's spokes),
+  # with no axes.
+  @unframed [:pie, :donut, :choropleth, :bubble_map, :treemap, :radar, :radial_bar]
+
+  defp arcs?(chart), do: Enum.all?(chart.layers, &(&1.kind in @unframed))
 
   # -- Annotations -------------------------------------------------------------
 
@@ -314,7 +317,13 @@ defmodule Fude.Compile do
   # the columns of each layer as the scales encode them. A layer whose y is
   # on the right axis has a y scale of its own, "yRight".
   defp layers(layers, data) do
-    tables = layers |> Enum.map(&table(&1, data)) |> Enum.map(&right_axis/1)
+    # A kind may draw more than one mark: a box plot's outliers are points.
+    tables =
+      layers
+      |> Enum.map(&table(&1, data))
+      |> Enum.flat_map(&[Map.delete(&1, :extra) | Map.get(&1, :extra, [])])
+      |> Enum.map(&right_axis/1)
+
     scales = Enum.reduce(tables, %{}, &merge_scales(&2, &1.scales))
     {Enum.map(tables, &encode(&1, scales)), scales}
   end
@@ -448,7 +457,19 @@ defmodule Fude.Compile do
   # is a number. A field of text (a map's color by plan) groups the rows.
   defp aggregated(kind, channels, number?) do
     implicit =
-      if kind in [:bar, :area, :heatmap, :pie, :donut, :choropleth, :bubble_map], do: :sum
+      if kind in [
+           :bar,
+           :area,
+           :heatmap,
+           :pie,
+           :donut,
+           :choropleth,
+           :bubble_map,
+           :treemap,
+           :radar,
+           :radial_bar
+         ],
+         do: :sum
 
     for {name, %Channel{} = channel} <- channels,
         fun = channel.aggregate || implicit_aggregate(implicit, kind, name, channel, number?),
@@ -569,7 +590,7 @@ defmodule Fude.Compile do
   defp done(fun, values) when fun in [:median, :distinct], do: aggregate(fun, values)
   defp done(_fun, acc), do: acc
 
-  defp value_channels(kind) when kind in [:pie, :donut], do: [:value]
+  defp value_channels(kind) when kind in [:pie, :donut, :treemap], do: [:value]
   defp value_channels(:heatmap), do: [:color]
   defp value_channels(:choropleth), do: [:color]
   defp value_channels(:bubble_map), do: [:size, :color]
@@ -734,6 +755,276 @@ defmodule Fude.Compile do
         layer.options
         |> Map.take([:step, :labels])
         |> Map.put(:funnel, true)
+    }
+  end
+
+  # A timeline: a bar for each row from its start (x) to its end (x2), its
+  # task (y) on a band. The bars float, as a waterfall's do; a bar goes
+  # from the earlier of the two to the later.
+  defp marks(:timeline, layer, %{rows: rows}, data) do
+    %{x: start, x2: finish, y: task} = layer.channels
+
+    rows =
+      for row <- rows, is_number(row[:x]) and is_number(row[:x2]) and not is_nil(row[:y]) do
+        {from, to} = {min(row.x, row.x2), max(row.x, row.x2)}
+
+        row
+        |> Map.drop([:x2])
+        |> Map.merge(%{x: row.y, y: to - from, y0: from, y1: to})
+      end
+
+    values = Enum.flat_map(rows, &[&1.y0, &1.y1])
+    extent = if values == [], do: nil, else: Enum.min_max(values)
+
+    span =
+      if x_type(start, data) == :time do
+        %{
+          "type" => "time",
+          "domain" => pair(extent),
+          "unit" => unit(start, start.field && Data.field(data, start.field)),
+          "title" => Channel.title(start),
+          "format" => format(start)
+        }
+      else
+        number(start, data, extent, zero: false, stack: false)
+      end
+
+    color = layer.channels[:color]
+
+    %{
+      mark: "bar",
+      layer: layer,
+      rows: rows,
+      channels: %{x: :x, y: :y},
+      horizontal: true,
+      stack: :range,
+      scales:
+        put_color(
+          %{"y" => band(task, data, rows, :x, layer.channels), "x" => span},
+          color,
+          data,
+          rows
+        ),
+      options: %{
+        labels: false,
+        table:
+          [
+            ["y", Channel.title(task), "y"],
+            ["x0", Channel.title(start), "x"],
+            ["x1", Channel.title(finish), "x"]
+          ] ++
+            if(color, do: [["color", Channel.title(color), "color"]], else: [])
+      }
+    }
+  end
+
+  # A box plot: for each category, its numbers' quartiles and median, and
+  # whiskers to the furthest numbers within 1.5 times the box (Tukey's);
+  # the numbers beyond them are outliers, drawn as points of a layer of
+  # their own.
+  defp marks(:boxplot, layer, %{rows: rows}, data) do
+    %{x: x, y: y} = layer.channels
+
+    boxes =
+      rows
+      |> Enum.reject(&is_nil(&1[:x]))
+      |> Enum.group_by(& &1[:x], & &1[:y])
+      |> then(fn groups ->
+        for cat <- rows |> Enum.map(& &1[:x]) |> Enum.reject(&is_nil/1) |> Enum.uniq(),
+            values = groups[cat] |> Enum.filter(&is_number/1) |> Enum.sort(),
+            values != [],
+            do: Map.put(box(values), :x, cat)
+      end)
+
+    outliers =
+      if layer.options[:outliers] == false,
+        do: [],
+        else: for(b <- boxes, v <- b.outliers, do: %{x: b.x, y: v})
+
+    boxes = Enum.map(boxes, &Map.delete(&1, :outliers))
+    values = Enum.flat_map(boxes, &[&1.lo, &1.hi]) ++ Enum.map(outliers, & &1.y)
+    extent = if values == [], do: nil, else: Enum.min_max(values)
+
+    scales = %{
+      "x" => band(x, data, boxes, :x, layer.channels),
+      "y" => number(y, data, extent, zero: false, stack: false)
+    }
+
+    %{
+      mark: "box",
+      layer: layer,
+      rows: boxes,
+      channels: %{x: :x, y: :y},
+      scales: scales,
+      options: %{
+        table:
+          [["x", Channel.title(x), "x"]] ++
+            Enum.zip_with(~w(lo b0 mid b1 hi), ~w(Low Q1 Median Q3 High), &[&1, &2, "y"]) ++
+            [["n", "Count", nil]]
+      },
+      extra:
+        if outliers == [] do
+          []
+        else
+          [
+            %{
+              mark: "point",
+              layer: %{layer | channels: Map.take(layer.channels, [:x, :y])},
+              rows: outliers,
+              channels: %{x: :x, y: :y},
+              scales: scales,
+              options: %{outliers: true}
+            }
+          ]
+        end
+    }
+  end
+
+  # A candlestick for each x: a body from its open to its close, colored by
+  # whether it closed higher or lower, and a wick from its low to its high.
+  defp marks(:candlestick, layer, %{rows: rows}, data) do
+    %{x: x, close: close} = layer.channels
+
+    rows =
+      for row <- rows,
+          not is_nil(row[:x]),
+          Enum.all?([:open, :high, :low, :close], &is_number(row[&1])) do
+        row
+        |> Map.drop([:open, :high, :low, :close])
+        |> Map.merge(%{
+          lo: row.low,
+          b0: row.open,
+          b1: row.close,
+          hi: row.high,
+          color: if(row.close >= row.open, do: "Increase", else: "Decrease")
+        })
+      end
+
+    rows = if x_type(x, data) == :time, do: Enum.sort_by(rows, & &1.x), else: rows
+    values = Enum.flat_map(rows, &[&1.lo, &1.hi])
+    extent = if values == [], do: nil, else: Enum.min_max(values)
+
+    colors =
+      Enum.filter(["Increase", "Decrease"], fn name -> Enum.any?(rows, &(&1.color == name)) end)
+
+    title = &Channel.title(layer.channels[&1])
+
+    %{
+      mark: "box",
+      layer: layer,
+      rows: rows,
+      channels: %{x: :x, y: :y},
+      scales: %{
+        "x" => band(x, data, rows, :x, layer.channels),
+        "y" => close |> number(data, extent, zero: false, stack: false) |> Map.put("title", nil),
+        "color" => %{
+          "type" => "ordinal",
+          "domain" => colors,
+          "roles" => roles(colors),
+          "legend" => false
+        }
+      },
+      options: %{
+        table: [
+          ["x", Channel.title(x), "x"],
+          ["b0", title.(:open), "y"],
+          ["hi", title.(:high), "y"],
+          ["lo", title.(:low), "y"],
+          ["b1", title.(:close), "y"]
+        ]
+      }
+    }
+  end
+
+  # A treemap: a tile for each name, as large as its value. The browser
+  # lays the tiles out at the plot's size; a color keeps its tiles together.
+  defp marks(:treemap, layer, %{rows: rows}, data) do
+    %{name: name, value: value} = layer.channels
+    color = layer.channels[:color]
+
+    rows =
+      rows
+      |> Enum.filter(&(is_number(&1[:value]) and &1[:value] > 0 and not is_nil(&1[:name])))
+      |> Enum.sort_by(& &1.value, :desc)
+
+    names = rows |> Enum.map(& &1.name) |> Enum.uniq()
+
+    scales =
+      put_color(
+        %{"name" => %{"type" => "ordinal", "domain" => names, "title" => Channel.title(name)}},
+        color,
+        data,
+        rows
+      )
+
+    %{
+      mark: "tile",
+      layer: layer,
+      rows: rows,
+      channels: %{},
+      scales: scales,
+      options:
+        %{
+          format: format(value),
+          table:
+            [["name", Channel.title(name), "name"], ["value", Channel.title(value), nil]] ++
+              if(color, do: [["color", Channel.title(color), "color"]], else: [])
+        }
+        |> Map.merge(Map.take(layer.options, [:labels]))
+        |> Map.reject(fn {_key, v} -> is_nil(v) end)
+    }
+  end
+
+  # A radar: a spoke for each category of x, from zero at the center; a
+  # shape for each series.
+  defp marks(:radar, layer, %{rows: rows}, data) do
+    %{x: x, y: y} = layer.channels
+
+    scales =
+      put_color(
+        %{
+          "x" => band(x, data, rows, :x, layer.channels),
+          "y" => number(y, data, extent(rows, :y), zero: true, stack: false)
+        },
+        layer.channels[:color],
+        data,
+        rows
+      )
+
+    %{
+      mark: "radar",
+      layer: layer,
+      rows: rows,
+      channels: %{x: :x, y: :y},
+      scales: scales,
+      options: Map.take(layer.options, [:labels])
+    }
+  end
+
+  # Radial bars: a ring for each category, its arc its share of the max.
+  defp marks(:radial_bar, layer, %{rows: rows}, data) do
+    %{x: x, y: y} = layer.channels
+    rows = Enum.filter(rows, &(is_number(&1[:y]) and not is_nil(&1[:x])))
+    largest = rows |> Enum.map(& &1.y) |> Enum.max(fn -> 0 end)
+    max = layer.options[:max] || max(100, largest)
+    max = if max > 0, do: max, else: 1
+
+    %{
+      mark: "radial",
+      layer: layer,
+      rows: Enum.map(rows, &Map.merge(&1, %{a0: 0, a1: min(max(&1.y, 0) / max, 1)})),
+      channels: %{x: :x, y: :y},
+      scales: %{
+        "x" => band(x, data, rows, :x, layer.channels),
+        "y" => %{
+          "type" => "linear",
+          "domain" => [0, max],
+          "nice" => false,
+          "title" => Channel.title(y),
+          "format" => format(y)
+        }
+      },
+      options: Map.take(layer.options, [:labels])
     }
   end
 
@@ -993,6 +1284,41 @@ defmodule Fude.Compile do
         %{column: column?, format: format(text), title: if(column?, do: Channel.title(text))}
         |> Map.reject(fn {_key, value} -> value in [nil, false] end)
     }
+  end
+
+  # The statistics of a box: of the numbers, sorted, the quartiles and the
+  # median (interpolated, as R's and NumPy's default), whiskers to the
+  # furthest numbers within 1.5 times the box from it, and the numbers
+  # beyond them. A whisker never ends inside the box (as Matplotlib's): an
+  # interpolated quartile can be beyond every number within its fence.
+  defp box(sorted) do
+    [q1, median, q3] = Enum.map([0.25, 0.5, 0.75], &quantile(sorted, &1))
+    reach = 1.5 * (q3 - q1)
+    {inside, outside} = Enum.split_with(sorted, &(&1 >= q1 - reach and &1 <= q3 + reach))
+
+    %{
+      lo: min(List.first(inside, q1), q1),
+      b0: q1,
+      mid: median,
+      b1: q3,
+      hi: max(List.last(inside, q3), q3),
+      n: length(sorted),
+      outliers: outside
+    }
+  end
+
+  defp quantile([only], _p), do: only
+
+  defp quantile(sorted, p) do
+    h = (length(sorted) - 1) * p
+    i = floor(h)
+    a = Enum.at(sorted, i)
+    b = Enum.at(sorted, min(i + 1, length(sorted) - 1))
+    # Rounded past the data's own decimals: 6.65, not 6.6499999999999995.
+    case a + (h - i) * (b - a) do
+      value when is_float(value) -> Float.round(value, 10)
+      value -> value
+    end
   end
 
   # Points joined in each category: a category on x or on y, which the
@@ -1364,7 +1690,8 @@ defmodule Fude.Compile do
     present = rows |> List.first(%{}) |> Map.keys()
 
     columns =
-      [:x, :x2, :y, :y0, :y1, :color, :size, :value, :a0, :a1, :text, :region, :share]
+      ([:x, :x2, :y, :y0, :y1, :color, :size, :value, :a0, :a1, :text, :region, :share] ++
+         [:lo, :b0, :mid, :b1, :hi, :n, :name])
       |> Enum.filter(&(&1 in present))
       |> Map.new(fn name ->
         target = column_name(name, swap)
@@ -1406,7 +1733,7 @@ defmodule Fude.Compile do
   defp column_name(name, true), do: name
 
   defp scale_name(name) when name in [:x, :x0, :x1, :x2], do: "x"
-  defp scale_name(name) when name in [:y, :y0, :y1, :y2], do: "y"
+  defp scale_name(name) when name in [:y, :y0, :y1, :y2, :lo, :b0, :mid, :b1, :hi], do: "y"
   defp scale_name(name), do: Atom.to_string(name)
 
   # A category goes as its index in its scale's domain, found in a map of
@@ -1473,15 +1800,7 @@ defmodule Fude.Compile do
   end
 
   def table(%{"layers" => [layer | _], "scales" => scales}) do
-    columns =
-      [{"x", "x"}, {"y", "y"}, {"color", "color"}, {"size", "size"}, {"value", nil}]
-      |> Enum.filter(fn {name, _scale} -> Map.has_key?(layer["columns"], name) end)
-
-    heads =
-      Enum.map(columns, fn
-        {"value", _} -> "Value"
-        {name, scale} -> get_in(scales, [scale, "title"]) || name
-      end)
+    {columns, heads} = table_columns(layer, scales)
 
     values =
       Enum.map(columns, fn {name, scale_name} ->
@@ -1499,6 +1818,29 @@ defmodule Fude.Compile do
   end
 
   def table(_wire), do: {[], []}
+
+  # The columns of a layer's table, and their heads: those its kind names
+  # (a box plot's quartiles, a timeline's start and end), or its channels.
+  defp table_columns(%{"options" => %{"table" => named}} = layer, _scales) when is_list(named) do
+    named = Enum.filter(named, fn [name | _] -> Map.has_key?(layer["columns"], name) end)
+
+    {Enum.map(named, fn [name, _title, scale] -> {name, scale} end),
+     Enum.map(named, &Enum.at(&1, 1))}
+  end
+
+  defp table_columns(layer, scales) do
+    columns =
+      [{"x", "x"}, {"y", "y"}, {"color", "color"}, {"size", "size"}, {"value", nil}]
+      |> Enum.filter(fn {name, _scale} -> Map.has_key?(layer["columns"], name) end)
+
+    heads =
+      Enum.map(columns, fn
+        {"value", _} -> "Value"
+        {name, scale} -> get_in(scales, [scale, "title"]) || name
+      end)
+
+    {columns, heads}
+  end
 
   defp cell(nil, _scale), do: nil
 
@@ -1566,6 +1908,12 @@ defmodule Fude.Compile do
   defp kind_name(:waterfall), do: "waterfall chart"
   defp kind_name(:funnel), do: "funnel"
   defp kind_name(:bubble_map), do: "map"
+  defp kind_name(:timeline), do: "timeline"
+  defp kind_name(:boxplot), do: "box plot"
+  defp kind_name(:candlestick), do: "candlestick chart"
+  defp kind_name(:treemap), do: "treemap"
+  defp kind_name(:radar), do: "radar chart"
+  defp kind_name(:radial_bar), do: "radial bar chart"
   defp kind_name(kind), do: "#{kind} chart"
 
   defp axis_words(_name, nil), do: nil

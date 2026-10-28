@@ -30,3 +30,26 @@ test("a time is a date for a unit of a day or more, else a time to the second", 
 test("a chart with no layer has no table", () => {
   assert.deepEqual(tableOf({ ...base }), { heads: [], rows: [] });
 });
+
+test("a kind that names its columns: a timeline's task, start and end, as the server's table has them", () => {
+  const day = 86_400_000;
+  const start = Date.parse("2026-03-02");
+  const config: Config = {
+    ...base,
+    kind: "timeline",
+    scales: { y: { type: "band", domain: ["Design"], title: "Task" }, x: { type: "time", domain: [start, start + 7 * day], unit: "day", title: "Start" } },
+    layers: [
+      {
+        mark: "bar",
+        n: 1,
+        columns: { y: [0], x: [7 * day], x0: [start], x1: [start + 7 * day] },
+        horizontal: true,
+        stack: "range",
+        options: { table: [["y", "Task", "y"], ["x0", "Start", "x"], ["x1", "Finish", "x"], ["color", "Team", "color"]] },
+        tooltip: [],
+      },
+    ],
+  };
+  // A named column the layer does not have (no color) is left out.
+  assert.deepEqual(tableOf(config), { heads: ["Task", "Start", "Finish"], rows: [["Design", "2026-03-02", "2026-03-09"]] });
+});

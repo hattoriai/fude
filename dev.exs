@@ -244,6 +244,92 @@ defmodule FudeDev.Data do
     |> Enum.reject(&(&1.users == 0))
   end
 
+  # A project's plan: each task from its start to its end, by team.
+  def tasks do
+    [
+      {"Research", "Design", 0, 12},
+      {"Wireframes", "Design", 8, 22},
+      {"Visual design", "Design", 18, 34},
+      {"API", "Engineering", 14, 40},
+      {"Web app", "Engineering", 26, 58},
+      {"Mobile app", "Engineering", 34, 66},
+      {"Beta", "Product", 58, 72},
+      {"Launch", "Product", 72, 76}
+    ]
+    |> Enum.map(fn {task, team, from, to} ->
+      %{
+        task: task,
+        team: team,
+        start: Date.add(~D[2026-03-02], from),
+        finish: Date.add(~D[2026-03-02], to)
+      }
+    end)
+  end
+
+  # Delivery times of each region's orders, in days: a long tail in each.
+  def deliveries do
+    for {region, r} <- Enum.with_index(@regions), i <- 1..60 do
+      base = [2.2, 3.1, 2.6, 4.0, 3.4] |> Enum.at(r)
+      spread = :math.pow(noise({:delivery, region, i}), 2.2) * (5 + r)
+      late = if rem(i * (r + 3), 29) == 0, do: 6 + r * 2, else: 0
+      %{region: region, days: Float.round(base + spread + late, 1)}
+    end
+  end
+
+  # A share's price, day by day: its open, high, low and close.
+  def prices do
+    {rows, _} =
+      Enum.map_reduce(0..59, 120.0, fn d, open ->
+        close = Float.round(open * (1 + (noise({:price, d}) - 0.48) * 0.06), 2)
+        high = Float.round(max(open, close) * (1 + noise({:high, d}) * 0.015), 2)
+        low = Float.round(min(open, close) * (1 - noise({:low, d}) * 0.015), 2)
+
+        {%{day: Date.add(~D[2026-03-02], d), open: open, high: high, low: low, close: close},
+         close}
+      end)
+
+    rows
+  end
+
+  # The size of each city, in its country.
+  def cities do
+    [
+      {"Lisbon", "Portugal", 545},
+      {"Porto", "Portugal", 232},
+      {"Braga", "Portugal", 193},
+      {"Coimbra", "Portugal", 140},
+      {"Madrid", "Spain", 3_332},
+      {"Barcelona", "Spain", 1_620},
+      {"Valencia", "Spain", 792},
+      {"Seville", "Spain", 684},
+      {"Bilbao", "Spain", 346},
+      {"Paris", "France", 2_103},
+      {"Marseille", "France", 870},
+      {"Lyon", "France", 522},
+      {"Toulouse", "France", 498},
+      {"Nice", "France", 342}
+    ]
+    |> Enum.map(fn {city, country, people} ->
+      %{city: city, country: country, people: people * 1000}
+    end)
+  end
+
+  # Two products, scored on what matters to their buyers.
+  def scores do
+    for {product, values} <- [
+          {"Fude", [92, 85, 60, 78, 95, 70]},
+          {"Other", [60, 55, 90, 85, 40, 80]}
+        ],
+        {measure, value} <-
+          Enum.zip(~w(Speed Size Kinds Interaction Accessibility Export), values),
+        do: %{product: product, measure: measure, score: value}
+  end
+
+  # How far each channel is to its goal, in percent.
+  def goals do
+    Enum.zip_with(@channels ++ ["Direct"], [86, 64, 47, 91], &%{channel: &1, done: &2})
+  end
+
   def states do
     states =
       ~w(CA TX FL NY PA IL OH GA NC MI NJ VA WA AZ MA TN IN MO MD WI CO MN SC AL LA KY OR OK CT UT IA NV)
@@ -558,6 +644,42 @@ defmodule FudeDev.GalleryLive do
         locale={@locale}
         chart={Fude.bubble_map(Data.states(), region: :state, size: [field: :stores, title: "Stores"], map: "us-states",
           title: "Stores by state")}
+      />
+      <.chart
+        id="plan"
+        locale={@locale}
+        chart={Fude.timeline(Data.tasks(), y: :task, x: :start, x2: :finish, color: :team,
+          title: "The launch is in mid-May", subtitle: "The plan, by team")}
+      />
+      <.chart
+        id="deliveries"
+        locale={@locale}
+        chart={Fude.boxplot(Data.deliveries(), x: :region, y: [field: :days, title: "Days to deliver"],
+          title: "The West waits longest", subtitle: "Days to deliver each order, by region")}
+      />
+      <.chart
+        id="prices"
+        locale={@locale}
+        chart={Fude.candlestick(Data.prices(), x: :day, open: :open, high: :high, low: :low, close: [field: :close, format: {:currency, "EUR"}],
+          title: "A volatile spring", subtitle: "The share's price, each day")}
+      />
+      <.chart
+        id="cities"
+        locale={@locale}
+        chart={Fude.treemap(Data.cities(), name: :city, value: [field: :people, format: :compact, title: "People"], color: :country,
+          title: "Madrid is the largest city", subtitle: "People in the largest cities, by country")}
+      />
+      <.chart
+        id="scores"
+        locale={@locale}
+        chart={Fude.radar(Data.scores(), x: :measure, y: :score, color: :product,
+          title: "Faster, and fewer kinds", subtitle: "Scores out of 100")}
+      />
+      <.chart
+        id="goals"
+        locale={@locale}
+        chart={Fude.radial_bar(Data.goals(), x: :channel, y: [field: :done, format: :number, suffix: "%", title: "Done"],
+          title: "Direct is nearly there", subtitle: "Progress to each channel's goal")}
       />
       <.chart
         id="broken"
