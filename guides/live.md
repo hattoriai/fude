@@ -94,6 +94,46 @@ North's bars, of every series). With no selection, or none of its marks
 in the data, no mark fades. The chart draws it again in place, with no
 move, when only the selection changes.
 
+## Brushing a range
+
+`brush` on a chart lets a person drag across its x axis to choose a
+range, shaded as they drag, with the range written above it ("Mar – May
+2026"). It does one of two things:
+
+```elixir
+Fude.line(orders, x: :day, y: {:sum, :total}, brush: :zoom)
+Fude.bar(orders, x: {:month, :placed_on}, y: {:count, :id}, brush: :select)
+```
+
+* `:zoom` - the chart zooms its x axis to the range, in place, its marks
+  moving there. A **Reset zoom** button, a double click or Escape goes
+  back. The server does not hear of it.
+* `:select` - the range goes to the server as the event `"fude:brush"`,
+  with the chart's `id` and its `from` and `to`, where `phx-target` says;
+  what it means is the app's. The range stays shaded until the server's
+  next render, or the person clears it (a **Clear range** button, a
+  double click, Escape). `Fude.Live.brush_range/1` reads it:
+
+```elixir
+def handle_event("fude:brush", %{"id" => "orders"} = params, socket) do
+  {from, to} = Fude.Live.brush_range(params)
+  {:noreply, socket |> assign(period: {from, to}) |> load_orders()}
+end
+```
+
+The range is in the axis's terms, both ends included: a time with a
+unit snaps to whole units (`from` is the first month, `to` the last),
+and comes as a `Date` for a unit of a day or more, a `DateTime` for one
+of a time of a day; a number is a number (a histogram's out to the
+edges of its bins). The page hears the same range as a DOM event,
+`fude:brush` on the chart's element, for a page with no LiveView.
+
+A brush is across the x axis of times and numbers: lines, areas,
+points, histograms and bars over time. On a phone it starts with a long
+press, so that a swipe still scrolls the page; on the keyboard, Shift
+and the arrows choose a range, and Enter commits it. A brush on a panel
+of small multiples zooms them all, and sends the chart's range.
+
 ## Linked hover
 
 Charts of the same months on a dashboard (revenue, orders, refunds) can

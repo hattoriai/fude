@@ -162,7 +162,9 @@ defmodule Fude.Compile do
       "height" => chart.height,
       # Whether the marks move (#16): false, or a duration of the chart's own.
       "animate" => wire_animate(chart.animate),
-      "frame" => chart.frame
+      "frame" => chart.frame,
+      # What a drag across the x axis does (#13): "zoom", "select", or nothing.
+      "brush" => if(chart.brush, do: Atom.to_string(chart.brush))
     }
 
     if single? do

@@ -375,7 +375,13 @@ defmodule FudeDev.GalleryLive do
   alias FudeDev.Data
 
   def mount(params, _session, socket) do
-    {:ok, assign(socket, locale: params["locale"] || "en-GB", shuffled: false, selected: nil)}
+    {:ok,
+     assign(socket,
+       locale: params["locale"] || "en-GB",
+       shuffled: false,
+       selected: nil,
+       brushed: nil
+     )}
   end
 
   def render(assigns) do
@@ -430,6 +436,7 @@ defmodule FudeDev.GalleryLive do
           tooltip: [rank: true, history: true], title: "Revenue by region", subtitle: "Stacked by channel")}
       />
       <p id="selected">{@selected && Jason.encode!(@selected)}</p>
+      <p id="brushed">{@brushed && inspect(@brushed)}</p>
       <.chart
         id="orders-histogram"
         locale={@locale}
@@ -478,7 +485,7 @@ defmodule FudeDev.GalleryLive do
         chart={Fude.layers(Data.daily(), [
           Fude.area(x: :day, y: [field: :visits, title: "Visits"]),
           Fude.rule(y: 4000, label: "Goal: 4,000 a day")
-        ], title: "Visits reach the goal", subtitle: "Daily visits, July to September")
+        ], title: "Visits reach the goal", subtitle: "Daily visits, July to September. Drag across to zoom", brush: :zoom)
           |> Fude.annotate(:line, x: ~D[2026-08-17], text: "Campaign")}
       />
       <.chart
@@ -502,14 +509,14 @@ defmodule FudeDev.GalleryLive do
         link="months"
         locale={@locale}
         chart={Fude.area(monthly(@shuffled), x: :month, y: [field: :revenue, format: :compact, title: "Revenue"], color: :channel, tooltip: [change: true],
-          title: "Revenue, stacked")}
+          title: "Revenue, stacked", subtitle: "Drag across to choose months: the server hears them", brush: :select)}
       />
       <.chart
         id="regions-multiples"
         locale={@locale}
-        chart={Fude.area(Data.region_months(), x: :month, y: [field: :revenue, format: :compact, title: "Revenue"], color: :channel)
+        chart={Fude.area(Data.region_months(), x: :month, y: [field: :revenue, format: :compact, title: "Revenue"], color: :channel, brush: :zoom)
           |> Fude.facet(:region)
-          |> Fude.title("Every region grows online", subtitle: "Monthly revenue by channel, by region")}
+          |> Fude.title("Every region grows online", subtitle: "Monthly revenue by channel, by region. Drag across one to zoom them all")}
       />
       <.chart
         id="profit"
@@ -581,6 +588,9 @@ defmodule FudeDev.GalleryLive do
 
   def handle_event("shuffle", _params, socket), do: {:noreply, update(socket, :shuffled, &(!&1))}
   def handle_event("select", params, socket), do: {:noreply, assign(socket, :selected, params)}
+
+  def handle_event("fude:brush", params, socket),
+    do: {:noreply, assign(socket, :brushed, {params["id"], Fude.Live.brush_range(params)})}
 end
 
 defmodule FudeDev.LiveLive do

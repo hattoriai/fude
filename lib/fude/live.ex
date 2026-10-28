@@ -40,6 +40,53 @@ defmodule Fude.Live do
     do: Phoenix.LiveView.push_event(socket, "fude:export", %{id: id, format: format})
 
   @doc """
+  The range of a brush (`brush: :select`), from the params of the
+  `"fude:brush"` event a chart sends when a person drags across its x
+  axis: `{from, to}`, both included, in the axis's terms. A date for a
+  time of a day or more (a time with a unit snaps to whole units: the
+  first and the last of them), a `DateTime` for a time of a day, or a
+  number.
+
+      def handle_event("fude:brush", %{"id" => "orders"} = params, socket) do
+        {from, to} = Fude.Live.brush_range(params)
+        {:noreply, assign(socket, period: {from, to})}
+      end
+
+  Raises an `ArgumentError` for params that are not a brush's.
+  """
+  @spec brush_range(map()) :: {term(), term()}
+  def brush_range(%{"from" => from, "to" => to}), do: {brush_value(from), brush_value(to)}
+
+  def brush_range(params),
+    do: raise(ArgumentError, "Fude.Live.brush_range/1: not a brush's params: #{inspect(params)}")
+
+  defp brush_value(value) when is_number(value), do: value
+
+  defp brush_value(value) when is_binary(value) do
+    with {:error, _} <- Date.from_iso8601(value),
+         {:error, _} <- datetime(value) do
+      raise ArgumentError,
+            "Fude.Live.brush_range/1: not a date, a time or a number: #{inspect(value)}"
+    else
+      {:ok, value} -> value
+    end
+  end
+
+  defp brush_value(value),
+    do:
+      raise(
+        ArgumentError,
+        "Fude.Live.brush_range/1: not a date, a time or a number: #{inspect(value)}"
+      )
+
+  defp datetime(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, time, _offset} -> {:ok, time}
+      {:error, _} = error -> error
+    end
+  end
+
+  @doc """
   Sends new rows to the chart of an id, made with the chart they belong to
   (without its data). Options:
 

@@ -81,6 +81,7 @@ defmodule Fude.Spec do
       |> put_unless("height", chart.height, nil)
       |> put_unless("animate", dump_animate(chart.animate), true)
       |> put_unless("frame", chart.frame, nil)
+      |> put_unless("brush", dump_value(chart.brush), false)
       |> put_unless("annotations", Enum.map(chart.annotations, &Fude.Annotation.dump/1), [])
       |> put_unless("facet", dump_facet(chart.facet), nil)
 
@@ -234,7 +235,7 @@ defmodule Fude.Spec do
      [%{path: ["fude"], message: "is missing: a Fude spec carries its version, \"fude\" => 1"}]}
   end
 
-  @chart_keys ~w(fude title subtitle caption source description data height animate frame layers datasets annotations facet)
+  @chart_keys ~w(fude title subtitle caption source description data height animate frame brush layers datasets annotations facet)
 
   defp load_chart(spec) do
     acc = {%Chart{}, []}
@@ -267,6 +268,13 @@ defmodule Fude.Spec do
 
         {"frame", frame}, acc ->
           error(acc, ["frame"], "must be text, got: #{inspect(frame)}")
+
+        {"brush", brush}, {chart, errors} when brush in ["zoom", "select", false] ->
+          {%{chart | brush: Map.get(%{"zoom" => :zoom, "select" => :select}, brush, false)},
+           errors}
+
+        {"brush", brush}, acc ->
+          error(acc, ["brush"], "must be \"zoom\", \"select\" or false, got: #{inspect(brush)}")
 
         {"annotations", list}, acc ->
           annotations(list, acc)

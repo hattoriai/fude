@@ -9,6 +9,16 @@ and Fude follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Brushing (#13): `brush: :zoom` or `brush: :select` on a chart. A drag
+  across the x axis (a long press, then a drag, on a phone; Shift and the
+  arrows on the keyboard) chooses a range, snapped to whole units of a
+  time, written as it is dragged ("Mar – May 2026"). `:zoom` zooms the
+  chart in place, with a Reset zoom button, a double click and Escape to
+  go back; `:select` sends the server `"fude:brush"` with the range, and
+  `Fude.Live.brush_range/1` reads it as dates or numbers. The panels of
+  small multiples brush together. In specs as `"brush"`. See the Live
+  guide, "Brushing a range".
+
 - Linked hover (#14): `<.chart link="months">`. Charts of the same `link`
   show the place hovered on one (or moved to with the keyboard) together:
   a crosshair with each line's value, or the bars there brought forward,

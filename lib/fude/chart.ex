@@ -11,6 +11,9 @@ defmodule Fude.Chart do
 
   alias Fude.Layer
 
+  @typedoc "What a drag across the x axis does: zoom in place, select a range for the server, or nothing."
+  @type brush :: :zoom | :select | false
+
   @type t :: %__MODULE__{
           layers: [Layer.t()],
           title: String.t() | nil,
@@ -22,6 +25,7 @@ defmodule Fude.Chart do
           height: pos_integer() | nil,
           animate: boolean() | %{duration: non_neg_integer()},
           frame: String.t() | nil,
+          brush: brush(),
           annotations: [Fude.Annotation.t()],
           facet: %{field: String.t(), columns: pos_integer() | nil} | nil,
           datasets: %{String.t() => term()}
@@ -37,6 +41,7 @@ defmodule Fude.Chart do
             height: nil,
             animate: true,
             frame: nil,
+            brush: false,
             annotations: [],
             facet: nil,
             datasets: %{}
@@ -50,7 +55,7 @@ defmodule Fude.Chart do
   # Puts the keys of a chart (not of a layer) from the keyword list that
   # the functions of Fude take; the rest are the layer's.
   @spec split(keyword()) :: {keyword(), keyword()}
-  def split(opts), do: Keyword.split(opts, [:height, :data, :animate, :frame | @words])
+  def split(opts), do: Keyword.split(opts, [:height, :data, :animate, :frame, :brush | @words])
 
   @doc false
   @spec put(t(), keyword()) :: t()
@@ -70,6 +75,13 @@ defmodule Fude.Chart do
 
       {:frame, frame}, chart when is_binary(frame) or is_nil(frame) ->
         %{chart | frame: frame}
+
+      {:brush, brush}, chart when brush in [:zoom, :select, false] ->
+        %{chart | brush: brush}
+
+      {:brush, brush}, _chart ->
+        raise ArgumentError,
+              "Fude: :brush of a chart must be :zoom, :select or false, got: #{inspect(brush)}"
 
       {key, value}, _chart ->
         raise ArgumentError, "Fude: #{inspect(key)} of a chart is not valid: #{inspect(value)}"
